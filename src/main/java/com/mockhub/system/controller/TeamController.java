@@ -1,6 +1,7 @@
 package com.mockhub.system.controller;
 
 import com.mockhub.common.model.Result;
+import com.mockhub.common.util.SecurityContextUtil;
 import com.mockhub.system.model.dto.AddMemberRequest;
 import com.mockhub.system.model.dto.CreateTeamRequest;
 import com.mockhub.system.model.dto.TeamMemberVO;
@@ -35,12 +36,15 @@ public class TeamController {
 
     /**
      * GET /api/teams — 团队列表
+     * <p>
+     * 超级管理员看到全部团队，普通用户只看到所属团队。
      *
      * @return 团队列表（含 memberCount 和 apiCount）
      */
     @GetMapping
     public Result<List<Team>> list() {
-        List<Team> teams = teamService.listAll();
+        String userId = SecurityContextUtil.getCurrentUserId();
+        List<Team> teams = teamService.findTeamsByUserId(userId);
         return Result.ok(teams);
     }
 

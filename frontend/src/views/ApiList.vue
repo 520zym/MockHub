@@ -107,38 +107,31 @@
         </template>
 
         <!-- HTTP 方法列 -->
-        <el-table-column label="方法" width="100" align="center">
+        <el-table-column label="方法" width="80" align="center">
           <template #default="{ row }">
             <HttpMethodTag :method="row.method" />
           </template>
         </el-table-column>
 
         <!-- 路径列 -->
-        <el-table-column label="路径" min-width="220">
+        <el-table-column label="路径" min-width="180" show-overflow-tooltip>
           <template #default="{ row }">
             <span class="api-path">{{ row.path }}</span>
           </template>
         </el-table-column>
 
         <!-- 接口名称列 -->
-        <el-table-column prop="name" label="名称" min-width="150" show-overflow-tooltip />
+        <el-table-column prop="name" label="名称" min-width="120" show-overflow-tooltip />
 
         <!-- 团队列 -->
-        <el-table-column label="团队" width="100" align="center">
+        <el-table-column label="团队" width="80" align="center">
           <template #default="{ row }">
             <TeamTag :identifier="row.teamIdentifier" :color="row.teamColor" />
           </template>
         </el-table-column>
 
-        <!-- 分组列 -->
-        <el-table-column label="分组" width="120" show-overflow-tooltip>
-          <template #default="{ row }">
-            <span class="group-name">{{ row.groupName || '未分组' }}</span>
-          </template>
-        </el-table-column>
-
         <!-- 状态码列 -->
-        <el-table-column prop="responseCode" label="状态码" width="85" align="center">
+        <el-table-column prop="responseCode" label="状态码" width="70" align="center">
           <template #default="{ row }">
             <span class="response-code" :class="responseCodeClass(row.responseCode)">
               {{ row.responseCode }}
@@ -146,36 +139,8 @@
           </template>
         </el-table-column>
 
-        <!-- 延迟列 -->
-        <el-table-column label="延迟" width="80" align="center">
-          <template #default="{ row }">
-            <span class="delay-text">{{ row.delayMs > 0 ? row.delayMs + 'ms' : '-' }}</span>
-          </template>
-        </el-table-column>
-
-        <!-- 标签列 -->
-        <el-table-column label="标签" min-width="140">
-          <template #default="{ row }">
-            <div class="tag-list" v-if="row.tags && row.tags.length">
-              <el-tag
-                v-for="tag in row.tags"
-                :key="tag.id"
-                size="small"
-                :style="{
-                  backgroundColor: hexToRgba(tag.color, 0.15),
-                  color: tag.color,
-                  borderColor: 'transparent'
-                }"
-              >
-                {{ tag.name }}
-              </el-tag>
-            </div>
-            <span v-else class="no-tags">-</span>
-          </template>
-        </el-table-column>
-
         <!-- 启用开关列 -->
-        <el-table-column label="启用" width="75" align="center">
+        <el-table-column label="启用" width="65" align="center">
           <template #default="{ row }">
             <el-switch
               :model-value="row.enabled"
@@ -187,7 +152,7 @@
         </el-table-column>
 
         <!-- 操作列 -->
-        <el-table-column label="操作" width="150" align="center" fixed="right">
+        <el-table-column label="操作" width="140" align="center">
           <template #default="{ row }">
             <div class="action-buttons" @click.stop>
               <el-button text size="small" type="primary" @click="handleEdit(row)">
