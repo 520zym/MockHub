@@ -17,6 +17,9 @@ public class SettingsDTO {
     /** 是否启用 Mock 接口的 CORS 支持 */
     private boolean mockCorsEnabled;
 
+    /** 服务器地址（用于拼接 Mock URL），为空时自动检测内网 IP */
+    private String serverAddress;
+
     public String getLogRetainMode() {
         return logRetainMode;
     }
@@ -47,5 +50,13 @@ public class SettingsDTO {
 
     public void setMockCorsEnabled(boolean mockCorsEnabled) {
         this.mockCorsEnabled = mockCorsEnabled;
+    }
+
+    public String getServerAddress() {
+        return serverAddress;
+    }
+
+    public void setServerAddress(String serverAddress) {
+        this.serverAddress = serverAddress;
     }
 }

@@ -34,6 +34,9 @@ public class SettingsController {
     @Autowired
     private MockCorsProperties mockCorsProperties;
 
+    @Autowired
+    private HealthController healthController;
+
     /**
      * GET /api/settings — 获取全局配置
      *
@@ -48,6 +51,7 @@ public class SettingsController {
         dto.setLogRetainCount(logRetainProperties.getCount());
         dto.setLogRetainDays(logRetainProperties.getDays());
         dto.setMockCorsEnabled(mockCorsProperties.isEnabled());
+        dto.setServerAddress(healthController.getCustomServerAddress());
 
         return Result.ok(dto);
     }
@@ -71,6 +75,7 @@ public class SettingsController {
         logRetainProperties.setCount(dto.getLogRetainCount());
         logRetainProperties.setDays(dto.getLogRetainDays());
         mockCorsProperties.setEnabled(dto.isMockCorsEnabled());
+        healthController.setCustomServerAddress(dto.getServerAddress());
 
         return Result.ok(dto);
     }

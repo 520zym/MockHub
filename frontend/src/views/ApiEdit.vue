@@ -633,6 +633,8 @@ async function handleSave() {
       await createApi(payload)
       ElMessage.success('创建成功')
     }
+    // 刷新团队数据（apiCount 可能变化）
+    appStore.loadTeams()
     router.push('/apis')
   } catch (e) {
     // 错误已由拦截器处理

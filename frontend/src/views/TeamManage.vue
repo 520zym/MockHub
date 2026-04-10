@@ -4,9 +4,8 @@
 -->
 <template>
   <div class="page-container page-team-manage">
-    <!-- 页面标题 + 新建按钮 -->
+    <!-- 新建按钮 -->
     <div class="page-header">
-      <h1 class="page-title">团队管理</h1>
       <el-button type="primary" @click="openCreateDialog">
         <el-icon><Plus /></el-icon>
         新建团队
@@ -407,12 +406,8 @@ async function handleRemoveMember(member) {
 .page-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   margin-bottom: 24px;
-
-  .page-title {
-    margin-bottom: 0;
-  }
 }
 
 // ========== 团队卡片网格 ==========

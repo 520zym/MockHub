@@ -4,9 +4,8 @@
 -->
 <template>
   <div class="page-container page-user-manage">
-    <!-- 页面标题 + 新建按钮 -->
+    <!-- 新建按钮 -->
     <div class="page-header">
-      <h1 class="page-title">用户管理</h1>
       <el-button type="primary" @click="openCreateDialog">
         <el-icon><Plus /></el-icon>
         新建用户
@@ -460,12 +459,8 @@ async function handleAssignTeams() {
 .page-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   margin-bottom: 24px;
-
-  .page-title {
-    margin-bottom: 0;
-  }
 }
 
 // ========== 团队标签单元格 ==========

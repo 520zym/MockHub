@@ -120,8 +120,7 @@ const navItems = [
   { path: '/apis', label: '接口管理', icon: 'Connection', requiresSuperAdmin: false },
   { path: '/teams', label: '团队管理', icon: 'OfficeBuilding', requiresSuperAdmin: true },
   { path: '/users', label: '用户管理', icon: 'User', requiresSuperAdmin: true },
-  { path: '/logs/operation', label: '操作日志', icon: 'Document', requiresSuperAdmin: false },
-  { path: '/logs/request', label: '请求日志', icon: 'Tickets', requiresSuperAdmin: false },
+  { path: '/logs/operation', label: '日志', icon: 'Document', requiresSuperAdmin: false },
   { path: '/settings', label: '全局设置', icon: 'Setting', requiresSuperAdmin: true }
 ]
 

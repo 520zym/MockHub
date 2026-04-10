@@ -53,6 +53,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         return path.startsWith("/mock/")
                 || path.startsWith("/wsdl/")
                 || path.equals("/api/health")
+                || path.equals("/api/server-address")
                 || path.equals("/api/auth/login")
                 || path.equals("/")
                 || path.equals("/index.html")

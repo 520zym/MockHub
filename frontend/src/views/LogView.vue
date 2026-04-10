@@ -5,9 +5,6 @@
 -->
 <template>
   <div class="page-log-view">
-    <!-- 页面标题 -->
-    <h2 class="page-title">日志查看</h2>
-
     <!-- 工具栏：Tab 切换 + 团队筛选 -->
     <div class="log-toolbar">
       <div class="log-tabs">
@@ -369,14 +366,6 @@ onMounted(async () => {
 <style lang="scss" scoped>
 .page-log-view {
   padding: 0;
-}
-
-// ========== 页面标题 ==========
-.page-title {
-  font-size: 24px;
-  font-weight: 700;
-  color: #1B2559;
-  margin: 0 0 24px;
 }
 
 // ========== 工具栏 ==========

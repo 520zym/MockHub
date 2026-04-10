@@ -5,8 +5,6 @@
 -->
 <template>
   <div class="page-settings">
-    <h2 class="page-title">全局设置</h2>
-
     <!-- 设置卡片 -->
     <div class="settings-card" v-loading="loading">
       <el-form label-position="top" class="settings-form">
@@ -42,6 +40,24 @@
               controls-position="right"
             />
             <span class="input-hint">超出天数的日志将被自动清理</span>
+          </el-form-item>
+        </div>
+
+        <!-- 分割线 -->
+        <div class="section-divider"></div>
+
+        <!-- 服务器地址 -->
+        <div class="settings-section">
+          <h3 class="section-title">服务器地址</h3>
+          <p class="section-desc">用于拼接 Mock URL，为空时自动检测内网 IP</p>
+
+          <el-form-item label="服务器地址">
+            <el-input
+              v-model="form.serverAddress"
+              placeholder="如：http://192.168.1.100:8080"
+              clearable
+              style="width: 400px"
+            />
           </el-form-item>
         </div>
 
@@ -91,7 +107,8 @@ const form = reactive({
   logRetainMode: 'count',
   logRetainCount: 1000,
   logRetainDays: 30,
-  mockCorsEnabled: true
+  mockCorsEnabled: true,
+  serverAddress: ''
 })
 
 // ========== 数据加载 ==========
@@ -103,6 +120,7 @@ async function loadSettings() {
     form.logRetainCount = data.logRetainCount || 1000
     form.logRetainDays = data.logRetainDays || 30
     form.mockCorsEnabled = data.mockCorsEnabled !== false
+    form.serverAddress = data.serverAddress || ''
   } catch (err) {
     // 拦截器已处理错误提示
   } finally {
@@ -118,7 +136,8 @@ async function handleSave() {
       logRetainMode: form.logRetainMode,
       logRetainCount: form.logRetainCount,
       logRetainDays: form.logRetainDays,
-      mockCorsEnabled: form.mockCorsEnabled
+      mockCorsEnabled: form.mockCorsEnabled,
+      serverAddress: form.serverAddress
     })
     ElMessage.success('设置已保存')
   } catch (err) {
@@ -138,14 +157,6 @@ onMounted(() => {
 .page-settings {
   padding: 0;
   max-width: 720px;
-}
-
-// ========== 页面标题 ==========
-.page-title {
-  font-size: 24px;
-  font-weight: 700;
-  color: #1B2559;
-  margin: 0 0 24px;
 }
 
 // ========== 设置卡片 ==========

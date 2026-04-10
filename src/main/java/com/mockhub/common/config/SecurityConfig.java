@@ -33,7 +33,7 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
                 // WSDL 托管路径，无需认证
                 .antMatchers("/wsdl/**").permitAll()
                 // 健康检查，无需认证
-                .antMatchers("/api/health").permitAll()
+                .antMatchers("/api/health", "/api/server-address").permitAll()
                 // 登录接口，无需认证
                 .antMatchers("/api/auth/login").permitAll()
                 // 静态资源放行

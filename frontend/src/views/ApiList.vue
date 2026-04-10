@@ -1,8 +1,6 @@
 <template>
   <!-- 接口列表页：工具栏筛选 + 数据表格 + 分页 + 导入导出 -->
   <div class="page-api-list">
-    <h1 class="page-title">接口管理</h1>
-
     <!-- 工具栏 -->
     <div class="toolbar soft-card">
       <div class="toolbar__filters">
@@ -152,9 +150,12 @@
         </el-table-column>
 
         <!-- 操作列 -->
-        <el-table-column label="操作" width="140" align="center">
+        <el-table-column label="操作" width="190" align="center">
           <template #default="{ row }">
             <div class="action-buttons" @click.stop>
+              <el-button text size="small" @click="handleCopyUrl(row)" title="复制 Mock 地址">
+                <el-icon><DocumentCopy /></el-icon>
+              </el-button>
               <el-button text size="small" type="primary" @click="handleEdit(row)">
                 编辑
               </el-button>
@@ -246,6 +247,7 @@ import { useAppStore } from '@/stores/app'
 import { useApiStore } from '@/stores/api'
 import { getApis, deleteApi, copyApi, toggleApi, importApis, exportApis } from '@/api/apis'
 import { getTags } from '@/api/tags'
+import { getServerAddress } from '@/api/settings'
 import HttpMethodTag from '@/components/HttpMethodTag.vue'
 import TeamTag from '@/components/TeamTag.vue'
 
@@ -270,6 +272,9 @@ const httpMethods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
 
 // 当前可选标签（基于当前团队筛选加载）
 const availableTags = ref([])
+
+// --- 服务器地址（用于拼接 Mock URL） ---
+const serverAddress = ref('')
 
 // --- 导入相关 ---
 const importDialogVisible = ref(false)
@@ -414,12 +419,34 @@ function handleEdit(row) {
   router.push(`/apis/${row.id}/edit`)
 }
 
+/** 复制 Mock 地址到剪贴板 */
+async function handleCopyUrl(row) {
+  const base = serverAddress.value || window.location.origin
+  const url = `${base}/mock/${row.teamIdentifier || ''}${row.path || '/'}`
+  try {
+    await navigator.clipboard.writeText(url)
+    ElMessage.success('Mock 地址已复制')
+  } catch (err) {
+    // 降级方案
+    const textarea = document.createElement('textarea')
+    textarea.value = url
+    textarea.style.position = 'fixed'
+    textarea.style.opacity = '0'
+    document.body.appendChild(textarea)
+    textarea.select()
+    document.execCommand('copy')
+    document.body.removeChild(textarea)
+    ElMessage.success('Mock 地址已复制')
+  }
+}
+
 /** 复制接口 */
 async function handleCopy(row) {
   try {
     await copyApi(row.id)
     ElMessage.success('复制成功')
     loadApis()
+    appStore.loadTeams()
   } catch (e) {
     // 错误已由拦截器处理
   }
@@ -436,6 +463,7 @@ async function handleDelete(row) {
     await deleteApi(row.id)
     ElMessage.success('删除成功')
     loadApis()
+    appStore.loadTeams()
   } catch (e) {
     // 取消或错误，不处理
   }
@@ -534,20 +562,21 @@ function responseCodeClass(code) {
 }
 
 // --- 初始化 ---
-onMounted(() => {
+onMounted(async () => {
   loadApis()
   loadTags()
+  // 加载服务器地址用于拼接 Mock URL
+  try {
+    const data = await getServerAddress()
+    serverAddress.value = data.address || ''
+  } catch (e) {
+    // 获取失败时降级使用 window.location.origin
+  }
 })
 </script>
 
 <style lang="scss" scoped>
 .page-api-list {
-  .page-title {
-    font-size: 24px;
-    font-weight: 700;
-    color: #1B2559;
-    margin-bottom: 20px;
-  }
 }
 
 // 工具栏

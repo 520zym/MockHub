@@ -15,6 +15,8 @@ import com.mockhub.mock.model.entity.Tag;
 import com.mockhub.mock.repository.ApiRepository;
 import com.mockhub.mock.repository.ApiTagRepository;
 import com.mockhub.mock.repository.TagRepository;
+import com.mockhub.log.LogService;
+import com.mockhub.log.model.OperationLog;
 import com.mockhub.system.model.entity.Team;
 import com.mockhub.system.service.TeamService;
 import org.slf4j.Logger;
@@ -54,19 +56,44 @@ public class ApiServiceImpl implements ApiService {
     private final TeamService teamService;
     private final PermissionChecker permissionChecker;
     private final ObjectMapper objectMapper;
+    private final LogService logService;
 
     public ApiServiceImpl(ApiRepository apiRepository,
                           ApiTagRepository apiTagRepository,
                           TagRepository tagRepository,
                           TeamService teamService,
                           PermissionChecker permissionChecker,
-                          ObjectMapper objectMapper) {
+                          ObjectMapper objectMapper,
+                          LogService logService) {
         this.apiRepository = apiRepository;
         this.apiTagRepository = apiTagRepository;
         this.tagRepository = tagRepository;
         this.teamService = teamService;
         this.permissionChecker = permissionChecker;
         this.objectMapper = objectMapper;
+        this.logService = logService;
+    }
+
+    /**
+     * 记录操作日志的工具方法
+     */
+    private void recordOperation(String action, String targetType, String targetId, String targetName, String detail, String teamId) {
+        try {
+            OperationLog opLog = new OperationLog();
+            opLog.setId(UUID.randomUUID().toString());
+            opLog.setTeamId(teamId);
+            opLog.setUserId(SecurityContextUtil.getCurrentUserId());
+            opLog.setUsername(SecurityContextUtil.getCurrentUsername());
+            opLog.setAction(action);
+            opLog.setTargetType(targetType);
+            opLog.setTargetId(targetId);
+            opLog.setTargetName(targetName);
+            opLog.setDetail(detail);
+            opLog.setCreatedAt(new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss").format(new Date()));
+            logService.logOperation(opLog);
+        } catch (Exception e) {
+            log.warn("记录操作日志失败: {}", e.getMessage());
+        }
     }
 
     // ==================== 路径匹配算法 ====================
@@ -239,6 +266,9 @@ public class ApiServiceImpl implements ApiService {
             apiTagRepository.replaceTagsForApi(api.getId(), dto.getTagIds());
         }
 
+        recordOperation("CREATE", "API", api.getId(), api.getName(),
+                "创建接口 " + api.getMethod() + " " + api.getPath(), api.getTeamId());
+
         return api;
     }
 
@@ -283,6 +313,8 @@ public class ApiServiceImpl implements ApiService {
 
         apiRepository.update(existing);
         log.info("更新接口: id={}, name={}", id, existing.getName());
+        recordOperation("UPDATE", "API", id, existing.getName(),
+                "修改接口 " + existing.getMethod() + " " + existing.getPath(), existing.getTeamId());
 
         // 更新标签关联
         apiTagRepository.replaceTagsForApi(id, dto.getTagIds());
@@ -305,6 +337,8 @@ public class ApiServiceImpl implements ApiService {
         // 删除接口
         apiRepository.deleteById(id);
         log.info("删除接口: id={}, name={}, path={}", id, api.getName(), api.getPath());
+        recordOperation("DELETE", "API", id, api.getName(),
+                "删除接口 " + api.getMethod() + " " + api.getPath(), api.getTeamId());
     }
 
     @Override
