@@ -1,0 +1,73 @@
+// ========== MockHub Soft UI 设计变量 ==========
+
+// ========== 主色 ==========
+:root {
+  --el-color-primary: #6366F1;
+  --el-color-primary-light-3: #818CF8;
+  --el-color-primary-light-5: #A5B4FC;
+  --el-color-primary-light-7: #C7D2FE;
+  --el-color-primary-light-9: #E0E7FF;
+  --el-color-primary-dark-2: #4F46E5;
+
+  // ========== 语义色 ==========
+  --el-color-success: #10B981;
+  --el-color-warning: #F59E0B;
+  --el-color-danger: #EF4444;
+  --el-color-info: #6B7280;
+
+  // ========== 圆角 ==========
+  --el-border-radius-base: 10px;
+  --el-border-radius-small: 8px;
+  --el-border-radius-round: 20px;
+
+  // ========== 文字颜色 ==========
+  --el-text-color-primary: #1B2559;
+  --el-text-color-regular: #4A5568;
+  --el-text-color-secondary: #A3AED0;
+  --el-text-color-placeholder: #CBD5E0;
+
+  // ========== 边框 ==========
+  --el-border-color: transparent;
+  --el-border-color-light: #F1F5F9;
+  --el-border-color-lighter: #F8FAFC;
+
+  // ========== 背景 ==========
+  --el-bg-color: #FFFFFF;
+  --el-bg-color-page: transparent;
+  --el-fill-color-light: #F7F8FA;
+  --el-fill-color-lighter: #FAFBFC;
+
+  // ========== 阴影 ==========
+  --el-box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+  --el-box-shadow-light: 0 1px 6px rgba(0, 0, 0, 0.03);
+}
+
+// ========== 自定义设计变量 ==========
+$primary-color: #6366F1;
+$primary-light: #E0E7FF;
+$primary-dark: #4F46E5;
+
+$success-color: #10B981;
+$warning-color: #F59E0B;
+$danger-color: #EF4444;
+$info-color: #6B7280;
+
+$text-primary: #1B2559;
+$text-regular: #4A5568;
+$text-secondary: #A3AED0;
+$text-placeholder: #CBD5E0;
+
+$bg-gradient: linear-gradient(135deg, #f5f7fa 0%, #e8ecf4 50%, #e0e7f1 100%);
+
+$radius-card: 16px;
+$radius-button: 10px;
+$radius-input: 10px;
+$radius-capsule: 20px;
+
+$shadow-card: 0 2px 12px rgba(0, 0, 0, 0.04);
+$shadow-card-hover: 0 4px 20px rgba(0, 0, 0, 0.08);
+$shadow-dialog: 0 8px 40px rgba(0, 0, 0, 0.08);
+
+$sidebar-width: 220px;
+$sidebar-collapsed-width: 64px;
+$topbar-height: 60px;

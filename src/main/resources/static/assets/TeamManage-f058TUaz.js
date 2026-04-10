@@ -1,0 +1,1 @@
+import{I as e,p as t,u as n}from"./runtime-core.esm-bundler-DIN9oH-m.js";var r={class:`page-team-manage`},i={__name:`TeamManage`,setup(i){return(i,a)=>(e(),t(`div`,r,[...a[0]||=[n(`h2`,null,`团队管理`,-1),n(`p`,null,`待实现`,-1)]]))}};export{i as default};

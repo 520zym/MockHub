@@ -1,0 +1,207 @@
+// ========== Element Plus 组件级覆盖样式 ==========
+
+// ========== 表格 ==========
+.el-table {
+  --el-table-border-color: transparent;
+  --el-table-header-bg-color: transparent;
+  --el-table-row-hover-bg-color: #F7F8FF;
+  background-color: transparent;
+
+  &::before,
+  &::after {
+    display: none;
+  }
+
+  th.el-table__cell {
+    background-color: transparent;
+    color: var(--el-text-color-secondary);
+    font-size: 13px;
+    font-weight: 500;
+    border-bottom: none;
+  }
+
+  td.el-table__cell {
+    border-bottom: none;
+  }
+
+  .el-table__row {
+    transition: background-color 0.2s ease;
+  }
+
+  .el-table__inner-wrapper::before {
+    display: none;
+  }
+
+  // 去除固定列阴影的硬边
+  .el-table-fixed-column--left,
+  .el-table-fixed-column--right {
+    &::before {
+      box-shadow: none;
+    }
+  }
+}
+
+// ========== 按钮 ==========
+.el-button {
+  border-radius: 12px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+
+  &--primary {
+    &:hover,
+    &:focus {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+    }
+
+    &:active {
+      transform: translateY(0);
+    }
+  }
+
+  &--default {
+    background-color: transparent;
+    border-color: transparent;
+    color: var(--el-color-primary);
+
+    &:hover,
+    &:focus {
+      background-color: #E0E7FF;
+      border-color: transparent;
+      color: var(--el-color-primary);
+    }
+  }
+}
+
+// ========== 输入框 ==========
+.el-input {
+  .el-input__wrapper {
+    background-color: #F7F8FA;
+    border: 2px solid transparent;
+    border-radius: 10px;
+    box-shadow: none;
+    transition: all 0.2s ease;
+
+    &:hover {
+      box-shadow: none;
+    }
+
+    &.is-focus {
+      background-color: #FFFFFF;
+      border-color: var(--el-color-primary);
+      box-shadow: none;
+    }
+  }
+}
+
+.el-textarea {
+  .el-textarea__inner {
+    background-color: #F7F8FA;
+    border: 2px solid transparent;
+    border-radius: 10px;
+    box-shadow: none;
+    transition: all 0.2s ease;
+
+    &:hover {
+      box-shadow: none;
+    }
+
+    &:focus {
+      background-color: #FFFFFF;
+      border-color: var(--el-color-primary);
+      box-shadow: none;
+    }
+  }
+}
+
+// ========== 选择器 ==========
+.el-select {
+  .el-input__wrapper {
+    background-color: #F7F8FA;
+    border: 2px solid transparent;
+    border-radius: 10px;
+    box-shadow: none;
+
+    &.is-focus {
+      background-color: #FFFFFF;
+      border-color: var(--el-color-primary);
+      box-shadow: none;
+    }
+  }
+}
+
+// ========== 对话框 ==========
+.el-dialog {
+  border-radius: 16px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+
+  .el-dialog__header {
+    padding: 20px 24px 16px;
+    margin-right: 0;
+  }
+
+  .el-dialog__body {
+    padding: 0 24px 24px;
+  }
+
+  .el-dialog__footer {
+    padding: 0 24px 20px;
+  }
+}
+
+// ========== 抽屉 ==========
+.el-drawer {
+  border-radius: 16px 0 0 16px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.08);
+}
+
+// ========== 卡片 ==========
+.el-card {
+  border: none;
+  border-radius: 16px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+
+  .el-card__body {
+    padding: 20px;
+  }
+
+  &:hover {
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  }
+}
+
+// ========== 消息提示 ==========
+.el-message {
+  border-radius: 12px;
+  border: none;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+// ========== 标签 ==========
+.el-tag {
+  border: none;
+  border-radius: 20px;
+  font-weight: 500;
+}
+
+// ========== 开关 ==========
+.el-switch {
+  --el-switch-on-color: var(--el-color-primary);
+}
+
+// ========== 分页 ==========
+.el-pagination {
+  .el-pager li {
+    border-radius: 8px;
+
+    &.is-active {
+      background-color: var(--el-color-primary);
+    }
+  }
+
+  .btn-prev,
+  .btn-next {
+    border-radius: 8px;
+  }
+}
