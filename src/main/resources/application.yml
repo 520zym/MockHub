@@ -11,6 +11,9 @@ spring:
   datasource:
     url: jdbc:sqlite:${data.path:./data}/mockhub.db
     driver-class-name: org.sqlite.JDBC
+  sql:
+    init:
+      mode: never
   servlet:
     multipart:
       # 文件上传大小限制（WSDL 文件、导入文件等）
