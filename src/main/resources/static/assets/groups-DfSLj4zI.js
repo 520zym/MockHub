@@ -1,1 +1,0 @@
-import{n as e}from"./_plugin-vue_export-helper-CIPTgmVX.js";var t=t=>e.get(`/groups`,{params:{teamId:t}});export{t};

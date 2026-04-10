@@ -137,15 +137,6 @@
           </template>
         </el-table-column>
 
-        <!-- 状态码列 -->
-        <el-table-column prop="responseCode" label="状态码" width="70" align="center">
-          <template #default="{ row }">
-            <span class="response-code" :class="responseCodeClass(row.responseCode)">
-              {{ row.responseCode }}
-            </span>
-          </template>
-        </el-table-column>
-
         <!-- 启用开关列 -->
         <el-table-column label="启用" width="65" align="center">
           <template #default="{ row }">
