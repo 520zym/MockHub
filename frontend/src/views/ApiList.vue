@@ -128,7 +128,7 @@
         </el-table-column>
 
         <!-- 接口名称列 -->
-        <el-table-column prop="name" label="名称" min-width="120" show-overflow-tooltip />
+        <el-table-column prop="name" label="名称" min-width="100" show-overflow-tooltip />
 
         <!-- 团队列 -->
         <el-table-column label="团队" width="80" align="center">
@@ -158,21 +158,21 @@
           </template>
         </el-table-column>
 
-        <!-- 操作列 -->
-        <el-table-column label="操作" width="220" align="center">
+        <!-- 操作列（全图标按钮，hover 显示 title） -->
+        <el-table-column label="操作" width="150" align="center">
           <template #default="{ row }">
             <div class="action-buttons" @click.stop>
               <el-button text size="small" @click="handleCopyUrl(row)" title="复制 Mock 地址">
                 <el-icon><DocumentCopy /></el-icon>
               </el-button>
-              <el-button text size="small" type="primary" @click="handleEdit(row)">
-                编辑
+              <el-button text size="small" type="primary" @click="handleEdit(row)" title="编辑">
+                <el-icon><Edit /></el-icon>
               </el-button>
-              <el-button text size="small" @click="handleCopy(row)">
-                复制
+              <el-button text size="small" @click="handleCopy(row)" title="复制接口">
+                <el-icon><CopyDocument /></el-icon>
               </el-button>
-              <el-button text size="small" type="danger" @click="handleDelete(row)">
-                删除
+              <el-button text size="small" type="danger" @click="handleDelete(row)" title="删除">
+                <el-icon><Delete /></el-icon>
               </el-button>
             </div>
           </template>
@@ -860,8 +860,18 @@ onMounted(async () => {
 
 // 表格行样式
 .api-row {
-  cursor: pointer;
   height: 52px;
+
+  // 确保所有单元格内容垂直居中
+  :deep(td .cell) {
+    display: flex;
+    align-items: center;
+    min-height: 36px;
+  }
+  // 居中列的 cell 也要水平居中
+  :deep(td.is-center .cell) {
+    justify-content: center;
+  }
 }
 
 .api-path {
