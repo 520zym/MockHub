@@ -1,0 +1,1 @@
+import{n as e}from"./_plugin-vue_export-helper-BS1nowuY.js";var t=()=>e.get(`/users`),n=t=>e.post(`/users`,t),r=(t,n)=>e.put(`/users/${t}`,n),i=t=>e.delete(`/users/${t}`),a=(t,n)=>e.post(`/users/${t}/teams`,n),o=(t,n)=>e.post(`/users/${t}/reset-password`,{newPassword:n});export{o as a,t as i,n,r as o,i as r,a as t};

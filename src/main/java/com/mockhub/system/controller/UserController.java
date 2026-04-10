@@ -19,6 +19,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.mockhub.common.util.PasswordUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -33,6 +37,8 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/users")
 public class UserController {
+
+    private static final Logger log = LoggerFactory.getLogger(UserController.class);
 
     @Autowired
     private UserServiceImpl userService;
@@ -104,6 +110,30 @@ public class UserController {
     @PostMapping("/{id}/teams")
     public Result<Void> assignTeams(@PathVariable String id, @RequestBody AssignTeamsRequest request) {
         userService.assignTeams(id, request);
+        return Result.ok();
+    }
+
+    /**
+     * POST /api/users/{id}/reset-password — 超管重置用户密码
+     *
+     * @param id   用户 ID
+     * @param body 包含 newPassword 字段
+     * @return 成功响应
+     */
+    @PostMapping("/{id}/reset-password")
+    public Result<Void> resetPassword(@PathVariable String id, @RequestBody Map<String, String> body) {
+        String newPassword = body.get("newPassword");
+        if (newPassword == null || newPassword.length() < 6) {
+            return Result.error(40000, "新密码长度不能少于6位");
+        }
+        User user = userService.findById(id);
+        if (user == null) {
+            return Result.error(40401, "用户不存在");
+        }
+        String newHash = PasswordUtil.hash(newPassword);
+        userService.updatePassword(id, newHash);
+        userService.updateFirstLogin(id, true);
+        log.info("超管重置用户密码：userId={}, username={}", id, user.getUsername());
         return Result.ok();
     }
 

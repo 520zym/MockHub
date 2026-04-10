@@ -9,3 +9,5 @@ export const updateUser = (id, data) => request.put(`/users/${id}`, data)
 export const deleteUser = (id) => request.delete(`/users/${id}`)
 
 export const assignTeams = (id, data) => request.post(`/users/${id}/teams`, data)
+
+export const resetPassword = (id, newPassword) => request.post(`/users/${id}/reset-password`, { newPassword })

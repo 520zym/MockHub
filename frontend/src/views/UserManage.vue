@@ -37,7 +37,7 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="所属团队" min-width="200">
+        <el-table-column label="所属团队" width="120">
           <template #default="{ row }">
             <div class="team-tags-cell" v-if="row.teams && row.teams.length > 0">
               <TeamTag
@@ -55,23 +55,20 @@
             {{ formatDate(row.createdAt) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="220" fixed="right">
+        <el-table-column label="操作" min-width="280" fixed="right">
           <template #default="{ row }">
-            <el-button text type="primary" size="small" @click="openEditDialog(row)">
-              编辑
-            </el-button>
-            <el-button text type="primary" size="small" @click="openAssignDialog(row)">
-              分配团队
-            </el-button>
-            <el-button
-              text
-              type="danger"
-              size="small"
-              :disabled="row.globalRole === 'SUPER_ADMIN'"
-              @click="handleDeleteUser(row)"
-            >
-              删除
-            </el-button>
+            <div style="display: flex; align-items: center; gap: 2px; white-space: nowrap;">
+              <el-button text type="primary" size="small" @click="openEditDialog(row)">编辑</el-button>
+              <el-button text type="primary" size="small" @click="openAssignDialog(row)">分配团队</el-button>
+              <el-button text type="warning" size="small" @click="handleResetPassword(row)">重置密码</el-button>
+              <el-button
+                text
+                type="danger"
+                size="small"
+                :disabled="row.globalRole === 'SUPER_ADMIN'"
+                @click="handleDeleteUser(row)"
+              >删除</el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -224,7 +221,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import { getUsers, createUser, updateUser, deleteUser, assignTeams } from '@/api/users'
+import { getUsers, createUser, updateUser, deleteUser, assignTeams, resetPassword } from '@/api/users'
 import { getTeams } from '@/api/teams'
 import TeamTag from '@/components/TeamTag.vue'
 
@@ -373,6 +370,30 @@ async function handleEditUser() {
 }
 
 // ========== 删除用户 ==========
+/** 超管重置用户密码 */
+async function handleResetPassword(user) {
+  try {
+    const { value } = await ElMessageBox.prompt(
+      `为用户「${user.displayName}」设置新密码（不少于6位），重置后用户首次登录需再次修改密码。`,
+      '重置密码',
+      {
+        confirmButtonText: '确认重置',
+        cancelButtonText: '取消',
+        inputType: 'password',
+        inputPlaceholder: '请输入新密码',
+        inputValidator: (val) => {
+          if (!val || val.length < 6) return '密码长度不能少于6位'
+          return true
+        }
+      }
+    )
+    await resetPassword(user.id, value)
+    ElMessage.success('密码已重置，该用户下次登录需修改密码')
+  } catch {
+    // 用户取消
+  }
+}
+
 async function handleDeleteUser(user) {
   // 超管不可删除（按钮已 disabled，这里做二次防御）
   if (user.globalRole === 'SUPER_ADMIN') {
