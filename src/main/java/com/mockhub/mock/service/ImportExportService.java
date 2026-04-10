@@ -6,9 +6,11 @@ import com.mockhub.mock.model.dto.ImportExportData;
 import com.mockhub.mock.model.dto.ImportResult;
 import com.mockhub.mock.model.entity.ApiDefinition;
 import com.mockhub.mock.model.entity.ApiGroup;
+import com.mockhub.mock.model.entity.ApiResponse;
 import com.mockhub.mock.model.entity.GlobalHeader;
 import com.mockhub.mock.model.entity.Tag;
 import com.mockhub.mock.repository.ApiRepository;
+import com.mockhub.mock.repository.ApiResponseRepository;
 import com.mockhub.mock.repository.ApiTagRepository;
 import com.mockhub.mock.repository.GlobalHeaderRepository;
 import com.mockhub.mock.repository.GroupRepository;
@@ -20,6 +22,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -42,6 +45,7 @@ public class ImportExportService {
     private static final Logger log = LoggerFactory.getLogger(ImportExportService.class);
 
     private final ApiRepository apiRepository;
+    private final ApiResponseRepository apiResponseRepository;
     private final GroupRepository groupRepository;
     private final TagRepository tagRepository;
     private final ApiTagRepository apiTagRepository;
@@ -50,6 +54,7 @@ public class ImportExportService {
     private final PermissionChecker permissionChecker;
 
     public ImportExportService(ApiRepository apiRepository,
+                               ApiResponseRepository apiResponseRepository,
                                GroupRepository groupRepository,
                                TagRepository tagRepository,
                                ApiTagRepository apiTagRepository,
@@ -57,6 +62,7 @@ public class ImportExportService {
                                TeamService teamService,
                                PermissionChecker permissionChecker) {
         this.apiRepository = apiRepository;
+        this.apiResponseRepository = apiResponseRepository;
         this.groupRepository = groupRepository;
         this.tagRepository = tagRepository;
         this.apiTagRepository = apiTagRepository;
@@ -77,17 +83,28 @@ public class ImportExportService {
         Team team = teamService.getById(teamId);
 
         ImportExportData data = new ImportExportData();
-        data.setVersion("1.0");
+        data.setVersion("2.0");
         data.setExportedAt(new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss").format(new Date()));
         data.setTeamName(team != null ? team.getName() : "");
         data.setGroups(groupRepository.findByTeamId(teamId));
         data.setTags(tagRepository.findByTeamId(teamId));
-        data.setApis(apiRepository.findByTeamId(teamId));
+
+        List<ApiDefinition> apis = apiRepository.findByTeamId(teamId);
+        data.setApis(apis);
+
+        // 导出所有接口的返回体
+        List<ApiResponse> allResponses = new ArrayList<ApiResponse>();
+        for (ApiDefinition api : apis) {
+            allResponses.addAll(apiResponseRepository.findByApiId(api.getId()));
+        }
+        data.setApiResponses(allResponses);
+
         data.setGlobalHeaders(globalHeaderRepository.findByTeamId(teamId));
 
-        log.info("导出团队数据: teamId={}, apis={}, groups={}, tags={}, globalHeaders={}",
+        log.info("导出团队数据: teamId={}, apis={}, responses={}, groups={}, tags={}, globalHeaders={}",
                 teamId,
                 data.getApis() != null ? data.getApis().size() : 0,
+                allResponses.size(),
                 data.getGroups() != null ? data.getGroups().size() : 0,
                 data.getTags() != null ? data.getTags().size() : 0,
                 data.getGlobalHeaders() != null ? data.getGlobalHeaders().size() : 0);
@@ -141,7 +158,8 @@ public class ImportExportService {
             log.info("导入标签: 数量={}", data.getTags().size());
         }
 
-        // 导入接口
+        // 导入接口：建立旧 apiId → 新 apiId 映射
+        Map<String, String> apiIdMap = new HashMap<String, String>();
         if (data.getApis() != null) {
             for (ApiDefinition api : data.getApis()) {
                 // 检查同团队内 path+method 是否已存在
@@ -153,6 +171,7 @@ public class ImportExportService {
                         // 覆盖模式：更新已有接口
                         ApiDefinition existing = existingList.get(0);
                         existing.setName(api.getName());
+                        existing.setDescription(api.getDescription());
                         existing.setType(api.getType());
                         existing.setResponseCode(api.getResponseCode());
                         existing.setContentType(api.getContentType());
@@ -169,6 +188,10 @@ public class ImportExportService {
                         }
 
                         apiRepository.update(existing);
+                        // 记录 ID 映射，用于后续导入返回体
+                        apiIdMap.put(api.getId(), existing.getId());
+                        // 覆盖模式下清除旧返回体
+                        apiResponseRepository.deleteByApiId(existing.getId());
                         overridden++;
                     } else {
                         // 合并模式：跳过已存在的
@@ -192,7 +215,51 @@ public class ImportExportService {
                     }
 
                     apiRepository.insert(api);
+                    apiIdMap.put(oldId, api.getId());
                     imported++;
+                }
+            }
+        }
+
+        // 导入返回体
+        if (data.getApiResponses() != null && !data.getApiResponses().isEmpty()) {
+            int respImported = 0;
+            for (ApiResponse resp : data.getApiResponses()) {
+                String newApiId = apiIdMap.get(resp.getApiId());
+                if (newApiId == null) {
+                    // 对应的接口未导入（合并模式下被跳过），跳过此返回体
+                    continue;
+                }
+                resp.setId(UUID.randomUUID().toString());
+                resp.setApiId(newApiId);
+                resp.setCreatedAt(now);
+                resp.setUpdatedAt(now);
+                apiResponseRepository.insert(resp);
+                respImported++;
+            }
+            log.info("导入返回体: 数量={}", respImported);
+        } else if (!apiIdMap.isEmpty()) {
+            // 兼容旧版导出文件（无 apiResponses 字段）：为每个导入的 REST 接口创建默认返回体
+            for (Map.Entry<String, String> entry : apiIdMap.entrySet()) {
+                String newApiId = entry.getValue();
+                // 检查是否已有返回体（覆盖模式下可能已被上面的逻辑清空）
+                if (apiResponseRepository.countByApiId(newApiId) == 0) {
+                    ApiDefinition importedApi = apiRepository.findById(newApiId);
+                    if (importedApi != null && "REST".equals(importedApi.getType())) {
+                        ApiResponse defaultResp = new ApiResponse();
+                        defaultResp.setId(UUID.randomUUID().toString());
+                        defaultResp.setApiId(newApiId);
+                        defaultResp.setName("Default");
+                        defaultResp.setResponseCode(importedApi.getResponseCode());
+                        defaultResp.setContentType(importedApi.getContentType());
+                        defaultResp.setResponseBody(importedApi.getResponseBody());
+                        defaultResp.setDelayMs(importedApi.getDelayMs());
+                        defaultResp.setActive(true);
+                        defaultResp.setSortOrder(0);
+                        defaultResp.setCreatedAt(now);
+                        defaultResp.setUpdatedAt(now);
+                        apiResponseRepository.insert(defaultResp);
+                    }
                 }
             }
         }

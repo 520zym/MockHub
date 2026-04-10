@@ -8,11 +8,15 @@ import com.mockhub.common.model.PageResult;
 import com.mockhub.common.util.PermissionChecker;
 import com.mockhub.common.util.SecurityContextUtil;
 import com.mockhub.mock.model.dto.ApiDefinitionDTO;
+import com.mockhub.mock.model.dto.ApiDefinitionDetailVO;
 import com.mockhub.mock.model.dto.ApiDefinitionVO;
 import com.mockhub.mock.model.dto.ApiMatchResult;
+import com.mockhub.mock.model.dto.ApiResponseDTO;
 import com.mockhub.mock.model.entity.ApiDefinition;
+import com.mockhub.mock.model.entity.ApiResponse;
 import com.mockhub.mock.model.entity.Tag;
 import com.mockhub.mock.repository.ApiRepository;
+import com.mockhub.mock.repository.ApiResponseRepository;
 import com.mockhub.mock.repository.ApiTagRepository;
 import com.mockhub.mock.repository.TagRepository;
 import com.mockhub.log.LogService;
@@ -51,6 +55,7 @@ public class ApiServiceImpl implements ApiService {
     private static final Pattern PARAM_NAME_PATTERN = Pattern.compile("\\{(\\w+)\\}");
 
     private final ApiRepository apiRepository;
+    private final ApiResponseRepository apiResponseRepository;
     private final ApiTagRepository apiTagRepository;
     private final TagRepository tagRepository;
     private final TeamService teamService;
@@ -59,6 +64,7 @@ public class ApiServiceImpl implements ApiService {
     private final LogService logService;
 
     public ApiServiceImpl(ApiRepository apiRepository,
+                          ApiResponseRepository apiResponseRepository,
                           ApiTagRepository apiTagRepository,
                           TagRepository tagRepository,
                           TeamService teamService,
@@ -66,6 +72,7 @@ public class ApiServiceImpl implements ApiService {
                           ObjectMapper objectMapper,
                           LogService logService) {
         this.apiRepository = apiRepository;
+        this.apiResponseRepository = apiResponseRepository;
         this.apiTagRepository = apiTagRepository;
         this.tagRepository = tagRepository;
         this.teamService = teamService;
@@ -213,14 +220,49 @@ public class ApiServiceImpl implements ApiService {
     }
 
     @Override
-    public ApiDefinition getById(String id) {
+    public ApiDefinitionDetailVO getById(String id) {
         ApiDefinition api = apiRepository.findById(id);
         if (api == null) {
             throw new BizException(40402, "接口不存在");
         }
         // 校验团队访问权限
         permissionChecker.checkTeamAccess(api.getTeamId());
-        return api;
+
+        // 构建详情 VO
+        ApiDefinitionDetailVO detail = new ApiDefinitionDetailVO();
+        detail.setId(api.getId());
+        detail.setTeamId(api.getTeamId());
+        detail.setGroupId(api.getGroupId());
+        detail.setType(api.getType());
+        detail.setName(api.getName());
+        detail.setDescription(api.getDescription());
+        detail.setMethod(api.getMethod());
+        detail.setPath(api.getPath());
+        detail.setResponseCode(api.getResponseCode());
+        detail.setContentType(api.getContentType());
+        detail.setResponseBody(api.getResponseBody());
+        detail.setDelayMs(api.getDelayMs());
+        detail.setEnabled(api.isEnabled());
+        detail.setGlobalHeaderOverrides(api.getGlobalHeaderOverrides());
+        detail.setSoapConfig(api.getSoapConfig());
+        detail.setCreatedBy(api.getCreatedBy());
+        detail.setCreatedAt(api.getCreatedAt());
+        detail.setUpdatedAt(api.getUpdatedAt());
+        detail.setUpdatedBy(api.getUpdatedBy());
+
+        // 填充返回体列表
+        List<ApiResponse> responses = apiResponseRepository.findByApiId(id);
+        detail.setResponses(responses);
+
+        // 填充标签列表
+        List<String> tagIds = apiTagRepository.findTagIdsByApiId(id);
+        if (!tagIds.isEmpty()) {
+            detail.setTags(tagRepository.findByIds(tagIds));
+        } else {
+            detail.setTags(Collections.<Tag>emptyList());
+        }
+
+        return detail;
     }
 
     @Override
@@ -244,6 +286,7 @@ public class ApiServiceImpl implements ApiService {
         api.setGroupId(dto.getGroupId());
         api.setType(dto.getType() != null ? dto.getType() : "REST");
         api.setName(dto.getName());
+        api.setDescription(dto.getDescription());
         api.setMethod(dto.getMethod());
         api.setPath(dto.getPath());
         api.setResponseCode(dto.getResponseCode());
@@ -260,6 +303,9 @@ public class ApiServiceImpl implements ApiService {
 
         apiRepository.insert(api);
         log.info("创建接口: id={}, name={}, method={}, path={}", api.getId(), api.getName(), api.getMethod(), api.getPath());
+
+        // 保存返回体
+        saveResponses(api.getId(), dto.getResponses(), now);
 
         // 保存标签关联
         if (dto.getTagIds() != null && !dto.getTagIds().isEmpty()) {
@@ -299,6 +345,7 @@ public class ApiServiceImpl implements ApiService {
         existing.setGroupId(dto.getGroupId());
         existing.setType(dto.getType() != null ? dto.getType() : existing.getType());
         existing.setName(dto.getName() != null ? dto.getName() : existing.getName());
+        existing.setDescription(dto.getDescription());
         existing.setMethod(newMethod);
         existing.setPath(newPath);
         existing.setResponseCode(dto.getResponseCode());
@@ -313,6 +360,10 @@ public class ApiServiceImpl implements ApiService {
 
         apiRepository.update(existing);
         log.info("更新接口: id={}, name={}", id, existing.getName());
+
+        // 替换返回体
+        saveResponses(id, dto.getResponses(), now);
+
         recordOperation("UPDATE", "API", id, existing.getName(),
                 "修改接口 " + existing.getMethod() + " " + existing.getPath(), existing.getTeamId());
 
@@ -360,6 +411,7 @@ public class ApiServiceImpl implements ApiService {
         copy.setGroupId(source.getGroupId());
         copy.setType(source.getType());
         copy.setName(source.getName() + " (副本)");
+        copy.setDescription(source.getDescription());
         copy.setMethod(source.getMethod());
         copy.setPath(source.getPath() + "-copy");
         copy.setResponseCode(source.getResponseCode());
@@ -376,6 +428,26 @@ public class ApiServiceImpl implements ApiService {
 
         apiRepository.insert(copy);
         log.info("复制接口: sourceId={}, newId={}, newPath={}", id, copy.getId(), copy.getPath());
+
+        // 复制返回体
+        List<ApiResponse> sourceResponses = apiResponseRepository.findByApiId(id);
+        for (ApiResponse srcResp : sourceResponses) {
+            ApiResponse copyResp = new ApiResponse();
+            copyResp.setId(UUID.randomUUID().toString());
+            copyResp.setApiId(copy.getId());
+            copyResp.setSoapOperationName(srcResp.getSoapOperationName());
+            copyResp.setName(srcResp.getName());
+            copyResp.setResponseCode(srcResp.getResponseCode());
+            copyResp.setContentType(srcResp.getContentType());
+            copyResp.setResponseBody(srcResp.getResponseBody());
+            copyResp.setDelayMs(srcResp.getDelayMs());
+            copyResp.setActive(srcResp.isActive());
+            copyResp.setSortOrder(srcResp.getSortOrder());
+            copyResp.setConditions(srcResp.getConditions());
+            copyResp.setCreatedAt(now);
+            copyResp.setUpdatedAt(now);
+            apiResponseRepository.insert(copyResp);
+        }
 
         // 复制标签关联
         List<String> tagIds = apiTagRepository.findTagIdsByApiId(id);
@@ -417,6 +489,7 @@ public class ApiServiceImpl implements ApiService {
         vo.setGroupId(api.getGroupId());
         vo.setType(api.getType());
         vo.setName(api.getName());
+        vo.setDescription(api.getDescription());
         vo.setMethod(api.getMethod());
         vo.setPath(api.getPath());
         vo.setResponseCode(api.getResponseCode());
@@ -455,7 +528,55 @@ public class ApiServiceImpl implements ApiService {
         // createdByName 需要 UserService 查询，由 Controller 层或通过 SQL JOIN 补充
         // 此处暂不填充
 
+        // 填充返回体摘要信息
+        List<ApiResponse> respSummary = apiResponseRepository.findSummaryByApiId(api.getId());
+        vo.setResponseCount(respSummary.size());
+        for (ApiResponse resp : respSummary) {
+            if (resp.isActive()) {
+                vo.setActiveResponseName(resp.getName());
+                break;
+            }
+        }
+
         return vo;
+    }
+
+    /**
+     * 保存接口的返回体列表
+     * <p>
+     * 如果 DTO 中提供了 responses 列表，则替换所有返回体；
+     * 如果未提供（兼容旧版客户端），不做处理，保留已有数据。
+     *
+     * @param apiId     接口 ID
+     * @param responses 返回体 DTO 列表
+     * @param now       当前时间
+     */
+    private void saveResponses(String apiId, List<ApiResponseDTO> responses, String now) {
+        if (responses == null) {
+            return;
+        }
+
+        List<ApiResponse> entities = new ArrayList<ApiResponse>();
+        for (int i = 0; i < responses.size(); i++) {
+            ApiResponseDTO dto = responses.get(i);
+            ApiResponse entity = new ApiResponse();
+            entity.setId(dto.getId() != null ? dto.getId() : UUID.randomUUID().toString());
+            entity.setApiId(apiId);
+            entity.setSoapOperationName(dto.getSoapOperationName());
+            entity.setName(dto.getName() != null ? dto.getName() : "Response " + (i + 1));
+            entity.setResponseCode(dto.getResponseCode());
+            entity.setContentType(dto.getContentType() != null ? dto.getContentType() : "application/json");
+            entity.setResponseBody(dto.getResponseBody());
+            entity.setDelayMs(dto.getDelayMs());
+            entity.setActive(dto.isActive());
+            entity.setSortOrder(dto.getSortOrder());
+            entity.setCreatedAt(now);
+            entity.setUpdatedAt(now);
+            entities.add(entity);
+        }
+
+        apiResponseRepository.replaceAll(apiId, entities);
+        log.debug("保存接口 {} 的返回体，共 {} 个", apiId, entities.size());
     }
 
     /**

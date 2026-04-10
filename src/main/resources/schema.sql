@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS api_definition (
     group_id               TEXT,            -- 可为 null（未分组）
     type                   TEXT NOT NULL DEFAULT 'REST',  -- REST / SOAP
     name                   TEXT NOT NULL,
+    description            TEXT,            -- 接口描述，存储 HTML 富文本
     method                 TEXT NOT NULL,   -- GET / POST / PUT / DELETE / PATCH
     path                   TEXT NOT NULL,   -- 不含团队标识前缀，支持 {xxx} 路径参数
     response_code          INTEGER NOT NULL DEFAULT 200,
@@ -166,3 +167,25 @@ CREATE TABLE IF NOT EXISTS request_log (
 CREATE INDEX IF NOT EXISTS idx_request_log_team_id ON request_log(team_id);
 CREATE INDEX IF NOT EXISTS idx_request_log_created_at ON request_log(created_at);
 CREATE INDEX IF NOT EXISTS idx_request_log_api_id ON request_log(api_id);
+
+-- ========== 接口返回体（多返回体支持） ==========
+
+CREATE TABLE IF NOT EXISTS api_response (
+    id                  TEXT PRIMARY KEY,
+    api_id              TEXT NOT NULL,
+    soap_operation_name TEXT,            -- REST 为 null；SOAP 填 operationName
+    name                TEXT NOT NULL DEFAULT 'Default',
+    response_code       INTEGER NOT NULL DEFAULT 200,
+    content_type        TEXT NOT NULL DEFAULT 'application/json',
+    response_body       TEXT,            -- 支持动态变量占位符，可能很大
+    delay_ms            INTEGER NOT NULL DEFAULT 0,
+    is_active           INTEGER NOT NULL DEFAULT 0,  -- 0=false, 1=true，同一 api_id + soap_operation_name 下只有一个为 1
+    sort_order          INTEGER NOT NULL DEFAULT 0,
+    conditions          TEXT,            -- v2 预留：JSON 条件匹配规则，当前为 null
+    created_at          TEXT NOT NULL,
+    updated_at          TEXT NOT NULL,
+    FOREIGN KEY (api_id) REFERENCES api_definition(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_api_response_api_id ON api_response(api_id);
+CREATE INDEX IF NOT EXISTS idx_api_response_active ON api_response(api_id, is_active);

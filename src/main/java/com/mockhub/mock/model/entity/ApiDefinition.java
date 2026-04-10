@@ -24,6 +24,9 @@ public class ApiDefinition {
     /** 接口名称 */
     private String name;
 
+    /** 接口描述，存储 HTML 富文本 */
+    private String description;
+
     /** HTTP 方法：GET / POST / PUT / DELETE / PATCH */
     private String method;
 
@@ -107,6 +110,14 @@ public class ApiDefinition {
 
     public void setName(String name) {
         this.name = name;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
     }
 
     public String getMethod() {

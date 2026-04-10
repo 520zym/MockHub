@@ -3,6 +3,7 @@ package com.mockhub.mock.controller;
 import com.mockhub.common.model.PageResult;
 import com.mockhub.common.model.Result;
 import com.mockhub.mock.model.dto.ApiDefinitionDTO;
+import com.mockhub.mock.model.dto.ApiDefinitionDetailVO;
 import com.mockhub.mock.model.dto.ApiDefinitionVO;
 import com.mockhub.mock.model.entity.ApiDefinition;
 import com.mockhub.mock.service.ApiService;
@@ -69,15 +70,15 @@ public class ApiController {
     }
 
     /**
-     * 获取接口详情（含 responseBody）
+     * 获取接口详情（含返回体列表、标签列表）
      *
      * @param id 接口 ID
-     * @return 完整的接口定义对象
+     * @return 完整的接口定义详情
      */
     @GetMapping("/{id}")
-    public Result<ApiDefinition> getById(@PathVariable String id) {
-        ApiDefinition api = apiService.getById(id);
-        return Result.ok(api);
+    public Result<ApiDefinitionDetailVO> getById(@PathVariable String id) {
+        ApiDefinitionDetailVO detail = apiService.getById(id);
+        return Result.ok(detail);
     }
 
     /**

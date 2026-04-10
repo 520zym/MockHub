@@ -2,6 +2,7 @@ package com.mockhub.mock.model.dto;
 
 import com.mockhub.mock.model.entity.ApiDefinition;
 import com.mockhub.mock.model.entity.ApiGroup;
+import com.mockhub.mock.model.entity.ApiResponse;
 import com.mockhub.mock.model.entity.GlobalHeader;
 import com.mockhub.mock.model.entity.Tag;
 
@@ -29,6 +30,9 @@ public class ImportExportData {
 
     /** 接口列表 */
     private List<ApiDefinition> apis;
+
+    /** 接口返回体列表 */
+    private List<ApiResponse> apiResponses;
 
     /** 全局响应头列表 */
     private List<GlobalHeader> globalHeaders;
@@ -82,6 +86,14 @@ public class ImportExportData {
 
     public void setApis(List<ApiDefinition> apis) {
         this.apis = apis;
+    }
+
+    public List<ApiResponse> getApiResponses() {
+        return apiResponses;
+    }
+
+    public void setApiResponses(List<ApiResponse> apiResponses) {
+        this.apiResponses = apiResponses;
     }
 
     public List<GlobalHeader> getGlobalHeaders() {

@@ -94,6 +94,12 @@
       </el-form>
     </div>
 
+    <!-- 卡片：接口描述（REST 和 SOAP 都显示） -->
+    <div class="soft-card section-card">
+      <h3 class="section-title">接口描述</h3>
+      <RichTextEditor v-model="form.description" placeholder="输入接口描述..." />
+    </div>
+
     <!-- SOAP 模式：WSDL 上传及 Operation 配置 -->
     <div class="soft-card section-card" v-if="form.type === 'SOAP'">
       <h3 class="section-title">SOAP / WSDL 配置</h3>
@@ -135,7 +141,7 @@
         </el-form-item>
       </el-form>
 
-      <!-- Operation 列表 -->
+      <!-- Operation 列表（每个 operation 使用 ResponseTabs 管理多返回体） -->
       <div v-if="form.soapConfig && form.soapConfig.operations && form.soapConfig.operations.length" class="operations-list">
         <h4 class="operations-title">Operations（{{ form.soapConfig.operations.length }} 个）</h4>
         <div
@@ -147,23 +153,11 @@
             <span class="operation-name">{{ op.operationName }}</span>
             <span class="operation-action">SOAPAction: {{ op.soapAction }}</span>
           </div>
-          <el-row :gutter="16" style="margin-bottom: 12px">
-            <el-col :span="6">
-              <el-form-item label="响应状态码" label-position="top">
-                <el-input-number v-model="op.responseCode" :min="100" :max="599" controls-position="right" style="width: 100%" />
-              </el-form-item>
-            </el-col>
-            <el-col :span="6">
-              <el-form-item label="延迟 (ms)" label-position="top">
-                <el-input-number v-model="op.delayMs" :min="0" :max="60000" controls-position="right" style="width: 100%" />
-              </el-form-item>
-            </el-col>
-          </el-row>
-          <div class="operation-editor-label">响应 XML</div>
-          <MonacoEditor
-            v-model="op.responseBody"
-            language="xml"
-            class="operation-editor"
+          <ResponseTabs
+            v-model="op.responses"
+            :operation-name="op.operationName"
+            default-content-type="text/xml"
+            editor-language="xml"
           />
         </div>
       </div>
@@ -173,91 +167,23 @@
       </div>
     </div>
 
-    <!-- 卡片 2：返回体配置（REST 模式） -->
+    <!-- 卡片：返回体配置（REST 模式，使用 ResponseTabs 组件） -->
     <div class="soft-card section-card" v-if="form.type === 'REST'">
       <h3 class="section-title">返回体配置</h3>
-
-      <el-form label-position="top">
-        <el-row :gutter="20">
-          <el-col :span="6">
-            <el-form-item label="响应状态码">
-              <el-input-number
-                v-model="form.responseCode"
-                :min="100"
-                :max="599"
-                controls-position="right"
-                style="width: 100%"
-              />
-            </el-form-item>
-          </el-col>
-          <el-col :span="18">
-            <el-form-item label="Content-Type">
-              <div class="content-type-bar">
-                <span class="content-type-auto">
-                  自动识别：{{ detectedContentType }}
-                  <el-icon v-if="detectedContentType !== '未知'" class="check-icon"><Check /></el-icon>
-                </span>
-                <el-radio-group v-model="manualContentType" size="small">
-                  <el-radio-button value="json">JSON</el-radio-button>
-                  <el-radio-button value="xml">XML</el-radio-button>
-                  <el-radio-button value="text">Text</el-radio-button>
-                </el-radio-group>
-              </div>
-            </el-form-item>
-          </el-col>
-        </el-row>
-
-        <!-- 编辑器工具栏 -->
-        <div class="editor-toolbar">
-          <el-button size="small" @click="formatResponseBody">
-            <el-icon><MagicStick /></el-icon>
-            格式化
-          </el-button>
-          <el-upload
-            :auto-upload="false"
-            :show-file-list="false"
-            :on-change="handleUploadResponseFile"
-          >
-            <el-button size="small">
-              <el-icon><Upload /></el-icon>
-              上传文件
-            </el-button>
-          </el-upload>
-        </div>
-
-        <!-- Monaco 编辑器 -->
-        <MonacoEditor
-          v-model="form.responseBody"
-          :language="editorLanguage"
-          class="response-editor"
-        />
-      </el-form>
+      <ResponseTabs v-model="form.responses" />
     </div>
 
-    <!-- 卡片 3：标签 -->
+    <!-- 卡片：标签 -->
     <div class="soft-card section-card">
       <h3 class="section-title">标签</h3>
       <TagInput v-model="form.tagIds" :team-id="form.teamId" />
     </div>
 
-    <!-- 卡片 4：高级配置 -->
+    <!-- 卡片：高级配置 -->
     <div class="soft-card section-card">
       <h3 class="section-title">高级配置</h3>
 
       <el-form label-position="top">
-        <!-- 响应延迟（REST 模式下显示，SOAP 模式延迟在各 Operation 中配置） -->
-        <el-form-item label="响应延迟 (ms)" v-if="form.type === 'REST'">
-          <el-input-number
-            v-model="form.delayMs"
-            :min="0"
-            :max="60000"
-            :step="100"
-            controls-position="right"
-            style="width: 200px"
-          />
-          <span class="form-hint">设为 0 表示无延迟</span>
-        </el-form-item>
-
         <!-- 全局响应头覆盖 -->
         <el-form-item label="全局响应头覆盖">
           <div class="header-overrides">
@@ -294,17 +220,22 @@
 <script setup>
 /**
  * 接口编辑/新建页面
- * 分区式卡片布局：基本信息 / SOAP配置 / 返回体配置 / 标签 / 高级配置
+ *
+ * 分区式卡片布局：基本信息 / 接口描述 / SOAP配置 / 返回体配置 / 标签 / 高级配置
  * 路由 /apis/new → 新建模式；/apis/:id/edit → 编辑模式
+ *
+ * 多返回体支持：REST 和 SOAP 都使用 ResponseTabs 组件管理多个返回体，
+ * 每个返回体有独立的名称、状态码、Content-Type、延迟和响应体。
  */
-import { ref, computed, watch, onMounted, reactive } from 'vue'
+import { ref, computed, onMounted, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAppStore } from '@/stores/app'
 import { getApiDetail, createApi, updateApi } from '@/api/apis'
 import { uploadWsdl } from '@/api/soap'
 import { getServerAddress } from '@/api/settings'
-import MonacoEditor from '@/components/MonacoEditor.vue'
+import RichTextEditor from '@/components/RichTextEditor.vue'
+import ResponseTabs from '@/components/ResponseTabs.vue'
 import TeamTag from '@/components/TeamTag.vue'
 import CopyButton from '@/components/CopyButton.vue'
 import TagInput from '@/components/TagInput.vue'
@@ -324,9 +255,11 @@ const saving = ref(false)
 const form = reactive({
   type: 'REST',
   name: '',
+  description: '',
   teamId: '',
   method: 'GET',
   path: '',
+  // 旧字段保留用于后端兼容
   responseCode: 200,
   contentType: 'application/json',
   responseBody: '',
@@ -334,11 +267,20 @@ const form = reactive({
   enabled: true,
   tagIds: [],
   globalHeaderOverrides: {},
-  soapConfig: null
+  soapConfig: null,
+  // 多返回体（REST 模式）
+  responses: [{
+    id: null,
+    soapOperationName: null,
+    name: 'Default',
+    responseCode: 200,
+    contentType: 'application/json',
+    responseBody: '',
+    delayMs: 0,
+    isActive: true,
+    sortOrder: 0
+  }]
 })
-
-// 手动选择的 Content-Type（json/xml/text），用于覆盖自动识别
-const manualContentType = ref('json')
 
 // WSDL 上传相关
 const wsdlFile = ref(null)
@@ -371,45 +313,6 @@ const wsdlHostUrl = computed(() => {
   return `${base}/wsdl/${form.soapConfig.wsdlFileName}`
 })
 
-/** 自动识别内容类型 */
-const detectedContentType = computed(() => {
-  const body = (form.responseBody || '').trim()
-  if (!body) return '未知'
-  // JSON 检测
-  if ((body.startsWith('{') && body.endsWith('}')) || (body.startsWith('[') && body.endsWith(']'))) {
-    return 'JSON'
-  }
-  // XML 检测
-  if (body.startsWith('<') && body.endsWith('>')) {
-    return 'XML'
-  }
-  return 'Text'
-})
-
-/** Monaco 编辑器语言（根据手动选择的 Content-Type） */
-const editorLanguage = computed(() => {
-  const map = { json: 'json', xml: 'xml', text: 'plaintext' }
-  return map[manualContentType.value] || 'plaintext'
-})
-
-// --- 内容类型自动识别联动 ---
-watch(() => form.responseBody, (val) => {
-  const body = (val || '').trim()
-  if (!body) return
-  if ((body.startsWith('{') && body.endsWith('}')) || (body.startsWith('[') && body.endsWith(']'))) {
-    manualContentType.value = 'json'
-  } else if (body.startsWith('<') && body.endsWith('>')) {
-    manualContentType.value = 'xml'
-  }
-})
-
-// 手动切换 Content-Type 时同步到 form.contentType
-watch(manualContentType, (val) => {
-  const map = { json: 'application/json', xml: 'application/xml', text: 'text/plain' }
-  form.contentType = map[val] || 'text/plain'
-})
-
-// --- 团队变化时加载分组 ---
 // --- 数据加载（编辑模式） ---
 
 async function loadApiDetail() {
@@ -417,10 +320,12 @@ async function loadApiDetail() {
   pageLoading.value = true
   try {
     const data = await getApiDetail(route.params.id)
-    // 填充表单
+
+    // 填充基本信息
     Object.assign(form, {
       type: data.type || 'REST',
       name: data.name || '',
+      description: data.description || '',
       teamId: data.teamId || '',
       method: data.method || 'GET',
       path: data.path || '',
@@ -431,20 +336,99 @@ async function loadApiDetail() {
       enabled: data.enabled !== undefined ? data.enabled : true,
       tagIds: data.tags ? data.tags.map(t => t.id) : [],
       globalHeaderOverrides: data.globalHeaderOverrides || {},
-      soapConfig: data.soapConfig || null
+      soapConfig: null
     })
 
-    // 根据 contentType 设置手动选择的类型
-    if (form.contentType.includes('json')) {
-      manualContentType.value = 'json'
-    } else if (form.contentType.includes('xml')) {
-      manualContentType.value = 'xml'
+    // 填充返回体
+    if (data.responses && data.responses.length > 0) {
+      if (data.type === 'REST') {
+        // REST 模式：直接使用 responses（soapOperationName 为 null 的）
+        form.responses = data.responses
+          .filter(r => !r.soapOperationName)
+          .map(r => ({
+            id: r.id,
+            soapOperationName: null,
+            name: r.name || 'Default',
+            responseCode: r.responseCode || 200,
+            contentType: r.contentType || 'application/json',
+            responseBody: r.responseBody || '',
+            delayMs: r.delayMs || 0,
+            isActive: r.active !== undefined ? r.active : false,
+            sortOrder: r.sortOrder || 0
+          }))
+        // 确保至少有一个
+        if (form.responses.length === 0) {
+          form.responses = [createDefaultResponse()]
+        }
+      } else {
+        // SOAP 模式：按 soapOperationName 分组，塞入各 operation
+        const soapResponses = data.responses.filter(r => r.soapOperationName)
+        const responsesByOp = {}
+        soapResponses.forEach(r => {
+          if (!responsesByOp[r.soapOperationName]) {
+            responsesByOp[r.soapOperationName] = []
+          }
+          responsesByOp[r.soapOperationName].push({
+            id: r.id,
+            soapOperationName: r.soapOperationName,
+            name: r.name || 'Default',
+            responseCode: r.responseCode || 200,
+            contentType: r.contentType || 'text/xml',
+            responseBody: r.responseBody || '',
+            delayMs: r.delayMs || 0,
+            isActive: r.active !== undefined ? r.active : false,
+            sortOrder: r.sortOrder || 0
+          })
+        })
+
+        // 解析 soapConfig 并填充 responses
+        if (data.soapConfig) {
+          const soapConfig = typeof data.soapConfig === 'string' ? JSON.parse(data.soapConfig) : data.soapConfig
+          form.soapConfig = {
+            wsdlFileName: soapConfig.wsdlFileName,
+            operations: (soapConfig.operations || []).map(op => ({
+              operationName: op.operationName,
+              soapAction: op.soapAction,
+              responses: responsesByOp[op.operationName] || [createDefaultSoapResponse(op.operationName)]
+            }))
+          }
+        }
+      }
     } else {
-      manualContentType.value = 'text'
+      // 无返回体数据（兼容旧数据），创建默认
+      if (data.type === 'REST') {
+        form.responses = [{
+          id: null,
+          soapOperationName: null,
+          name: 'Default',
+          responseCode: data.responseCode || 200,
+          contentType: data.contentType || 'application/json',
+          responseBody: data.responseBody || '',
+          delayMs: data.delayMs || 0,
+          isActive: true,
+          sortOrder: 0
+        }]
+      }
+    }
+
+    // SOAP soapConfig（非返回体部分）
+    if (data.type === 'SOAP' && data.soapConfig && !form.soapConfig) {
+      const soapConfig = typeof data.soapConfig === 'string' ? JSON.parse(data.soapConfig) : data.soapConfig
+      form.soapConfig = {
+        wsdlFileName: soapConfig.wsdlFileName,
+        operations: (soapConfig.operations || []).map(op => ({
+          operationName: op.operationName,
+          soapAction: op.soapAction,
+          responses: [createDefaultSoapResponse(op.operationName)]
+        }))
+      }
     }
 
     // 将 globalHeaderOverrides 对象转为可编辑列表
-    headerOverrideList.value = Object.entries(form.globalHeaderOverrides || {}).map(
+    const overridesObj = typeof form.globalHeaderOverrides === 'string'
+      ? JSON.parse(form.globalHeaderOverrides || '{}')
+      : (form.globalHeaderOverrides || {})
+    headerOverrideList.value = Object.entries(overridesObj).map(
       ([key, value]) => ({ key, value })
     )
   } catch (e) {
@@ -454,33 +438,34 @@ async function loadApiDetail() {
   }
 }
 
-// --- 格式化返回体 ---
-function formatResponseBody() {
-  const body = (form.responseBody || '').trim()
-  if (!body) return
-
-  if (manualContentType.value === 'json') {
-    try {
-      const obj = JSON.parse(body)
-      form.responseBody = JSON.stringify(obj, null, 2)
-      ElMessage.success('格式化成功')
-    } catch (e) {
-      ElMessage.warning('JSON 格式不正确，无法格式化')
-    }
-  } else if (manualContentType.value === 'xml') {
-    // 简单的 XML 格式化（缩进处理）
-    ElMessage.info('XML 格式化暂不支持，请手动调整')
+/** 创建默认 REST 返回体 */
+function createDefaultResponse() {
+  return {
+    id: null,
+    soapOperationName: null,
+    name: 'Default',
+    responseCode: 200,
+    contentType: 'application/json',
+    responseBody: '',
+    delayMs: 0,
+    isActive: true,
+    sortOrder: 0
   }
 }
 
-// --- 上传返回体文件 ---
-function handleUploadResponseFile(uploadFile) {
-  const reader = new FileReader()
-  reader.onload = (e) => {
-    form.responseBody = e.target.result
-    ElMessage.success('文件内容已加载到编辑器')
+/** 创建默认 SOAP operation 返回体 */
+function createDefaultSoapResponse(operationName) {
+  return {
+    id: null,
+    soapOperationName: operationName,
+    name: 'Default',
+    responseCode: 200,
+    contentType: 'text/xml',
+    responseBody: `<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">\n  <soap:Body>\n    <!-- ${operationName} response -->\n  </soap:Body>\n</soap:Envelope>`,
+    delayMs: 0,
+    isActive: true,
+    sortOrder: 0
   }
-  reader.readAsText(uploadFile.raw)
 }
 
 // --- WSDL 上传 ---
@@ -497,15 +482,13 @@ async function handleUploadWsdl() {
     formData.append('file', wsdlFile.value)
     const res = await uploadWsdl(formData)
 
-    // 初始化 soapConfig
+    // 初始化 soapConfig，每个 operation 有默认返回体
     form.soapConfig = {
       wsdlFileName: res.fileName,
       operations: (res.operations || []).map(op => ({
         operationName: op.operationName,
         soapAction: op.soapAction,
-        responseCode: 200,
-        delayMs: 0,
-        responseBody: `<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">\n  <soap:Body>\n    <!-- ${op.operationName} response -->\n  </soap:Body>\n</soap:Envelope>`
+        responses: [createDefaultSoapResponse(op.operationName)]
       }))
     }
     // SOAP 模式使用 POST 方法
@@ -555,20 +538,54 @@ async function handleSave() {
       }
     })
 
+    // 收集所有返回体
+    let allResponses = []
+    if (form.type === 'REST') {
+      allResponses = form.responses
+    } else if (form.type === 'SOAP' && form.soapConfig && form.soapConfig.operations) {
+      // 从各 operation 中收集返回体
+      form.soapConfig.operations.forEach(op => {
+        if (op.responses) {
+          allResponses.push(...op.responses)
+        }
+      })
+    }
+
+    // 从活跃返回体取值填充旧字段（后端兼容）
+    const activeResp = allResponses.find(r => r.isActive) || allResponses[0]
+    const responseCode = activeResp ? activeResp.responseCode : 200
+    const contentType = activeResp ? activeResp.contentType : 'application/json'
+    const responseBody = activeResp ? activeResp.responseBody : ''
+    const delayMs = activeResp ? activeResp.delayMs : 0
+
+    // 构建 soapConfig（只保存元数据，不含 responses）
+    let soapConfigPayload = null
+    if (form.type === 'SOAP' && form.soapConfig) {
+      soapConfigPayload = {
+        wsdlFileName: form.soapConfig.wsdlFileName,
+        operations: (form.soapConfig.operations || []).map(op => ({
+          operationName: op.operationName,
+          soapAction: op.soapAction
+        }))
+      }
+    }
+
     const payload = {
       type: form.type,
       name: form.name,
+      description: form.description,
       teamId: form.teamId,
       method: form.type === 'SOAP' ? 'POST' : form.method,
       path: form.path,
-      responseCode: form.responseCode,
-      contentType: form.contentType,
-      responseBody: form.responseBody,
-      delayMs: form.delayMs,
+      responseCode: responseCode,
+      contentType: contentType,
+      responseBody: responseBody,
+      delayMs: delayMs,
       enabled: form.enabled,
       tagIds: form.tagIds,
       globalHeaderOverrides: overrides,
-      soapConfig: form.type === 'SOAP' ? form.soapConfig : null
+      soapConfig: soapConfigPayload,
+      responses: allResponses
     }
 
     if (isEdit.value) {
@@ -685,40 +702,6 @@ onMounted(async () => {
   word-break: break-all;
 }
 
-// Content-Type 栏
-.content-type-bar {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.content-type-auto {
-  font-size: 13px;
-  color: #A3AED0;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.check-icon {
-  color: #10B981;
-}
-
-// 编辑器工具栏
-.editor-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-// Monaco 编辑器高度
-.response-editor {
-  :deep(.monaco-editor-container) {
-    height: 400px;
-  }
-}
-
 // SOAP Operation 相关
 .wsdl-upload-row {
   display: flex;
@@ -766,18 +749,6 @@ onMounted(async () => {
   font-family: monospace;
 }
 
-.operation-editor-label {
-  font-size: 13px;
-  color: #4A5568;
-  margin-bottom: 6px;
-}
-
-.operation-editor {
-  :deep(.monaco-editor-container) {
-    height: 250px;
-  }
-}
-
 .empty-operations {
   padding: 20px;
   text-align: center;
@@ -804,12 +775,6 @@ onMounted(async () => {
 
 .header-value {
   flex: 1;
-}
-
-.form-hint {
-  margin-left: 12px;
-  font-size: 12px;
-  color: #A3AED0;
 }
 
 // 底部操作栏

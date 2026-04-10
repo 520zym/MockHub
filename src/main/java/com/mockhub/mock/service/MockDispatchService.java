@@ -9,6 +9,8 @@ import com.mockhub.mock.model.SoapConfig;
 import com.mockhub.mock.model.SoapOperation;
 import com.mockhub.mock.model.dto.ApiMatchResult;
 import com.mockhub.mock.model.entity.ApiDefinition;
+import com.mockhub.mock.model.entity.ApiResponse;
+import com.mockhub.mock.repository.ApiResponseRepository;
 import com.mockhub.system.model.entity.Team;
 import com.mockhub.system.service.TeamService;
 import org.slf4j.Logger;
@@ -58,17 +60,20 @@ public class MockDispatchService {
 
     private final TeamService teamService;
     private final ApiService apiService;
+    private final ApiResponseRepository apiResponseRepository;
     private final GlobalHeaderService globalHeaderService;
     private final LogService logService;
     private final ObjectMapper objectMapper;
 
     public MockDispatchService(TeamService teamService,
                                ApiService apiService,
+                               ApiResponseRepository apiResponseRepository,
                                GlobalHeaderService globalHeaderService,
                                LogService logService,
                                ObjectMapper objectMapper) {
         this.teamService = teamService;
         this.apiService = apiService;
+        this.apiResponseRepository = apiResponseRepository;
         this.globalHeaderService = globalHeaderService;
         this.logService = logService;
         this.objectMapper = objectMapper;
@@ -114,35 +119,70 @@ public class MockDispatchService {
         log.info("接口匹配成功: apiId={}, apiName={}, configPath={}, pathVars={}",
                 api.getId(), api.getName(), api.getPath(), pathVariables);
 
-        // ====== 3. 判断是否为 SOAP 请求 ======
+        // ====== 3. 获取活跃返回体 ======
         String contentType = request.getContentType();
         boolean isSoap = isSoapRequest(contentType);
-        String responseBody = api.getResponseBody();
-        int responseCode = api.getResponseCode();
-        int delayMs = api.getDelayMs();
+        String responseBody;
+        int responseCode;
+        int delayMs;
+        String respContentTypeFromResponse = null;
 
         if (isSoap && api.getSoapConfig() != null && !api.getSoapConfig().isEmpty()) {
+            // SOAP 请求处理
             log.debug("检测到 SOAP 请求, Content-Type={}", contentType);
 
             // 从 SOAPAction 请求头匹配 operation
             String soapAction = request.getHeader("SOAPAction");
             if (soapAction != null) {
-                // 去掉引号
                 soapAction = soapAction.replace("\"", "").trim();
             }
             log.debug("SOAPAction 头: {}", soapAction);
 
             SoapOperation matchedOp = matchSoapOperation(api.getSoapConfig(), soapAction);
             if (matchedOp != null) {
-                // 使用 operation 独立的配置
-                responseBody = matchedOp.getResponseBody();
-                responseCode = matchedOp.getResponseCode();
-                delayMs = matchedOp.getDelayMs();
                 log.info("SOAP operation 匹配成功: operationName={}, soapAction={}",
                         matchedOp.getOperationName(), matchedOp.getSoapAction());
+
+                // 优先从 api_response 表查询活跃返回体
+                ApiResponse soapResp = apiResponseRepository.findActiveByApiIdAndOperation(
+                        api.getId(), matchedOp.getOperationName());
+                if (soapResp != null) {
+                    responseBody = soapResp.getResponseBody();
+                    responseCode = soapResp.getResponseCode();
+                    delayMs = soapResp.getDelayMs();
+                    respContentTypeFromResponse = soapResp.getContentType();
+                    log.debug("使用 api_response 表的 SOAP 活跃返回体: respId={}, name={}",
+                            soapResp.getId(), soapResp.getName());
+                } else {
+                    // 兼容旧数据：从 operation 读取
+                    responseBody = matchedOp.getResponseBody();
+                    responseCode = matchedOp.getResponseCode();
+                    delayMs = matchedOp.getDelayMs();
+                    log.debug("使用 SoapOperation 旧数据回退");
+                }
             } else {
                 log.warn("未匹配到 SOAP operation: soapAction={}", soapAction);
-                // 未匹配到 operation 时仍使用接口默认配置
+                // 未匹配到 operation 时使用接口默认配置
+                responseBody = api.getResponseBody();
+                responseCode = api.getResponseCode();
+                delayMs = api.getDelayMs();
+            }
+        } else {
+            // REST 请求处理：优先从 api_response 表查询活跃返回体
+            ApiResponse activeResponse = apiResponseRepository.findActiveByApiId(api.getId());
+            if (activeResponse != null) {
+                responseBody = activeResponse.getResponseBody();
+                responseCode = activeResponse.getResponseCode();
+                delayMs = activeResponse.getDelayMs();
+                respContentTypeFromResponse = activeResponse.getContentType();
+                log.debug("使用 api_response 表的 REST 活跃返回体: respId={}, name={}",
+                        activeResponse.getId(), activeResponse.getName());
+            } else {
+                // 兼容旧数据：从 api_definition 读取
+                responseBody = api.getResponseBody();
+                responseCode = api.getResponseCode();
+                delayMs = api.getDelayMs();
+                log.debug("使用 api_definition 旧数据回退");
             }
         }
 
@@ -174,8 +214,8 @@ public class MockDispatchService {
         for (Map.Entry<String, String> entry : finalHeaders.entrySet()) {
             httpHeaders.add(entry.getKey(), entry.getValue());
         }
-        // 设置 Content-Type，确保包含 charset=UTF-8 避免中文乱码
-        String respContentType = api.getContentType();
+        // 设置 Content-Type，优先使用活跃返回体的 contentType，确保包含 charset=UTF-8 避免中文乱码
+        String respContentType = respContentTypeFromResponse != null ? respContentTypeFromResponse : api.getContentType();
         if (respContentType != null && !respContentType.isEmpty()) {
             if (!respContentType.toLowerCase().contains("charset")) {
                 respContentType = respContentType + "; charset=UTF-8";

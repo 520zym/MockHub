@@ -21,6 +21,7 @@ public class ApiDefinitionVO {
     private String groupName;
     private String type;
     private String name;
+    private String description;
     private String method;
     private String path;
     private int responseCode;
@@ -32,6 +33,12 @@ public class ApiDefinitionVO {
     private String createdByName;
     private String createdAt;
     private String updatedAt;
+
+    /** 返回体总数 */
+    private int responseCount;
+
+    /** 当前生效的返回体名称 */
+    private String activeResponseName;
 
     public ApiDefinitionVO() {
     }
@@ -106,6 +113,14 @@ public class ApiDefinitionVO {
 
     public void setName(String name) {
         this.name = name;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
     }
 
     public String getMethod() {
@@ -194,5 +209,21 @@ public class ApiDefinitionVO {
 
     public void setUpdatedAt(String updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public int getResponseCount() {
+        return responseCount;
+    }
+
+    public void setResponseCount(int responseCount) {
+        this.responseCount = responseCount;
+    }
+
+    public String getActiveResponseName() {
+        return activeResponseName;
+    }
+
+    public void setActiveResponseName(String activeResponseName) {
+        this.activeResponseName = activeResponseName;
     }
 }

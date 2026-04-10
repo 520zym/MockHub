@@ -35,6 +35,7 @@ public class ApiRepository {
             api.setGroupId(rs.getString("group_id"));
             api.setType(rs.getString("type"));
             api.setName(rs.getString("name"));
+            api.setDescription(rs.getString("description"));
             api.setMethod(rs.getString("method"));
             api.setPath(rs.getString("path"));
             api.setResponseCode(rs.getInt("response_code"));
@@ -65,6 +66,7 @@ public class ApiRepository {
             api.setGroupId(rs.getString("group_id"));
             api.setType(rs.getString("type"));
             api.setName(rs.getString("name"));
+            api.setDescription(rs.getString("description"));
             api.setMethod(rs.getString("method"));
             api.setPath(rs.getString("path"));
             api.setResponseCode(rs.getInt("response_code"));
@@ -147,7 +149,7 @@ public class ApiRepository {
                                        String method, Boolean enabled, String keyword,
                                        String tagId, int offset, int limit) {
         StringBuilder sql = new StringBuilder();
-        sql.append("SELECT a.id, a.team_id, a.group_id, a.type, a.name, a.method, a.path, ");
+        sql.append("SELECT a.id, a.team_id, a.group_id, a.type, a.name, a.description, a.method, a.path, ");
         sql.append("a.response_code, a.content_type, a.delay_ms, a.enabled, ");
         sql.append("a.global_header_overrides, a.soap_config, ");
         sql.append("a.created_by, a.created_at, a.updated_at, a.updated_by ");
@@ -279,12 +281,12 @@ public class ApiRepository {
      */
     public void insert(ApiDefinition api) {
         jdbcTemplate.update(
-                "INSERT INTO api_definition (id, team_id, group_id, type, name, method, path, " +
+                "INSERT INTO api_definition (id, team_id, group_id, type, name, description, method, path, " +
                         "response_code, content_type, response_body, delay_ms, enabled, " +
                         "global_header_overrides, soap_config, scenarios, created_by, created_at, updated_at, updated_by) " +
-                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 api.getId(), api.getTeamId(), api.getGroupId(), api.getType(), api.getName(),
-                api.getMethod(), api.getPath(), api.getResponseCode(), api.getContentType(),
+                api.getDescription(), api.getMethod(), api.getPath(), api.getResponseCode(), api.getContentType(),
                 api.getResponseBody(), api.getDelayMs(), api.isEnabled() ? 1 : 0,
                 api.getGlobalHeaderOverrides(), api.getSoapConfig(), api.getScenarios(),
                 api.getCreatedBy(), api.getCreatedAt(), api.getUpdatedAt(), api.getUpdatedBy());
@@ -295,11 +297,11 @@ public class ApiRepository {
      */
     public void update(ApiDefinition api) {
         jdbcTemplate.update(
-                "UPDATE api_definition SET team_id = ?, group_id = ?, type = ?, name = ?, method = ?, path = ?, " +
+                "UPDATE api_definition SET team_id = ?, group_id = ?, type = ?, name = ?, description = ?, method = ?, path = ?, " +
                         "response_code = ?, content_type = ?, response_body = ?, delay_ms = ?, enabled = ?, " +
                         "global_header_overrides = ?, soap_config = ?, scenarios = ?, " +
                         "updated_at = ?, updated_by = ? WHERE id = ?",
-                api.getTeamId(), api.getGroupId(), api.getType(), api.getName(),
+                api.getTeamId(), api.getGroupId(), api.getType(), api.getName(), api.getDescription(),
                 api.getMethod(), api.getPath(), api.getResponseCode(), api.getContentType(),
                 api.getResponseBody(), api.getDelayMs(), api.isEnabled() ? 1 : 0,
                 api.getGlobalHeaderOverrides(), api.getSoapConfig(), api.getScenarios(),

@@ -1,63 +1,57 @@
 package com.mockhub.mock.model.dto;
 
-import java.util.ArrayList;
+import com.mockhub.mock.model.entity.ApiResponse;
+import com.mockhub.mock.model.entity.Tag;
+
 import java.util.List;
 import java.util.Map;
 
 /**
- * 接口定义创建/更新请求体
+ * 接口定义详情响应体
+ * <p>
+ * 用于编辑页面，包含完整信息：接口基本信息 + 所有返回体 + 标签列表。
+ * SOAP 接口的返回体通过 soapOperationName 区分归属的 operation。
  */
-public class ApiDefinitionDTO {
+public class ApiDefinitionDetailVO {
 
-    /** 所属团队 ID */
+    private String id;
     private String teamId;
-
-    /** 所属分组 ID，可为 null */
     private String groupId;
-
-    /** 接口类型：REST 或 SOAP */
     private String type;
-
-    /** 接口名称 */
     private String name;
-
-    /** 接口描述，存储 HTML 富文本 */
     private String description;
-
-    /** HTTP 方法 */
     private String method;
-
-    /** 请求路径 */
     private String path;
 
-    /** 响应状态码 */
+    /** 旧字段保留（兼容），实际使用 responses 中的数据 */
     private int responseCode;
-
-    /** 响应内容类型 */
     private String contentType;
-
-    /** 响应体 */
     private String responseBody;
-
-    /** 延迟毫秒数 */
     private int delayMs;
 
-    /** 是否启用 */
     private boolean enabled;
+    private String globalHeaderOverrides;
+    private String soapConfig;
+    private String createdBy;
+    private String createdAt;
+    private String updatedAt;
+    private String updatedBy;
 
-    /** 标签 ID 列表 */
-    private List<String> tagIds;
+    /** 所有返回体列表（REST 的 soapOperationName 为 null，SOAP 按 operationName 区分） */
+    private List<ApiResponse> responses;
 
-    /** 全局响应头覆盖 */
-    private Map<String, String> globalHeaderOverrides;
+    /** 关联标签列表 */
+    private List<Tag> tags;
 
-    /** SOAP 配置（type=SOAP 时使用），直接传对象而非 JSON 字符串 */
-    private Object soapConfig;
+    public ApiDefinitionDetailVO() {
+    }
 
-    /** 多返回体列表 */
-    private List<ApiResponseDTO> responses;
+    public String getId() {
+        return id;
+    }
 
-    public ApiDefinitionDTO() {
+    public void setId(String id) {
+        this.id = id;
     }
 
     public String getTeamId() {
@@ -156,35 +150,67 @@ public class ApiDefinitionDTO {
         this.enabled = enabled;
     }
 
-    public List<String> getTagIds() {
-        return tagIds;
-    }
-
-    public void setTagIds(List<String> tagIds) {
-        this.tagIds = tagIds;
-    }
-
-    public Map<String, String> getGlobalHeaderOverrides() {
+    public String getGlobalHeaderOverrides() {
         return globalHeaderOverrides;
     }
 
-    public void setGlobalHeaderOverrides(Map<String, String> globalHeaderOverrides) {
+    public void setGlobalHeaderOverrides(String globalHeaderOverrides) {
         this.globalHeaderOverrides = globalHeaderOverrides;
     }
 
-    public Object getSoapConfig() {
+    public String getSoapConfig() {
         return soapConfig;
     }
 
-    public void setSoapConfig(Object soapConfig) {
+    public void setSoapConfig(String soapConfig) {
         this.soapConfig = soapConfig;
     }
 
-    public List<ApiResponseDTO> getResponses() {
+    public String getCreatedBy() {
+        return createdBy;
+    }
+
+    public void setCreatedBy(String createdBy) {
+        this.createdBy = createdBy;
+    }
+
+    public String getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(String createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public String getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public void setUpdatedAt(String updatedAt) {
+        this.updatedAt = updatedAt;
+    }
+
+    public String getUpdatedBy() {
+        return updatedBy;
+    }
+
+    public void setUpdatedBy(String updatedBy) {
+        this.updatedBy = updatedBy;
+    }
+
+    public List<ApiResponse> getResponses() {
         return responses;
     }
 
-    public void setResponses(List<ApiResponseDTO> responses) {
+    public void setResponses(List<ApiResponse> responses) {
         this.responses = responses;
+    }
+
+    public List<Tag> getTags() {
+        return tags;
+    }
+
+    public void setTags(List<Tag> tags) {
+        this.tags = tags;
     }
 }

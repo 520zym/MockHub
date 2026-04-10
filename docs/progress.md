@@ -56,6 +56,29 @@
 - src/main/java/com/mockhub/common/model/ — 4 个文件 + enums/ 4 个文件（新建）
 - src/main/java/com/mockhub/common/util/ — 5 个文件（新建）
 
+### 功能优化：接口描述 + 多返回体 ✅
+
+**数据库变更**：
+- `schema.sql` — api_definition 新增 `description TEXT`；新建 `api_response` 表
+- `DataSourceConfig.java` — 自动迁移（ALTER TABLE + 数据迁移 REST/SOAP）
+
+**后端新建文件**：
+- `ApiResponse.java`（实体）、`ApiResponseDTO.java`、`ApiDefinitionDetailVO.java`、`ApiResponseRepository.java`
+
+**后端修改文件**：
+- `ApiDefinition.java`、`ApiDefinitionDTO.java`、`ApiDefinitionVO.java` — 新增 description 等字段
+- `ApiRepository.java` — RowMapper/INSERT/UPDATE/SELECT 添加 description
+- `ApiServiceImpl.java` — getById→DetailVO，create/update 保存 responses，copy 复制 responses
+- `ApiService.java`、`ApiController.java` — getById 返回类型更新
+- `MockDispatchService.java` — REST/SOAP 从 api_response 查活跃返回体
+- `ImportExportService.java`、`ImportExportData.java` — 导出/导入返回体数据
+
+**前端新建文件**：
+- `RichTextEditor.vue`（wangeditor 5 封装）、`ResponseTabs.vue`（多返回体标签页）
+
+**前端修改文件**：
+- `ApiEdit.vue` — 接口描述卡片 + REST/SOAP 都用 ResponseTabs
+
 ## 关键决策
 1. Lombok scope=provided：JDK 25 下 Lombok annotation processor 崩溃（TypeTag::UNKNOWN），改为手写 getter/setter
 2. SecurityConfig 用 WebSecurityConfigurerAdapter：Spring Boot 2.7 兼容方式，deprecated 警告可忽略

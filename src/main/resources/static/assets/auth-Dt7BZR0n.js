@@ -1,0 +1,1 @@
+import{n as e}from"./_plugin-vue_export-helper-B554W7K4.js";var t=t=>e.post(`/auth/login`,t),n=t=>e.post(`/auth/change-password`,t);export{t as n,n as t};

@@ -2,11 +2,10 @@ package com.mockhub.mock.service;
 
 import com.mockhub.common.model.PageResult;
 import com.mockhub.mock.model.dto.ApiDefinitionDTO;
+import com.mockhub.mock.model.dto.ApiDefinitionDetailVO;
 import com.mockhub.mock.model.dto.ApiDefinitionVO;
 import com.mockhub.mock.model.dto.ApiMatchResult;
 import com.mockhub.mock.model.entity.ApiDefinition;
-
-import java.util.Map;
 
 /**
  * 接口定义 Service 接口
@@ -46,12 +45,12 @@ public interface ApiService {
                                      int page, int size);
 
     /**
-     * 获取接口详情（含 responseBody）
+     * 获取接口详情（含 responseBody、返回体列表、标签列表）
      *
      * @param id 接口 ID
-     * @return 接口定义（含所有字段）
+     * @return 接口定义详情（含所有字段、返回体列表、标签列表）
      */
-    ApiDefinition getById(String id);
+    ApiDefinitionDetailVO getById(String id);
 
     /**
      * 创建接口
