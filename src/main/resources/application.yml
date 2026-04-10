@@ -1,0 +1,38 @@
+# MockHub 应用配置
+
+server:
+  port: 8080
+  tomcat:
+    # 表单提交大小限制，支持 5~6MB 的大文本响应体
+    max-http-form-post-size: 10MB
+
+spring:
+  # SQLite 数据源配置，使用 data.path 变量支持启动参数覆盖路径
+  datasource:
+    url: jdbc:sqlite:${data.path:./data}/mockhub.db
+    driver-class-name: org.sqlite.JDBC
+  servlet:
+    multipart:
+      # 文件上传大小限制（WSDL 文件、导入文件等）
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+# ===== 自定义配置 =====
+
+# 数据目录，所有持久化文件（SQLite 数据库、WSDL 文件等）存放于此
+# 可通过启动参数覆盖：--data.path=D:/mockhub/data
+data:
+  path: ./data
+
+# 日志保留策略配置
+# mode=count 时按条数保留，mode=days 时按天数保留
+log:
+  retain:
+    mode: count
+    count: 1000
+    days: 30
+
+# Mock 请求的 CORS 配置
+mock:
+  cors:
+    enabled: true

@@ -45,14 +45,78 @@
 
 ## Element Plus 主题覆盖要点
 
-使用 Element Plus 时需覆盖以下默认样式以匹配 Soft UI 风格：
+使用 Element Plus 时需覆盖以下默认样式以匹配 Soft UI 风格。在 `styles/variables.scss` 或 `styles/element-overrides.scss` 中统一设置：
 
-- 按钮圆角加大（`--el-border-radius-base: 10px`）
-- 表格去除边框和斑马纹，改用悬停高亮
-- 输入框去除默认边框，改用背景色区分
-- 对话框/抽屉加大圆角
-- 卡片去除默认边框，加大圆角和阴影
-- 菜单/侧边栏样式完全自定义
+### CSS 变量清单
+
+```scss
+// ========== 主色 ==========
+--el-color-primary: #6366F1;          // 靛蓝，用于导航高亮、主按钮
+--el-color-primary-light-3: #818CF8;
+--el-color-primary-light-5: #A5B4FC;
+--el-color-primary-light-7: #C7D2FE;
+--el-color-primary-light-9: #E0E7FF;
+--el-color-primary-dark-2: #4F46E5;
+
+// ========== 语义色 ==========
+--el-color-success: #10B981;          // 绿色，启用/成功状态
+--el-color-warning: #F59E0B;          // 琥珀，警告
+--el-color-danger: #EF4444;           // 红色，错误/禁用/删除
+--el-color-info: #6B7280;             // 灰色，信息/次要操作
+
+// ========== 圆角 ==========
+--el-border-radius-base: 10px;        // 按钮、输入框等
+--el-border-radius-small: 8px;        // 小型组件
+--el-border-radius-round: 20px;       // 胶囊形标签
+
+// ========== 文字颜色 ==========
+--el-text-color-primary: #1B2559;     // 主文本（深蓝黑）
+--el-text-color-regular: #4A5568;     // 正文
+--el-text-color-secondary: #A3AED0;   // 次要文本（灰蓝）
+--el-text-color-placeholder: #CBD5E0; // 占位符
+
+// ========== 边框 ==========
+--el-border-color: transparent;        // 默认无边框
+--el-border-color-light: #F1F5F9;
+--el-border-color-lighter: #F8FAFC;
+
+// ========== 背景 ==========
+--el-bg-color: #FFFFFF;
+--el-bg-color-page: transparent;       // 页面背景用渐变，不用纯色
+--el-fill-color-light: #F7F8FA;        // 输入框背景
+--el-fill-color-lighter: #FAFBFC;
+
+// ========== 阴影 ==========
+--el-box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+--el-box-shadow-light: 0 1px 6px rgba(0, 0, 0, 0.03);
+```
+
+### 组件级覆盖样式
+
+**表格（`el-table`）**：
+- 去除所有边框线（`border: none`，包括单元格边框）
+- 去除默认斑马纹，改用行悬停高亮背景色 `#F7F8FF`
+- 表头背景透明，表头文字 `--el-text-color-secondary` + 小字号
+
+**按钮（`el-button`）**：
+- 主按钮（`--primary`）圆角 `12px`，hover 时微上浮 + 加深阴影
+- 次要按钮（`--default`）透明背景 + 文字色为主色，hover 时浅主色背景 `#E0E7FF`
+
+**输入框（`el-input`）**：
+- 默认背景色 `#F7F8FA`，无边框
+- 聚焦时显示 `2px` 主色边框（`--el-color-primary`），背景变白
+
+**对话框/抽屉（`el-dialog` / `el-drawer`）**：
+- 圆角 `16px`
+- 阴影加大：`0 8px 40px rgba(0, 0, 0, 0.08)`
+
+**卡片（`el-card`）**：
+- 去除默认边框（`border: none`）
+- 圆角 `16px`
+- 阴影 `0 2px 12px rgba(0, 0, 0, 0.04)`
+- 内边距不小于 `20px`
+
+**菜单/侧边栏**：完全自定义样式，不使用 Element Plus 默认菜单组件（或深度覆盖）
 
 ---
 
@@ -115,6 +179,56 @@
 ```
 
 左侧团队筛选树可以和全局导航共存于同一个侧边栏中——导航在上，团队树在下（接口管理页面时展示）。
+
+### 侧边栏团队筛选树交互规格
+
+**位置**：全局导航菜单下方，仅在接口管理页面（`/apis`）可见。与全局导航共享同一个侧边栏，导航在上、筛选树在下，中间用细分割线分隔。
+
+**数据来源**：
+- 团队列表：调用 `GET /api/teams` 获取当前用户可见的团队
+- 分组列表：对每个团队调用 `GET /api/groups?teamId=xxx` 获取其下的分组
+- 接口计数：从接口列表响应的 `total` 或本地统计中获取
+
+**树结构**：
+```
+所有接口           ← 点击：清除筛选，显示全部
+├─ [FE] 前端团队   ← 点击：筛选该团队全部接口（teamId 筛选）
+│   ├─ 用户模块    ← 点击：筛选该分组接口（teamId + groupId 筛选）
+│   └─ 订单模块
+└─ [BE] 后端团队
+    ├─ 支付模块
+    └─ 未分组      ← 没有分组的接口归入此虚拟节点（groupId=null 筛选）
+```
+
+**选中态**：
+- 单选模式，同时只能有一个节点处于选中状态
+- 选中节点：主色浅背景（`#E0E7FF`）+ 主色文字（`#6366F1`），左侧带 3px 主色竖条指示器
+- 未选中节点：`--el-text-color-regular`（`#4A5568`）文字，hover 时背景变 `#F7F8FA`
+
+**团队标识**：
+- 使用 `TeamTag` 组件（彩色胶囊标签）显示在团队名称前
+- 胶囊标签显示团队 `identifier`（如 `FE`、`BE`），背景色使用团队 `color` 的浅色变体（opacity 0.15），文字使用团队 `color` 原色
+
+**接口计数**：
+- 每个节点右侧显示该节点下的接口数量，使用灰色小字（`--el-text-color-secondary`，12px）
+- "所有接口"节点显示总接口数
+- 团队节点显示该团队下的接口总数
+- 分组节点显示该分组下的接口数
+- "未分组"节点显示该团队下 `groupId=null` 的接口数
+
+**折叠/展开**：
+- 团队节点默认展开
+- 点击团队节点左侧的折叠图标可收起/展开分组列表
+- 折叠/展开不影响当前选中状态
+- 折叠图标使用小三角（`el-icon-arrow-right`），展开时旋转 90 度，带 200ms 过渡动画
+
+**联动行为**：
+- 选中节点后，更新 `appStore.currentTeamId` 和 `appStore.currentGroupId`
+- 主内容区的接口表格自动响应 store 变化，发起带对应 `teamId` / `groupId` 参数的查询请求
+- 选中"所有接口"时，清除 `teamId` 和 `groupId` 筛选
+- 选中团队节点时，设置 `teamId`、清除 `groupId`
+- 选中分组节点时，同时设置 `teamId` 和 `groupId`
+- 选中"未分组"节点时，设置 `teamId`，`groupId` 传特殊值（如空字符串 `""`）表示只查未分组接口
 
 ### 接口编辑页
 

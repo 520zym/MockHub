@@ -385,7 +385,9 @@ export default defineConfig({
 
 前端开发时后端未就绪可使用 `vite-plugin-mock` 或在 `api/request.js` 中临时拦截返回 mock 数据，集成联调时切换到真实代理即可。
 
-### Store 约定（`stores/user.js`）
+### Store 约定
+
+#### `stores/user.js` -- 用户信息与权限
 
 ```javascript
 // 所有页面通过此 store 获取当前用户信息和权限判断
@@ -402,6 +404,112 @@ export const useUserStore = defineStore('user', {
       return state.user?.teams?.some(t => t.teamId === teamId && t.role === 'TEAM_ADMIN')
     },
     userTeamIds: (state) => state.user?.teams?.map(t => t.teamId) || []
+  }
+})
+```
+
+#### `stores/app.js` -- 全局应用状态与侧边栏筛选
+
+```javascript
+import { defineStore } from 'pinia'
+import { getTeams } from '@/api/teams'
+
+export const useAppStore = defineStore('app', {
+  state: () => ({
+    sidebarCollapsed: false,   // 侧边栏是否收起
+    teams: [],                 // 当前用户可见的团队列表（登录后加载）
+    currentTeamId: null,       // 侧边栏选中的团队（null = 全部）
+    currentGroupId: null,      // 侧边栏选中的分组（null = 全部）
+  }),
+
+  getters: {
+    // 当前选中的团队对象，未选中时返回 null
+    currentTeam: (state) => state.teams.find(t => t.id === state.currentTeamId) || null,
+  },
+
+  actions: {
+    /**
+     * 加载当前用户可见的团队列表
+     * 登录成功后调用一次，后续团队变更时重新调用
+     */
+    async loadTeams() {
+      this.teams = await getTeams()
+    },
+
+    /**
+     * 设置侧边栏筛选条件
+     * @param {string|null} teamId - 团队 ID，null 表示全部
+     * @param {string|null} groupId - 分组 ID，null 表示全部，'' 表示未分组
+     */
+    setFilter(teamId, groupId) {
+      this.currentTeamId = teamId
+      this.currentGroupId = groupId
+    },
+
+    /**
+     * 清除筛选，回到"所有接口"
+     */
+    clearFilter() {
+      this.currentTeamId = null
+      this.currentGroupId = null
+    },
+
+    /**
+     * 切换侧边栏收起/展开
+     */
+    toggleSidebar() {
+      this.sidebarCollapsed = !this.sidebarCollapsed
+    },
+  }
+})
+```
+
+#### `stores/api.js` -- 接口列表查询参数
+
+```javascript
+import { defineStore } from 'pinia'
+
+export const useApiStore = defineStore('api', {
+  state: () => ({
+    // 接口列表查询参数（与 URL query 同步，与侧边栏筛选互补）
+    // 注意：teamId/groupId 由 appStore 管理，此处只管工具栏筛选条件
+    listParams: {
+      keyword: '',           // 搜索关键词（按名称或路径模糊搜索）
+      method: null,          // HTTP 方法筛选，null = 全部
+      enabled: null,         // 启用状态筛选，null = 全部
+      tagId: null,           // 标签筛选，null = 全部
+      page: 1,               // 当前页码
+      size: 20,              // 每页条数
+    },
+  }),
+
+  actions: {
+    /**
+     * 设置单个查询参数，同时重置页码到第 1 页
+     * @param {string} key - 参数名
+     * @param {any} value - 参数值
+     */
+    setParam(key, value) {
+      this.listParams[key] = value
+      // 修改筛选条件时自动回到第一页（翻页本身除外）
+      if (key !== 'page') {
+        this.listParams.page = 1
+      }
+    },
+
+    /**
+     * 重置所有查询参数为默认值
+     */
+    resetParams() {
+      this.listParams = {
+        keyword: '',
+        method: null,
+        enabled: null,
+        tagId: null,
+        page: 1,
+        size: 20,
+      }
+    },
   }
 })
 ```

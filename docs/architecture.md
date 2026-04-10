@@ -151,6 +151,74 @@ SOAP 请求（Content-Type: text/xml 或 application/soap+xml）→ 从 SOAPActi
 
 ---
 
+## 路径参数匹配算法
+
+Mock 分发时需要将实际请求路径（如 `/api/user/123`）与配置路径（如 `/api/user/{id}`）进行匹配。算法分两阶段：先精确匹配，再路径参数匹配。
+
+### 匹配优先级
+
+1. **精确匹配优先**：遍历所有不含 `{xxx}` 的配置路径，如果请求路径与某条配置路径完全一致，直接命中返回，不再继续匹配。
+2. **路径参数匹配**：精确匹配未命中时，遍历所有含 `{xxx}` 的配置路径，将其编译为正则表达式进行匹配。按定义顺序（即数据库返回顺序）遍历，首个匹配成功的即为命中。
+
+### 路径参数转正则
+
+将配置路径中的 `{xxx}` 占位符替换为正则捕获组 `([^/]+)`，整体加上首尾锚定。例如：
+
+| 配置路径 | 编译后的正则 |
+|----------|-------------|
+| `/api/user/{id}` | `^/api/user/([^/]+)$` |
+| `/api/order/{orderId}/item/{itemId}` | `^/api/order/([^/]+)/item/([^/]+)$` |
+
+### 路径参数提取
+
+匹配成功后，按顺序从正则的 capture group 中提取参数值，与配置路径中的占位符名称一一对应，存入 `Map<String, String>`。例如请求 `/api/order/ORD001/item/3` 匹配 `/api/order/{orderId}/item/{itemId}` 后，得到 `{orderId: "ORD001", itemId: "3"}`。
+
+提取的路径参数通过 `{{path.xxx}}` 占位符注入到响应体中（如 `{{path.id}}` 替换为 `123`）。
+
+### 伪代码
+
+```
+function matchPath(teamId, requestPath, method):
+    // 查出该团队所有已启用的、方法匹配的接口定义
+    candidates = findByTeamIdAndMethodAndEnabled(teamId, method, true)
+
+    // 第一阶段：精确匹配
+    for api in candidates:
+        if not containsPlaceholder(api.path):
+            if api.path == requestPath:
+                return MatchResult(api, emptyMap)
+
+    // 第二阶段：路径参数匹配
+    for api in candidates:
+        if containsPlaceholder(api.path):
+            paramNames = extractParamNames(api.path)        // ["id"] or ["orderId", "itemId"]
+            regex = api.path.replaceAll("\\{[^}]+\\}", "([^/]+)")
+            regex = "^" + regex + "$"
+            matcher = Pattern.compile(regex).matcher(requestPath)
+            if matcher.matches():
+                pathParams = new LinkedHashMap()
+                for i in range(paramNames.size()):
+                    pathParams.put(paramNames[i], matcher.group(i + 1))
+                return MatchResult(api, pathParams)
+
+    return null  // 未匹配
+
+function containsPlaceholder(path):
+    return path.contains("{")
+
+function extractParamNames(path):
+    // 用正则 \{(\w+)\} 提取所有占位符名称，按出现顺序返回
+    return findAll("\\{(\\w+)\\}", path)
+```
+
+### 性能考虑
+
+- 路径参数正则可在接口创建/更新时预编译并缓存，避免每次请求重复编译。
+- 精确匹配阶段可用 `HashMap<String, ApiDefinition>` 以 `path` 为 key 实现 O(1) 查找。
+- 路径参数模式的接口数量通常较少，线性遍历即可满足性能要求。
+
+---
+
 ## SOAP 处理
 
 - SOAP 接口也通过 `/mock/{teamIdentifier}/**` 分发
@@ -174,6 +242,45 @@ SOAP 请求（Content-Type: text/xml 或 application/soap+xml）→ 从 SOAPActi
 | `{{datetime}}` | 当前日期时间 yyyy-MM-dd HH:mm:ss |
 | `{{random_int}}` | 0~10000 随机整数 |
 | `{{path.xxx}}` | 路径参数值，如 `{{path.id}}` 对应 URL 中 `{id}` 的实际值 |
+
+---
+
+## 全局响应头叠加规则
+
+Mock 响应返回前，按以下步骤构建最终的 HTTP 响应头：
+
+1. **加载团队全局响应头**：从 `global_header` 表查询目标团队（`teamId`）的所有记录，过滤 `enabled=true`，按 `sortOrder` 升序排列
+2. **构建基础 Map**：将查询结果组装为 `headerName → headerValue` 的有序 Map
+3. **应用接口级别覆盖**：读取当前 `ApiDefinition.globalHeaderOverrides`（JSON 对象），逐个 key 处理：
+   - key 已存在于基础 Map → **替换** value
+   - key 不存在于基础 Map → **新增** 该 header
+   - value 为空字符串（`""`）→ **删除** 该 header（允许接口级别移除某个全局头）
+4. **动态变量替换**：对最终 Map 中所有 value 执行动态变量替换（如 `{{uuid}}`、`{{timestamp}}` 等，规则同「动态变量替换」章节）
+5. **写入响应**：将最终 Map 中的所有键值对设置到 HTTP 响应头中
+
+**示例**：
+
+团队全局响应头配置：
+| headerName | headerValue | enabled | sortOrder |
+|---|---|---|---|
+| `X-Request-Id` | `{{uuid}}` | true | 1 |
+| `X-Powered-By` | `MockHub` | true | 2 |
+| `X-Debug` | `true` | false | 3 |
+
+接口 `globalHeaderOverrides`：
+```json
+{
+  "X-Request-Id": "fixed-123",
+  "X-Custom": "hello",
+  "X-Powered-By": ""
+}
+```
+
+最终响应头：
+- `X-Request-Id: fixed-123`（被覆盖，不再执行 `{{uuid}}` 替换）
+- `X-Custom: hello`（新增）
+- `X-Debug` 不出现（`enabled=false`，未进入基础 Map）
+- `X-Powered-By` 不出现（value 为空字符串，被移除）
 
 ---
 

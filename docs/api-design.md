@@ -62,6 +62,68 @@
 | 40701 | WSDL 文件解析失败 |
 | 50001 | 系统内部错误 |
 
+### 认证错误处理
+
+JWT 认证在 `JwtAuthFilter` 中统一拦截，权限校验在 Service 层处理。各场景的处理方式如下：
+
+**1. JWT 校验失败（过期、签名无效、格式错误）**
+
+`JwtAuthFilter` 直接返回 HTTP 401，不进入 Controller 层：
+
+```json
+HTTP 401
+{"code": 40002, "msg": "Token 无效或已过期"}
+```
+
+**2. 无 Token 访问受保护接口**
+
+请求头缺少 `Authorization` 或值为空，`JwtAuthFilter` 直接返回 HTTP 401：
+
+```json
+HTTP 401
+{"code": 40002, "msg": "未登录"}
+```
+
+**3. 有 Token 但权限不足（跨团队访问等）**
+
+Token 校验通过，但 Service 层判断当前用户无权操作目标资源（如普通成员访问其他团队数据），由 Service 层抛出 `BizException`，全局异常处理器返回 HTTP 200：
+
+```json
+HTTP 200
+{"code": 40102, "msg": "不能访问其他团队数据"}
+```
+
+> 注意：权限不足返回 HTTP 200 而非 403，错误信息通过业务错误码 `code` 区分，与项目统一响应格式保持一致。
+
+**4. 前端处理逻辑**
+
+Axios 响应拦截器中统一处理认证错误：
+
+- 收到 HTTP 401 状态码，或响应体中 `code === 40002` 时：
+  1. 清除 `localStorage` 中的 `token`
+  2. 跳转到 `/login` 页面
+  3. 可选：弹出提示"登录已过期，请重新登录"
+
+```javascript
+// Axios 拦截器伪代码
+axios.interceptors.response.use(
+  response => {
+    if (response.data && response.data.code === 40002) {
+      localStorage.removeItem('token')
+      router.push('/login')
+    }
+    return response
+  },
+  error => {
+    if (error.response && error.response.status === 401) {
+      localStorage.removeItem('token')
+      router.push('/login')
+    }
+    return Promise.reject(error)
+  }
+)
+```
+
 ---
 
 ## 认证
