@@ -1,1 +1,0 @@
-import{n as e,r as t}from"./_plugin-vue_export-helper-Ck74rk_D.js";var n=()=>e.get(`/settings`),r=t=>e.put(`/settings`,t),i=()=>t.get(`/api/server-address`).then(e=>e.data);export{n,r,i as t};

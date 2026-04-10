@@ -121,14 +121,14 @@
         </el-table-column>
 
         <!-- 路径列 -->
-        <el-table-column label="路径" min-width="180" show-overflow-tooltip>
+        <el-table-column label="路径" width="200" show-overflow-tooltip>
           <template #default="{ row }">
             <span class="api-path">{{ row.path }}</span>
           </template>
         </el-table-column>
 
         <!-- 接口名称列 -->
-        <el-table-column prop="name" label="名称" min-width="100" show-overflow-tooltip />
+        <el-table-column prop="name" label="名称" width="120" show-overflow-tooltip />
 
         <!-- 团队列 -->
         <el-table-column label="团队" width="80" align="center">
@@ -150,7 +150,7 @@
         </el-table-column>
 
         <!-- 操作列（全图标按钮，hover 显示 title） -->
-        <el-table-column label="操作" width="150" align="center">
+        <el-table-column label="操作" width="160" align="center">
           <template #default="{ row }">
             <div class="action-buttons" @click.stop>
               <el-button text size="small" @click="handleCopyUrl(row)" title="复制 Mock 地址">
