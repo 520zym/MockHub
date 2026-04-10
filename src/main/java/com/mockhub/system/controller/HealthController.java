@@ -70,24 +70,48 @@ public class HealthController {
      * 遍历网络接口，找到第一个非回环的 IPv4 地址。
      * 找不到时返回 localhost。
      */
+    /**
+     * 检测局域网 IP 地址
+     * <p>
+     * 优先选择 192.168.x.x 或 10.x.x.x 网段（典型局域网），
+     * 排除 Docker/虚拟网卡（172.17-31.x.x、veth、docker、br- 等）。
+     */
     private String detectInternalIp() {
+        String fallback = null;
         try {
             Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
             while (interfaces.hasMoreElements()) {
                 NetworkInterface ni = interfaces.nextElement();
-                if (ni.isLoopback() || !ni.isUp()) continue;
+                if (ni.isLoopback() || !ni.isUp() || ni.isVirtual()) continue;
+
+                // 排除 Docker/虚拟网卡
+                String niName = ni.getName().toLowerCase();
+                String displayName = ni.getDisplayName().toLowerCase();
+                if (niName.startsWith("docker") || niName.startsWith("veth")
+                        || niName.startsWith("br-") || niName.startsWith("vmnet")
+                        || displayName.contains("virtual") || displayName.contains("docker")) {
+                    continue;
+                }
 
                 Enumeration<InetAddress> addresses = ni.getInetAddresses();
                 while (addresses.hasMoreElements()) {
                     InetAddress addr = addresses.nextElement();
-                    if (addr instanceof java.net.Inet4Address && !addr.isLoopbackAddress()) {
-                        return addr.getHostAddress();
+                    if (!(addr instanceof java.net.Inet4Address) || addr.isLoopbackAddress()) continue;
+
+                    String ip = addr.getHostAddress();
+                    // 优先 192.168.x.x 或 10.x.x.x（典型局域网网段）
+                    if (ip.startsWith("192.168.") || ip.startsWith("10.")) {
+                        return ip;
+                    }
+                    // 记录第一个非虚拟的 IP 作为 fallback
+                    if (fallback == null) {
+                        fallback = ip;
                     }
                 }
             }
         } catch (Exception e) {
             // ignore
         }
-        return "localhost";
+        return fallback != null ? fallback : "localhost";
     }
 }

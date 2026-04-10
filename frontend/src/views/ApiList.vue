@@ -150,7 +150,7 @@
         </el-table-column>
 
         <!-- 操作列 -->
-        <el-table-column label="操作" width="190" align="center">
+        <el-table-column label="操作" width="220" align="center">
           <template #default="{ row }">
             <div class="action-buttons" @click.stop>
               <el-button text size="small" @click="handleCopyUrl(row)" title="复制 Mock 地址">
