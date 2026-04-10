@@ -3,11 +3,10 @@
   <div class="page-api-edit" v-loading="pageLoading">
     <!-- 页面标题 -->
     <div class="page-header">
-      <el-button class="back-button" @click="goBack">
+      <el-button class="back-button" text @click="goBack">
         <el-icon><ArrowLeft /></el-icon>
-        返回
       </el-button>
-      <h1 class="page-title">{{ isEdit ? '编辑接口' : '新建接口' }}</h1>
+      <span class="page-title">{{ isEdit ? '编辑接口' : '新建接口' }}</span>
     </div>
 
     <!-- 卡片 1：基本信息 -->
@@ -25,20 +24,19 @@
 
         <el-row :gutter="20">
           <!-- 接口名称 -->
-          <el-col :span="12">
+          <el-col :span="16">
             <el-form-item label="接口名称" required>
               <el-input v-model="form.name" placeholder="如：获取用户信息" />
             </el-form-item>
           </el-col>
 
           <!-- 所属团队 -->
-          <el-col :span="6">
+          <el-col :span="8">
             <el-form-item label="所属团队" required>
               <el-select
                 v-model="form.teamId"
                 placeholder="选择团队"
                 style="width: 100%"
-                @change="handleTeamChange"
               >
                 <el-option
                   v-for="team in appStore.teams"
@@ -55,24 +53,6 @@
             </el-form-item>
           </el-col>
 
-          <!-- 分组 -->
-          <el-col :span="6">
-            <el-form-item label="分组">
-              <el-select
-                v-model="form.groupId"
-                placeholder="选择分组（可选）"
-                clearable
-                style="width: 100%"
-              >
-                <el-option
-                  v-for="group in groups"
-                  :key="group.id"
-                  :label="group.name"
-                  :value="group.id"
-                />
-              </el-select>
-            </el-form-item>
-          </el-col>
         </el-row>
 
         <!-- REST 模式下的方法 + 路径 -->
@@ -322,8 +302,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAppStore } from '@/stores/app'
 import { getApiDetail, createApi, updateApi } from '@/api/apis'
-import { getGroups } from '@/api/groups'
 import { uploadWsdl } from '@/api/soap'
+import { getServerAddress } from '@/api/settings'
 import MonacoEditor from '@/components/MonacoEditor.vue'
 import TeamTag from '@/components/TeamTag.vue'
 import CopyButton from '@/components/CopyButton.vue'
@@ -345,7 +325,6 @@ const form = reactive({
   type: 'REST',
   name: '',
   teamId: '',
-  groupId: null,
   method: 'GET',
   path: '',
   responseCode: 200,
@@ -358,15 +337,15 @@ const form = reactive({
   soapConfig: null
 })
 
-// 当前团队的分组列表
-const groups = ref([])
-
 // 手动选择的 Content-Type（json/xml/text），用于覆盖自动识别
 const manualContentType = ref('json')
 
 // WSDL 上传相关
 const wsdlFile = ref(null)
 const wsdlUploading = ref(false)
+
+// 服务器局域网地址
+const serverAddress = ref('')
 
 // 全局响应头覆盖的可编辑列表（[{key, value}]）
 const headerOverrideList = ref([])
@@ -379,16 +358,17 @@ const currentTeamIdentifier = computed(() => {
   return team ? team.identifier : '{team}'
 })
 
-/** 完整 Mock 地址 */
+/** 完整 Mock 地址（优先使用服务器局域网地址） */
 const mockUrl = computed(() => {
-  const base = window.location.origin
+  const base = serverAddress.value || window.location.origin
   return `${base}/mock/${currentTeamIdentifier.value}${form.path || '/'}`
 })
 
 /** WSDL 托管地址 */
 const wsdlHostUrl = computed(() => {
   if (!form.soapConfig || !form.soapConfig.wsdlFileName) return ''
-  return `${window.location.origin}/wsdl/${form.soapConfig.wsdlFileName}`
+  const base = serverAddress.value || window.location.origin
+  return `${base}/wsdl/${form.soapConfig.wsdlFileName}`
 })
 
 /** 自动识别内容类型 */
@@ -430,30 +410,6 @@ watch(manualContentType, (val) => {
 })
 
 // --- 团队变化时加载分组 ---
-async function handleTeamChange(teamId) {
-  form.groupId = null
-  if (teamId) {
-    try {
-      groups.value = await getGroups(teamId)
-    } catch (e) {
-      groups.value = []
-    }
-  } else {
-    groups.value = []
-  }
-}
-
-// 初始化时也加载分组
-watch(() => form.teamId, async (teamId) => {
-  if (teamId && groups.value.length === 0) {
-    try {
-      groups.value = await getGroups(teamId)
-    } catch (e) {
-      groups.value = []
-    }
-  }
-})
-
 // --- 数据加载（编辑模式） ---
 
 async function loadApiDetail() {
@@ -466,7 +422,6 @@ async function loadApiDetail() {
       type: data.type || 'REST',
       name: data.name || '',
       teamId: data.teamId || '',
-      groupId: data.groupId || null,
       method: data.method || 'GET',
       path: data.path || '',
       responseCode: data.responseCode || 200,
@@ -486,15 +441,6 @@ async function loadApiDetail() {
       manualContentType.value = 'xml'
     } else {
       manualContentType.value = 'text'
-    }
-
-    // 加载分组
-    if (form.teamId) {
-      try {
-        groups.value = await getGroups(form.teamId)
-      } catch (e) {
-        groups.value = []
-      }
     }
 
     // 将 globalHeaderOverrides 对象转为可编辑列表
@@ -613,7 +559,6 @@ async function handleSave() {
       type: form.type,
       name: form.name,
       teamId: form.teamId,
-      groupId: form.groupId || null,
       method: form.type === 'SOAP' ? 'POST' : form.method,
       path: form.path,
       responseCode: form.responseCode,
@@ -649,6 +594,13 @@ function goBack() {
 
 // --- 初始化 ---
 onMounted(async () => {
+  // 加载服务器局域网地址
+  try {
+    const data = await getServerAddress()
+    serverAddress.value = data.address || ''
+  } catch (e) {
+    // 失败时使用浏览器当前地址
+  }
   // 确保团队数据已加载，否则 el-select 无法匹配显示团队名称
   if (appStore.teams.length === 0) {
     await appStore.loadTeams()
@@ -660,10 +612,6 @@ onMounted(async () => {
     // 新建模式：如果侧边栏已选中团队，默认选中
     if (appStore.currentTeamId) {
       form.teamId = appStore.currentTeamId
-      handleTeamChange(appStore.currentTeamId)
-    }
-    if (appStore.currentGroupId && appStore.currentGroupId !== '') {
-      form.groupId = appStore.currentGroupId
     }
   }
 })
@@ -678,30 +626,44 @@ onMounted(async () => {
 .page-header {
   display: flex;
   align-items: center;
-  gap: 16px;
-  margin-bottom: 20px;
+  gap: 4px;
+  margin-bottom: 24px;
 }
 
 .back-button {
   flex-shrink: 0;
+  font-size: 20px;
+  color: #4A5568;
+  padding: 0;
+  height: auto;
+  line-height: 1;
+  vertical-align: middle;
+
+  &:hover {
+    color: #6366F1;
+  }
 }
 
 .page-title {
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 700;
   color: #1B2559;
+  margin: 0;
+  padding: 0;
+  line-height: 1;
 }
 
 // 分区卡片
 .section-card {
-  margin-bottom: 20px;
+  margin-bottom: 24px;
+  padding: 24px;
 }
 
 .section-title {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
   color: #1B2559;
-  margin-bottom: 20px;
+  margin: 0 0 20px 0;
   padding-bottom: 12px;
   border-bottom: 1px solid #F1F5F9;
 }

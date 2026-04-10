@@ -58,7 +58,7 @@ mockhub/
 │   │   │   │       ├── UserRepository.java
 │   │   │   │       └── TeamRepository.java
 │   │   │   │
-│   │   │   ├── mock/                            # ── Mock 核心（接口定义、分发、分组、标签、SOAP）──
+│   │   │   ├── mock/                            # ── Mock 核心（接口定义、分发、标签、SOAP）──
 │   │   │   │   ├── controller/
 │   │   │   │   │   ├── MockDispatchController.java   # /mock/{teamId}/** 分发入口
 │   │   │   │   │   ├── ApiController.java            # 接口 CRUD

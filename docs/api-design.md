@@ -494,55 +494,9 @@ axios.interceptors.response.use(
 
 ---
 
-## 分组管理
+## ~~分组管理~~（已移除）
 
-### GET `/api/groups?teamId=xxx`
-
-分组列表（按 sortOrder 排序）。
-
-**响应 data：** `ApiGroup[]`
-
-```json
-[
-  {
-    "id": "uuid",
-    "teamId": "team-uuid",
-    "name": "用户模块",
-    "sortOrder": 1,
-    "apiCount": 8,
-    "createdAt": "2024-01-01T00:00:00"
-  }
-]
-```
-
-### POST `/api/groups`
-
-创建分组。
-
-**请求体：**
-```json
-{
-  "teamId": "team-uuid",
-  "name": "用户模块",
-  "sortOrder": 1
-}
-```
-
-### PUT `/api/groups/{id}`
-
-修改分组。
-
-**请求体：**
-```json
-{
-  "name": "用户模块",
-  "sortOrder": 2
-}
-```
-
-### DELETE `/api/groups/{id}`
-
-删除分组。分组下的接口 `groupId` 自动置为 null（变为未分组）。
+> 分组功能已从前端移除。后端 API（`/api/groups`）仍保留但不再使用。
 
 ---
 

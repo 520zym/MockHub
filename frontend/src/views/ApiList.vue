@@ -404,10 +404,10 @@ const newTagColor = ref(PRESET_COLORS[Math.floor(Math.random() * PRESET_COLORS.l
 function handleOpenTagManager() {
   if (!appStore.currentTeamId) {
     if (userStore.userTeamIds.length > 0) {
-      appStore.setFilter(userStore.userTeamIds[0], null)
+      appStore.setFilter(userStore.userTeamIds[0])
     } else if (appStore.teams.length > 0) {
       // 超管没有所属团队时取团队列表第一个
-      appStore.setFilter(appStore.teams[0].id, null)
+      appStore.setFilter(appStore.teams[0].id)
     } else {
       ElMessage.warning('请先选择一个团队')
       return
@@ -523,13 +523,9 @@ async function loadApis() {
       page: currentPage.value,
       size: pageSize.value
     }
-    // 侧边栏团队/分组筛选
+    // 侧边栏团队筛选
     if (appStore.currentTeamId) {
       params.teamId = appStore.currentTeamId
-    }
-    if (appStore.currentGroupId !== null && appStore.currentGroupId !== undefined) {
-      // 空字符串表示查询未分组接口
-      params.groupId = appStore.currentGroupId
     }
     // 工具栏筛选
     if (keyword.value) params.keyword = keyword.value
@@ -612,9 +608,9 @@ function handleSizeChange(size) {
   loadApis()
 }
 
-// 监听侧边栏团队/分组筛选变化，自动刷新列表和标签
+// 监听侧边栏团队筛选变化，自动刷新列表和标签
 watch(
-  () => [appStore.currentTeamId, appStore.currentGroupId],
+  () => appStore.currentTeamId,
   () => {
     currentPage.value = 1
     apiStore.setParam('page', 1)

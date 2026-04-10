@@ -5,8 +5,7 @@ export const useAppStore = defineStore('app', {
   state: () => ({
     sidebarCollapsed: false,
     teams: [],
-    currentTeamId: null,
-    currentGroupId: null
+    currentTeamId: null
   }),
 
   getters: {
@@ -18,14 +17,12 @@ export const useAppStore = defineStore('app', {
       this.teams = await getTeams()
     },
 
-    setFilter(teamId, groupId) {
+    setFilter(teamId) {
       this.currentTeamId = teamId
-      this.currentGroupId = groupId
     },
 
     clearFilter() {
       this.currentTeamId = null
-      this.currentGroupId = null
     },
 
     toggleSidebar() {
