@@ -178,9 +178,14 @@ public class ApiRepository {
             sql.append(") ");
         }
 
-        if (groupId != null && !groupId.isEmpty()) {
-            sql.append("AND a.group_id = ? ");
-            params.add(groupId);
+        if (groupId != null) {
+            if (groupId.isEmpty()) {
+                // 空字符串表示查询未分组接口
+                sql.append("AND (a.group_id IS NULL OR a.group_id = '') ");
+            } else {
+                sql.append("AND a.group_id = ? ");
+                params.add(groupId);
+            }
         }
 
         if (method != null && !method.isEmpty()) {
@@ -238,9 +243,14 @@ public class ApiRepository {
             sql.append(") ");
         }
 
-        if (groupId != null && !groupId.isEmpty()) {
-            sql.append("AND a.group_id = ? ");
-            params.add(groupId);
+        if (groupId != null) {
+            if (groupId.isEmpty()) {
+                // 空字符串表示查询未分组接口
+                sql.append("AND (a.group_id IS NULL OR a.group_id = '') ");
+            } else {
+                sql.append("AND a.group_id = ? ");
+                params.add(groupId);
+            }
         }
 
         if (method != null && !method.isEmpty()) {

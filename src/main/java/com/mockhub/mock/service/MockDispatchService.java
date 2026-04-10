@@ -174,10 +174,15 @@ public class MockDispatchService {
         for (Map.Entry<String, String> entry : finalHeaders.entrySet()) {
             httpHeaders.add(entry.getKey(), entry.getValue());
         }
-        // 设置 Content-Type
+        // 设置 Content-Type，确保包含 charset=UTF-8 避免中文乱码
         String respContentType = api.getContentType();
         if (respContentType != null && !respContentType.isEmpty()) {
+            if (!respContentType.toLowerCase().contains("charset")) {
+                respContentType = respContentType + "; charset=UTF-8";
+            }
             httpHeaders.set(HttpHeaders.CONTENT_TYPE, respContentType);
+        } else {
+            httpHeaders.set(HttpHeaders.CONTENT_TYPE, "application/json; charset=UTF-8");
         }
 
         long durationMs = System.currentTimeMillis() - startTime;

@@ -120,15 +120,33 @@
           </template>
         </el-table-column>
 
-        <!-- 路径列（弹性宽度，占剩余空间的较大比例） -->
-        <el-table-column label="路径" min-width="160" show-overflow-tooltip>
+        <!-- 路径列 -->
+        <el-table-column label="路径" min-width="200" show-overflow-tooltip>
           <template #default="{ row }">
             <span class="api-path">{{ row.path }}</span>
           </template>
         </el-table-column>
 
-        <!-- 接口名称列（弹性宽度，占剩余空间的较小比例） -->
-        <el-table-column prop="name" label="名称" min-width="100" show-overflow-tooltip />
+        <!-- 接口名称列 -->
+        <el-table-column prop="name" label="名称" width="120" show-overflow-tooltip />
+
+        <!-- 标签列 -->
+        <el-table-column label="标签" min-width="120" show-overflow-tooltip>
+          <template #default="{ row }">
+            <div class="tag-cell" v-if="row.tags && row.tags.length">
+              <el-tag
+                v-for="tag in row.tags"
+                :key="tag.id"
+                size="small"
+                :color="tag.color"
+                effect="dark"
+                round
+                class="api-tag"
+              >{{ tag.name }}</el-tag>
+            </div>
+            <span v-else class="no-tags">-</span>
+          </template>
+        </el-table-column>
 
         <!-- 团队列 -->
         <el-table-column label="团队" width="80" align="center">
@@ -150,7 +168,7 @@
         </el-table-column>
 
         <!-- 操作列（全图标按钮，hover 显示 title） -->
-        <el-table-column label="操作" width="160" align="center">
+        <el-table-column label="操作" width="200" align="center" class-name="action-col">
           <template #default="{ row }">
             <div class="action-buttons" @click.stop>
               <el-button text size="small" @click="handleCopyUrl(row)" title="复制 Mock 地址">
@@ -321,6 +339,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAppStore } from '@/stores/app'
 import { useApiStore } from '@/stores/api'
+import { useUserStore } from '@/stores/user'
 import { getApis, deleteApi, copyApi, toggleApi, importApis, exportApis } from '@/api/apis'
 import { getTags, createTag, updateTag, deleteTag } from '@/api/tags'
 import { getServerAddress } from '@/api/settings'
@@ -330,6 +349,7 @@ import TeamTag from '@/components/TeamTag.vue'
 const router = useRouter()
 const appStore = useAppStore()
 const apiStore = useApiStore()
+const userStore = useUserStore()
 
 // --- 列表数据 ---
 const apiList = ref([])
@@ -380,11 +400,18 @@ const editingTagColor = ref('')
 const newTagName = ref('')
 const newTagColor = ref(PRESET_COLORS[Math.floor(Math.random() * PRESET_COLORS.length)])
 
-/** 打开标签管理抽屉（需先选中团队） */
+/** 打开标签管理抽屉，未选团队时自动取用户所属的第一个团队 */
 function handleOpenTagManager() {
   if (!appStore.currentTeamId) {
-    ElMessage.warning('请先选择一个团队')
-    return
+    if (userStore.userTeamIds.length > 0) {
+      appStore.setFilter(userStore.userTeamIds[0], null)
+    } else if (appStore.teams.length > 0) {
+      // 超管没有所属团队时取团队列表第一个
+      appStore.setFilter(appStore.teams[0].id, null)
+    } else {
+      ElMessage.warning('请先选择一个团队')
+      return
+    }
   }
   tagDrawerVisible.value = true
   loadTagList()
@@ -899,6 +926,18 @@ onMounted(async () => {
   gap: 4px;
 }
 
+.tag-cell {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.api-tag {
+  border: none;
+  font-size: 12px;
+  color: #fff;
+}
+
 .no-tags {
   color: #A3AED0;
 }
@@ -907,7 +946,15 @@ onMounted(async () => {
 .action-buttons {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
+  padding-right: 8px;
+  white-space: nowrap;
+}
+
+// 操作列 cell 不裁切
+:deep(.action-col .cell) {
+  overflow: visible !important;
 }
 
 // 分页

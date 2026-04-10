@@ -648,7 +648,11 @@ function goBack() {
 }
 
 // --- 初始化 ---
-onMounted(() => {
+onMounted(async () => {
+  // 确保团队数据已加载，否则 el-select 无法匹配显示团队名称
+  if (appStore.teams.length === 0) {
+    await appStore.loadTeams()
+  }
   // 编辑模式：加载接口详情
   if (isEdit.value) {
     loadApiDetail()
