@@ -91,7 +91,6 @@
         v-loading="loading"
         style="width: 100%"
         row-class-name="api-row"
-        @row-click="handleRowClick"
       >
         <!-- 空状态 -->
         <template #empty>
@@ -408,11 +407,6 @@ watch(keyword, (val) => {
 })
 
 // --- 行操作 ---
-
-/** 点击行跳转编辑 */
-function handleRowClick(row) {
-  router.push(`/apis/${row.id}/edit`)
-}
 
 /** 编辑 */
 function handleEdit(row) {

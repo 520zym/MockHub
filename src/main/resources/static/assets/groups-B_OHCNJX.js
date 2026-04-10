@@ -1,0 +1,1 @@
+import{n as e}from"./_plugin-vue_export-helper-DfZmsJCo.js";var t=t=>e.get(`/groups`,{params:{teamId:t}});export{t};
