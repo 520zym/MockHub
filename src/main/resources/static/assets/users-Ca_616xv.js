@@ -1,0 +1,1 @@
+import{n as e}from"./_plugin-vue_export-helper-nxVZH8-t.js";var t=()=>e.get(`/users`),n=t=>e.post(`/users`,t),r=(t,n)=>e.put(`/users/${t}`,n),i=t=>e.delete(`/users/${t}`),a=(t,n)=>e.post(`/users/${t}/teams`,n);export{r as a,t as i,n,i as r,a as t};

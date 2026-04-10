@@ -120,15 +120,15 @@
           </template>
         </el-table-column>
 
-        <!-- 路径列 -->
-        <el-table-column label="路径" width="200" show-overflow-tooltip>
+        <!-- 路径列（弹性宽度，占剩余空间的较大比例） -->
+        <el-table-column label="路径" min-width="160" show-overflow-tooltip>
           <template #default="{ row }">
             <span class="api-path">{{ row.path }}</span>
           </template>
         </el-table-column>
 
-        <!-- 接口名称列 -->
-        <el-table-column prop="name" label="名称" width="120" show-overflow-tooltip />
+        <!-- 接口名称列（弹性宽度，占剩余空间的较小比例） -->
+        <el-table-column prop="name" label="名称" min-width="100" show-overflow-tooltip />
 
         <!-- 团队列 -->
         <el-table-column label="团队" width="80" align="center">
