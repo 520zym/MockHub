@@ -66,6 +66,11 @@
       </div>
 
       <div class="toolbar__actions">
+        <!-- 标签管理按钮 -->
+        <el-button @click="handleOpenTagManager">
+          <el-icon><PriceTag /></el-icon>
+          标签管理
+        </el-button>
         <!-- 导入按钮 -->
         <el-button @click="importDialogVisible = true">
           <el-icon><Upload /></el-icon>
@@ -189,6 +194,82 @@
       </div>
     </div>
 
+    <!-- 标签管理抽屉 -->
+    <el-drawer
+      v-model="tagDrawerVisible"
+      title="标签管理"
+      direction="rtl"
+      size="400px"
+      class="tag-drawer"
+      @close="handleTagDrawerClose"
+    >
+      <!-- 标签列表 -->
+      <div class="tag-manager">
+        <div v-if="tagList.length === 0 && !tagLoading" class="tag-manager__empty">
+          暂无标签
+        </div>
+        <div v-loading="tagLoading" class="tag-manager__list">
+          <div
+            v-for="tag in tagList"
+            :key="tag.id"
+            class="tag-manager__item"
+          >
+            <!-- 编辑态 -->
+            <template v-if="editingTagId === tag.id">
+              <el-color-picker
+                v-model="editingTagColor"
+                size="small"
+                :predefine="PRESET_COLORS"
+              />
+              <el-input
+                v-model="editingTagName"
+                size="small"
+                class="tag-manager__edit-input"
+                @keyup.enter="handleSaveTag(tag)"
+              />
+              <el-button text size="small" type="primary" @click="handleSaveTag(tag)">
+                保存
+              </el-button>
+              <el-button text size="small" @click="handleCancelEdit">
+                取消
+              </el-button>
+            </template>
+            <!-- 展示态 -->
+            <template v-else>
+              <span class="tag-manager__dot" :style="{ backgroundColor: tag.color }" />
+              <span class="tag-manager__name">{{ tag.name }}</span>
+              <span class="tag-manager__spacer" />
+              <el-button text size="small" type="primary" @click="handleStartEdit(tag)">
+                <el-icon><Edit /></el-icon>
+              </el-button>
+              <el-button text size="small" type="danger" @click="handleDeleteTag(tag)">
+                <el-icon><Delete /></el-icon>
+              </el-button>
+            </template>
+          </div>
+        </div>
+
+        <!-- 新建标签区域 -->
+        <div class="tag-manager__create">
+          <el-color-picker
+            v-model="newTagColor"
+            size="small"
+            :predefine="PRESET_COLORS"
+          />
+          <el-input
+            v-model="newTagName"
+            placeholder="新标签名称"
+            size="small"
+            class="tag-manager__create-input"
+            @keyup.enter="handleCreateTag"
+          />
+          <el-button type="primary" size="small" @click="handleCreateTag" :disabled="!newTagName.trim()">
+            添加
+          </el-button>
+        </div>
+      </div>
+    </el-drawer>
+
     <!-- 导入对话框 -->
     <el-dialog
       v-model="importDialogVisible"
@@ -250,7 +331,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAppStore } from '@/stores/app'
 import { useApiStore } from '@/stores/api'
 import { getApis, deleteApi, copyApi, toggleApi, importApis, exportApis } from '@/api/apis'
-import { getTags } from '@/api/tags'
+import { getTags, createTag, updateTag, deleteTag } from '@/api/tags'
 import { getServerAddress } from '@/api/settings'
 import HttpMethodTag from '@/components/HttpMethodTag.vue'
 import TeamTag from '@/components/TeamTag.vue'
@@ -286,6 +367,123 @@ const availableTags = ref([])
 
 // --- 服务器地址（用于拼接 Mock URL） ---
 const serverAddress = ref('')
+
+// --- 标签管理相关 ---
+
+/** 预设色板 */
+const PRESET_COLORS = [
+  '#6366F1', '#8B5CF6', '#EC4899', '#EF4444', '#F59E0B',
+  '#10B981', '#06B6D4', '#3B82F6', '#6B7280', '#D97706'
+]
+
+const tagDrawerVisible = ref(false)
+const tagList = ref([])
+const tagLoading = ref(false)
+
+// 编辑态
+const editingTagId = ref(null)
+const editingTagName = ref('')
+const editingTagColor = ref('')
+
+// 新建态
+const newTagName = ref('')
+const newTagColor = ref(PRESET_COLORS[Math.floor(Math.random() * PRESET_COLORS.length)])
+
+/** 打开标签管理抽屉（需先选中团队） */
+function handleOpenTagManager() {
+  if (!appStore.currentTeamId) {
+    ElMessage.warning('请先选择一个团队')
+    return
+  }
+  tagDrawerVisible.value = true
+  loadTagList()
+}
+
+/** 加载标签管理列表 */
+async function loadTagList() {
+  tagLoading.value = true
+  try {
+    tagList.value = await getTags(appStore.currentTeamId)
+  } catch (e) {
+    tagList.value = []
+  } finally {
+    tagLoading.value = false
+  }
+}
+
+/** 关闭抽屉后刷新接口列表（标签可能变了） */
+function handleTagDrawerClose() {
+  editingTagId.value = null
+  loadApis()
+  loadTags()
+}
+
+/** 开始行内编辑 */
+function handleStartEdit(tag) {
+  editingTagId.value = tag.id
+  editingTagName.value = tag.name
+  editingTagColor.value = tag.color
+}
+
+/** 取消编辑 */
+function handleCancelEdit() {
+  editingTagId.value = null
+}
+
+/** 保存编辑 */
+async function handleSaveTag(tag) {
+  if (!editingTagName.value.trim()) {
+    ElMessage.warning('标签名称不能为空')
+    return
+  }
+  try {
+    await updateTag(tag.id, {
+      teamId: appStore.currentTeamId,
+      name: editingTagName.value.trim(),
+      color: editingTagColor.value
+    })
+    ElMessage.success('标签已更新')
+    editingTagId.value = null
+    loadTagList()
+  } catch (e) {
+    // 错误已由拦截器处理
+  }
+}
+
+/** 删除标签 */
+async function handleDeleteTag(tag) {
+  try {
+    await ElMessageBox.confirm(
+      `删除标签「${tag.name}」将移除所有接口上的该标签，确认？`,
+      '删除确认',
+      { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' }
+    )
+    await deleteTag(tag.id)
+    ElMessage.success('标签已删除')
+    loadTagList()
+  } catch (e) {
+    // 取消或错误，不处理
+  }
+}
+
+/** 创建新标签 */
+async function handleCreateTag() {
+  if (!newTagName.value.trim()) return
+  try {
+    await createTag({
+      teamId: appStore.currentTeamId,
+      name: newTagName.value.trim(),
+      color: newTagColor.value
+    })
+    ElMessage.success('标签已创建')
+    newTagName.value = ''
+    // 随机选一个新的默认颜色
+    newTagColor.value = PRESET_COLORS[Math.floor(Math.random() * PRESET_COLORS.length)]
+    loadTagList()
+  } catch (e) {
+    // 错误已由拦截器处理
+  }
+}
 
 // --- 导入相关 ---
 const importDialogVisible = ref(false)
@@ -718,6 +916,72 @@ onMounted(async () => {
   padding: 16px 20px;
 }
 
+// 标签管理抽屉 Soft UI 风格
+.tag-manager {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+
+  &__empty {
+    text-align: center;
+    color: #A3AED0;
+    padding: 40px 0;
+    font-size: 14px;
+  }
+
+  &__list {
+    flex: 1;
+    overflow-y: auto;
+  }
+
+  &__item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    transition: background 0.2s;
+
+    &:hover {
+      background: #F7F8FA;
+    }
+  }
+
+  &__dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  &__name {
+    font-size: 14px;
+    color: #1B2559;
+  }
+
+  &__spacer {
+    flex: 1;
+  }
+
+  &__edit-input {
+    flex: 1;
+  }
+
+  // 新建标签区域固定在底部
+  &__create {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 16px 0 0;
+    margin-top: 12px;
+    border-top: 1px solid #F1F5F9;
+  }
+
+  &__create-input {
+    flex: 1;
+  }
+}
+
 // 空状态
 .empty-state {
   padding: 40px 0;
@@ -734,6 +998,25 @@ onMounted(async () => {
   &__text {
     font-size: 14px;
     color: #A3AED0;
+  }
+}
+</style>
+
+<!-- 标签管理抽屉全局样式覆盖：大圆角 Soft UI -->
+<style lang="scss">
+.tag-drawer {
+  .el-drawer__header {
+    margin-bottom: 0;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #F1F5F9;
+  }
+
+  .el-drawer__body {
+    padding: 16px 20px;
+  }
+
+  &.el-drawer {
+    border-radius: 16px 0 0 16px;
   }
 }
 </style>
