@@ -20,7 +20,7 @@ export interface User {
   id: string
   username: string
   displayName: string
-  globalRole: 'SUPER_ADMIN' | 'TEAM_ADMIN' | 'MEMBER'
+  globalRole: 'SUPER_ADMIN' | 'USER'
   firstLogin: boolean
   teams: UserTeamRole[]
   createdAt: string

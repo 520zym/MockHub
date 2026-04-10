@@ -14,7 +14,7 @@ public class CreateUserRequest {
     /** 显示名称 */
     private String displayName;
 
-    /** 全局角色：SUPER_ADMIN / TEAM_ADMIN / MEMBER */
+    /** 全局角色：SUPER_ADMIN / USER */
     private String globalRole;
 
     public String getUsername() {

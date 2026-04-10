@@ -19,7 +19,7 @@ public class UserInfo {
     /** 显示名称 */
     private String displayName;
 
-    /** 全局角色：SUPER_ADMIN / TEAM_ADMIN / MEMBER */
+    /** 全局角色：SUPER_ADMIN / USER */
     private String globalRole;
 
     /** 是否首次登录（true 时前端强制跳转修改密码页） */

@@ -43,7 +43,7 @@ public final class SecurityContextUtil {
     /**
      * 获取当前登录用户的全局角色
      *
-     * @return 角色字符串（SUPER_ADMIN / TEAM_ADMIN / MEMBER）
+     * @return 角色字符串（SUPER_ADMIN / USER）
      * @throws BizException code=40002，未登录时抛出
      */
     public static String getCurrentGlobalRole() {

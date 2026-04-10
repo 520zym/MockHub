@@ -5,6 +5,5 @@ package com.mockhub.common.model.enums;
  */
 public enum UserRole {
     SUPER_ADMIN,
-    TEAM_ADMIN,
-    MEMBER
+    USER
 }

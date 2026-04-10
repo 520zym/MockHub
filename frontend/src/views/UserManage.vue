@@ -109,8 +109,7 @@
         <el-form-item label="全局角色" prop="globalRole">
           <el-select v-model="createForm.globalRole" style="width: 100%">
             <el-option label="超级管理员" value="SUPER_ADMIN" />
-            <el-option label="团队管理员" value="TEAM_ADMIN" />
-            <el-option label="普通成员" value="MEMBER" />
+            <el-option label="普通用户" value="USER" />
           </el-select>
         </el-form-item>
       </el-form>
@@ -146,8 +145,7 @@
             :disabled="editingUser?.globalRole === 'SUPER_ADMIN'"
           >
             <el-option label="超级管理员" value="SUPER_ADMIN" />
-            <el-option label="团队管理员" value="TEAM_ADMIN" />
-            <el-option label="普通成员" value="MEMBER" />
+            <el-option label="普通用户" value="USER" />
           </el-select>
           <!-- 超管不可降级提示 -->
           <div v-if="editingUser?.globalRole === 'SUPER_ADMIN'" class="form-hint">
@@ -266,13 +264,13 @@ onMounted(async () => {
 
 // ========== 角色显示工具 ==========
 function roleLabel(role) {
-  const map = { SUPER_ADMIN: '超级管理员', TEAM_ADMIN: '团队管理员', MEMBER: '普通成员' }
+  const map = { SUPER_ADMIN: '超级管理员', USER: '普通用户' }
   return map[role] || role
 }
 
 function roleTagType(role) {
   // 超管用 danger（醒目），团队管理员用 warning，普通成员用 info
-  const map = { SUPER_ADMIN: 'danger', TEAM_ADMIN: 'warning', MEMBER: 'info' }
+  const map = { SUPER_ADMIN: 'danger', USER: 'info' }
   return map[role] || 'info'
 }
 
@@ -293,7 +291,7 @@ const createForm = reactive({
   username: '',
   password: '',
   displayName: '',
-  globalRole: 'MEMBER'
+  globalRole: 'USER'
 })
 
 const createRules = {
@@ -310,7 +308,7 @@ function openCreateDialog() {
   createForm.username = ''
   createForm.password = ''
   createForm.displayName = ''
-  createForm.globalRole = 'MEMBER'
+  createForm.globalRole = 'USER'
   createDialogVisible.value = true
 }
 

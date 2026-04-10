@@ -25,7 +25,7 @@ public class User {
     /** 显示名称 */
     private String displayName;
 
-    /** 全局角色：SUPER_ADMIN / TEAM_ADMIN / MEMBER */
+    /** 全局角色：SUPER_ADMIN / USER */
     private String globalRole;
 
     /** 是否首次登录（首次登录需强制修改密码） */
