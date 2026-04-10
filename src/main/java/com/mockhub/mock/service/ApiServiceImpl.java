@@ -19,7 +19,7 @@ import com.mockhub.mock.repository.ApiRepository;
 import com.mockhub.mock.repository.ApiResponseRepository;
 import com.mockhub.mock.repository.ApiTagRepository;
 import com.mockhub.mock.repository.TagRepository;
-import com.mockhub.log.LogService;
+import com.mockhub.log.service.LogService;
 import com.mockhub.log.model.OperationLog;
 import com.mockhub.system.model.entity.Team;
 import com.mockhub.system.service.TeamService;

@@ -1,4 +1,4 @@
-package com.mockhub.log;
+package com.mockhub.log.repository;
 
 import com.mockhub.log.model.OperationLog;
 import com.mockhub.log.model.RequestLog;

@@ -1,4 +1,4 @@
-package com.mockhub.auth;
+package com.mockhub.auth.service;
 
 import com.mockhub.auth.model.ChangePasswordRequest;
 import com.mockhub.auth.model.LoginRequest;

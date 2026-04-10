@@ -1,8 +1,13 @@
-package com.mockhub.log;
+package com.mockhub.log.service;
 
 import com.mockhub.common.config.LogRetainProperties;
+import com.mockhub.common.model.PageResult;
+import com.mockhub.common.util.PermissionChecker;
 import com.mockhub.log.model.OperationLog;
 import com.mockhub.log.model.RequestLog;
+import com.mockhub.log.repository.LogRepository;
+
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
@@ -27,10 +32,13 @@ public class LogServiceImpl implements LogService {
 
     private final LogRepository logRepository;
     private final LogRetainProperties logRetainProperties;
+    private final PermissionChecker permissionChecker;
 
-    public LogServiceImpl(LogRepository logRepository, LogRetainProperties logRetainProperties) {
+    public LogServiceImpl(LogRepository logRepository, LogRetainProperties logRetainProperties,
+                          PermissionChecker permissionChecker) {
         this.logRepository = logRepository;
         this.logRetainProperties = logRetainProperties;
+        this.permissionChecker = permissionChecker;
     }
 
     /**
@@ -135,5 +143,27 @@ public class LogServiceImpl implements LogService {
         } catch (Exception e) {
             logger.error("清理请求日志失败", e);
         }
+    }
+
+    /**
+     * 分页查询操作日志（含权限校验）
+     */
+    @Override
+    public PageResult<OperationLog> getOperationLogs(String teamId, int page, int size) {
+        permissionChecker.checkTeamAccess(teamId);
+        long total = logRepository.countOperationLogs(teamId);
+        List<OperationLog> items = logRepository.findOperationLogs(teamId, page, size);
+        return PageResult.of(items, total, page, size);
+    }
+
+    /**
+     * 分页查询请求日志（含权限校验）
+     */
+    @Override
+    public PageResult<RequestLog> getRequestLogs(String teamId, int page, int size) {
+        permissionChecker.checkTeamAccess(teamId);
+        long total = logRepository.countRequestLogs(teamId);
+        List<RequestLog> items = logRepository.findRequestLogs(teamId, page, size);
+        return PageResult.of(items, total, page, size);
     }
 }

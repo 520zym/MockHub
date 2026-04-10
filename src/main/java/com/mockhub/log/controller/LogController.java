@@ -1,33 +1,29 @@
-package com.mockhub.log;
+package com.mockhub.log.controller;
 
 import com.mockhub.common.model.PageResult;
 import com.mockhub.common.model.Result;
-import com.mockhub.common.util.PermissionChecker;
 import com.mockhub.log.model.OperationLog;
 import com.mockhub.log.model.RequestLog;
+import com.mockhub.log.service.LogService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
-
 /**
  * 日志查询控制器
  * <p>
  * 提供操作日志和请求日志的分页查询接口。
- * 所有查询都需要 JWT 认证，并校验当前用户是否有权访问目标团队。
+ * 所有查询都需要 JWT 认证，权限校验由 Service 层处理。
  */
 @RestController
 @RequestMapping("/api/logs")
 public class LogController {
 
-    private final LogRepository logRepository;
-    private final PermissionChecker permissionChecker;
+    private final LogService logService;
 
-    public LogController(LogRepository logRepository, PermissionChecker permissionChecker) {
-        this.logRepository = logRepository;
-        this.permissionChecker = permissionChecker;
+    public LogController(LogService logService) {
+        this.logService = logService;
     }
 
     /**
@@ -43,13 +39,7 @@ public class LogController {
             @RequestParam String teamId,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "50") int size) {
-
-        permissionChecker.checkTeamAccess(teamId);
-
-        long total = logRepository.countOperationLogs(teamId);
-        List<OperationLog> items = logRepository.findOperationLogs(teamId, page, size);
-
-        return Result.ok(PageResult.of(items, total, page, size));
+        return Result.ok(logService.getOperationLogs(teamId, page, size));
     }
 
     /**
@@ -65,12 +55,6 @@ public class LogController {
             @RequestParam String teamId,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "50") int size) {
-
-        permissionChecker.checkTeamAccess(teamId);
-
-        long total = logRepository.countRequestLogs(teamId);
-        List<RequestLog> items = logRepository.findRequestLogs(teamId, page, size);
-
-        return Result.ok(PageResult.of(items, total, page, size));
+        return Result.ok(logService.getRequestLogs(teamId, page, size));
     }
 }

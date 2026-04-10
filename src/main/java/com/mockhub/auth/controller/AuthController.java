@@ -1,8 +1,9 @@
-package com.mockhub.auth;
+package com.mockhub.auth.controller;
 
 import com.mockhub.auth.model.ChangePasswordRequest;
 import com.mockhub.auth.model.LoginRequest;
 import com.mockhub.auth.model.LoginResponse;
+import com.mockhub.auth.service.AuthService;
 import com.mockhub.common.model.Result;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

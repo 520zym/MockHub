@@ -3,7 +3,7 @@ package com.mockhub.mock.service;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mockhub.common.util.DynamicVariableUtil;
-import com.mockhub.log.LogService;
+import com.mockhub.log.service.LogService;
 import com.mockhub.log.model.RequestLog;
 import com.mockhub.mock.model.SoapConfig;
 import com.mockhub.mock.model.SoapOperation;
