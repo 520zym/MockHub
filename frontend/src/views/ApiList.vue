@@ -71,10 +71,10 @@
           <el-icon><Upload /></el-icon>
           导入
         </el-button>
-        <!-- 导出按钮 -->
+        <!-- 导出按钮（有选中时显示数量） -->
         <el-button @click="handleExport">
           <el-icon><Download /></el-icon>
-          导出
+          {{ selectedRows.length > 0 ? `导出(${selectedRows.length})` : '导出' }}
         </el-button>
         <!-- 新建接口按钮 -->
         <el-button type="primary" @click="$router.push('/apis/new')">
@@ -87,11 +87,16 @@
     <!-- 接口表格 -->
     <div class="table-card soft-card">
       <el-table
+        ref="tableRef"
         :data="apiList"
         v-loading="loading"
         style="width: 100%"
         row-class-name="api-row"
+        @selection-change="handleSelectionChange"
       >
+        <!-- 多选框列 -->
+        <el-table-column type="selection" width="40" />
+
         <!-- 空状态 -->
         <template #empty>
           <div class="empty-state">
@@ -258,6 +263,13 @@ const apiStore = useApiStore()
 const apiList = ref([])
 const total = ref(0)
 const loading = ref(false)
+const tableRef = ref(null)
+const selectedRows = ref([])
+
+/** 多选变化 */
+function handleSelectionChange(rows) {
+  selectedRows.value = rows
+}
 
 // --- 工具栏筛选状态（双向绑定到输入控件，变化后同步到 store） ---
 const keyword = ref(apiStore.listParams.keyword)
@@ -510,10 +522,33 @@ async function handleImport() {
 }
 
 async function handleExport() {
-  // 如果侧边栏选中了团队，直接导出该团队；否则让用户选择
+  // 有选中行时导出选中的接口，否则导出整个团队
+  if (selectedRows.value.length > 0) {
+    // 导出选中的接口：构造 JSON 并下载
+    const exportData = {
+      version: '1.0',
+      exportedAt: new Date().toISOString(),
+      teamName: selectedRows.value[0].teamName || '',
+      apis: selectedRows.value
+    }
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
+    const fileName = `mockhub-export-selected-${selectedRows.value.length}-${new Date().toISOString().slice(0, 10)}.json`
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', fileName)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+    ElMessage.success(`已导出 ${selectedRows.value.length} 个接口`)
+    return
+  }
+
+  // 没选中时按团队导出全部
   const teamId = appStore.currentTeamId
   if (!teamId) {
-    ElMessage.warning('请先在左侧选择一个团队再导出')
+    ElMessage.warning('请先选择接口或在左侧选择一个团队再导出')
     return
   }
 
@@ -521,8 +556,6 @@ async function handleExport() {
     const blob = await exportApis(teamId)
     const team = appStore.teams.find(t => t.id === teamId)
     const fileName = `mockhub-export-${team ? team.identifier : 'all'}-${new Date().toISOString().slice(0, 10)}.json`
-
-    // 触发浏览器下载
     const url = window.URL.createObjectURL(new Blob([blob]))
     const link = document.createElement('a')
     link.href = url
