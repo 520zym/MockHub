@@ -1,0 +1,73 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 8
+        uses: actions/setup-java@v4
+        with:
+          java-version: '8'
+          distribution: 'temurin'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Set Maven version
+        run: mvn versions:set -DnewVersion=${{ steps.version.outputs.VERSION }} -DgenerateBackupPoms=false
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build backend
+        run: mvn clean package -DskipTests
+
+      - name: Prepare release package
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          DIR="mockhub-${VERSION}"
+          mkdir -p "${DIR}"
+
+          # 复制 jar
+          cp "target/mockhub-${VERSION}.jar" "${DIR}/"
+
+          # 复制启动脚本并替换版本号
+          cp scripts/mockhub.sh "${DIR}/"
+          cp scripts/mockhub.bat "${DIR}/"
+          sed -i "s/mockhub-[0-9]*\.[0-9]*\.[0-9]*\.jar/mockhub-${VERSION}.jar/g" "${DIR}/mockhub.sh"
+          sed -i "s/mockhub-[0-9]*\.[0-9]*\.[0-9]*\.jar/mockhub-${VERSION}.jar/g" "${DIR}/mockhub.bat"
+
+          chmod +x "${DIR}/mockhub.sh"
+
+          # 打包
+          zip -r "mockhub-${VERSION}.zip" "${DIR}"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: MockHub v${{ steps.version.outputs.VERSION }}
+          generate_release_notes: true
+          files: |
+            target/mockhub-${{ steps.version.outputs.VERSION }}.jar
+            mockhub-${{ steps.version.outputs.VERSION }}.zip

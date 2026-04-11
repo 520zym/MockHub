@@ -1,25 +1,64 @@
 # MockHub
 
-内网接口模拟服务，支持 REST 和 SOAP 接口 Mock，提供现代化 Web 管理界面。单个 jar 文件即可运行，零外部依赖，专为离线内网环境设计。
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Java](https://img.shields.io/badge/Java-8%2B-orange.svg)](https://www.oracle.com/java/technologies/javase/javase8-archive-downloads.html)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-2.7.x-green.svg)](https://spring.io/projects/spring-boot)
+[![Vue](https://img.shields.io/badge/Vue-3-brightgreen.svg)](https://vuejs.org/)
+
+内网接口模拟服务，支持 REST 和 SOAP 接口 Mock，提供现代化 Web 管理界面。
+
+**单个 jar 文件即可运行，零外部依赖，专为离线内网环境设计。**
+
+---
+
+## 功能截图
+
+| 登录 | 接口管理 |
+|:---:|:---:|
+| ![登录](screenshots/login.png) | ![接口管理](screenshots/api-list.png) |
+
+| 团队管理 | 用户管理 |
+|:---:|:---:|
+| ![团队管理](screenshots/team-manage.png) | ![用户管理](screenshots/user-manage.png) |
+
+| 日志 | 全局设置 |
+|:---:|:---:|
+| ![日志](screenshots/logs.png) | ![全局设置](screenshots/settings.png) |
 
 ---
 
 ## 功能特性
 
-- **REST Mock** -- 支持 GET / POST / PUT / DELETE / PATCH，自定义状态码、响应头、响应体
-- **SOAP Mock** -- 上传 WSDL 自动解析 Operation，独立配置每个操作的返回 XML
-- **团队隔离** -- 多团队独立管理接口，Mock 路径按团队标识隔离，互不干扰
-- **路径参数** -- 支持 `/api/user/{id}` 风格路径匹配，响应体中通过 `{{path.id}}` 引用参数值
-- **动态变量** -- 响应体支持 `{{timestamp}}`、`{{uuid}}`、`{{date}}`、`{{datetime}}`、`{{random_int}}` 等占位符
-- **Monaco Editor** -- 内置代码编辑器，语法高亮、格式化、错误标红，支持 JSON / XML / 纯文本
-- **大文本支持** -- 响应体支持 5~6 MB 大文本
-- **WSDL 托管** -- 上传的 WSDL 文件可通过 `/wsdl/{fileName}` 直接访问，`soap:address` 自动替换为实际地址
-- **全局响应头** -- 团队级别的公共响应头，接口级别可覆盖
-- **导入导出** -- 按团队导出接口定义（含分组、标签），支持合并或覆盖两种导入模式
-- **操作日志 / 请求日志** -- 记录管理操作和 Mock 请求，支持按条数或天数自动清理
-- **权限控制** -- 超级管理员 / 团队管理员 / 普通成员 三级权限
-- **CORS 支持** -- Mock 接口默认允许跨域，可通过参数关闭
-- **SQLite 存储** -- 嵌入式单文件数据库，无需安装，易于备份
+### 已实现
+
+- [x] **REST Mock** -- 支持 GET / POST / PUT / DELETE / PATCH，自定义状态码、响应头、响应体
+- [x] **SOAP Mock** -- 上传 WSDL 自动解析 Operation，独立配置每个操作的返回 XML
+- [x] **团队隔离** -- 多团队独立管理接口，Mock 路径按团队标识隔离，互不干扰
+- [x] **路径参数** -- 支持 `/api/user/{id}` 风格路径匹配，响应体中通过 `{{path.id}}` 引用参数值
+- [x] **动态变量** -- 响应体支持 `{{timestamp}}`、`{{uuid}}`、`{{date}}`、`{{datetime}}`、`{{random_int}}` 等占位符
+- [x] **多返回体** -- 单个接口可配置多个响应体，支持切换活跃返回体
+- [x] **接口描述** -- 支持富文本描述接口用途和说明
+- [x] **Monaco Editor** -- 内置代码编辑器，JSON / XML / 纯文本语法高亮和格式化
+- [x] **大文本支持** -- 响应体支持 5~6 MB 大文本
+- [x] **WSDL 托管** -- 上传的 WSDL 文件可通过 `/wsdl/{fileName}` 直接访问，`soap:address` 自动替换为实际地址
+- [x] **全局响应头** -- 团队级别的公共响应头，接口级别可覆盖
+- [x] **导入导出** -- 按团队导出接口定义（含标签），支持合并或覆盖两种导入模式
+- [x] **操作日志 / 请求日志** -- 记录管理操作和 Mock 请求，支持按条数或天数自动清理
+- [x] **权限控制** -- 超级管理员 / 团队管理员 / 普通成员 三级权限
+- [x] **用户管理** -- 密码修改、超管重置密码
+- [x] **CORS 支持** -- Mock 接口默认允许跨域，可通过参数关闭
+- [x] **SQLite 存储** -- 嵌入式单文件数据库，无需安装，易于备份
+
+### 计划中 (Roadmap)
+
+- [ ] **多场景响应** -- 根据请求参数 / Body 匹配不同响应（条件路由）
+- [ ] **响应延迟** -- 模拟接口耗时，支持固定延迟和随机延迟区间
+- [ ] **请求校验** -- 校验请求参数是否符合预期格式，不匹配时返回自定义错误
+- [ ] **接口文档生成** -- 基于 Mock 定义自动生成简易接口文档
+- [ ] **Swagger / OpenAPI 导入** -- 从 Swagger JSON/YAML 一键导入接口定义
+- [ ] **Postman Collection 导入** -- 从 Postman 导出文件导入
+
+> 欢迎提交 [Issue](../../issues) 反馈需求或 Bug！
 
 ---
 
@@ -34,13 +73,37 @@
 
 ### 1. 下载
 
-从 Release 页面下载 `mockhub-1.0.0.jar`。
+从 [Release](../../releases) 页面下载最新版本的压缩包，解压即可使用。
+
+压缩包内包含：
+
+```
+mockhub-x.x.x/
+├── mockhub-x.x.x.jar    # 可执行文件
+├── mockhub.sh            # Linux / macOS 管理脚本
+└── mockhub.bat           # Windows 管理脚本
+```
 
 ### 2. 运行
 
+**直接运行：**
+
 ```bash
-java -jar mockhub-1.0.0.jar
+java -jar mockhub-x.x.x.jar
 ```
+
+**使用管理脚本：**
+
+```bash
+# Linux / macOS
+chmod +x mockhub.sh
+./mockhub.sh start
+
+# Windows
+mockhub.bat start
+```
+
+管理脚本支持 `start`、`stop`、`restart`、`status` 命令，无参数时显示交互菜单。
 
 首次启动会自动创建 `data/` 目录和 SQLite 数据库，并初始化默认管理员账号。
 
@@ -83,7 +146,7 @@ GET http://localhost:8080/mock/FE/api/user/info
 示例：
 
 ```bash
-java -jar mockhub-1.0.0.jar \
+java -jar mockhub-1.4.0.jar \
   --server.port=9090 \
   --data.path=D:/mockhub/data \
   --log.retain.mode=days \
@@ -96,8 +159,12 @@ java -jar mockhub-1.0.0.jar \
 
 ### 技术栈
 
-- 后端：Java 8 + Spring Boot 2.7.x + Spring Security + Apache CXF 3.x + SQLite
-- 前端：Vue 3 + Vite + Element Plus + Monaco Editor + Axios
+| 层 | 技术 |
+|----|------|
+| 后端 | Java 8 + Spring Boot 2.7.x + Spring Security + Apache CXF 3.x |
+| 数据库 | SQLite（嵌入式，WAL 模式） |
+| 前端 | Vue 3 + Vite + Element Plus + Monaco Editor |
+| 认证 | JWT（启动时随机密钥，重启后旧 Token 自动失效） |
 
 ### 本地开发
 
@@ -125,15 +192,13 @@ cd ..
 mvn clean package -DskipTests
 ```
 
-构建产物：`target/mockhub-1.0.0.jar`
+构建产物：`target/mockhub-{version}.jar`
 
 ---
 
 ## 注册为 Windows 服务
 
 使用 [WinSW](https://github.com/winsw/winsw) 可将 MockHub 注册为 Windows 服务，实现开机自启动。
-
-### 步骤
 
 1. 下载 `WinSW-x64.exe`，重命名为 `mockhub-service.exe`，放到 jar 同级目录
 
@@ -145,7 +210,7 @@ mvn clean package -DskipTests
   <name>MockHub</name>
   <description>MockHub 接口模拟服务</description>
   <executable>java</executable>
-  <arguments>-jar mockhub-1.0.0.jar --server.port=8080 --data.path=./data</arguments>
+  <arguments>-jar mockhub-1.4.0.jar --server.port=8080 --data.path=./data</arguments>
   <workingdirectory>%BASE%</workingdirectory>
   <logpath>%BASE%\logs</logpath>
   <log mode="roll-by-size">
@@ -155,39 +220,21 @@ mvn clean package -DskipTests
 </service>
 ```
 
-3. 以管理员身份运行命令：
+3. 以管理员身份运行：
 
 ```bash
-# 安装服务
-mockhub-service.exe install
-
-# 启动服务
-mockhub-service.exe start
-
-# 查看状态
-mockhub-service.exe status
-
-# 停止服务
-mockhub-service.exe stop
-
-# 卸载服务
-mockhub-service.exe uninstall
+mockhub-service.exe install   # 安装服务
+mockhub-service.exe start     # 启动服务
+mockhub-service.exe status    # 查看状态
+mockhub-service.exe stop      # 停止服务
+mockhub-service.exe uninstall # 卸载服务
 ```
 
 ---
 
 ## 数据备份
 
-MockHub 的所有数据存储在 `data/` 目录下，核心是 `mockhub.db` 文件（SQLite 数据库）。
-
-建议定期备份整个 `data/` 目录：
-
-```bash
-# 示例：备份到指定目录
-xcopy /E /I data D:\backup\mockhub-data-%date:~0,4%%date:~5,2%%date:~8,2%
-```
-
-备份内容包括：
+所有数据存储在 `data/` 目录下，定期备份该目录即可：
 
 - `mockhub.db` -- 全部业务数据（用户、团队、接口定义、日志等）
 - `wsdl/` -- 上传的 WSDL 文件

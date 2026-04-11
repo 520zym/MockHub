@@ -28,3 +28,12 @@ logs/
 # WinSW
 mockhub-service.exe
 mockhub-service.xml
+
+# Claude Code (AI 开发辅助配置，不公开)
+CLAUDE.md
+.claude/
+
+# 内部开发文档（不公开）
+docs/
+
+.playwright-mcp/
