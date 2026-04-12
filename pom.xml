@@ -13,7 +13,7 @@
 
     <groupId>com.mockhub</groupId>
     <artifactId>mockhub</artifactId>
-    <version>1.4.0</version>
+    <version>1.4.1</version>
     <packaging>jar</packaging>
     <name>MockHub</name>
     <description>接口模拟服务，支持 REST 和 SOAP 接口的 Mock</description>

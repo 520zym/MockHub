@@ -43,10 +43,13 @@
           <el-option label="已禁用" :value="false" />
         </el-select>
 
-        <!-- 标签筛选 -->
+        <!-- 标签筛选（支持多选，命中任一标签即返回） -->
         <el-select
           v-model="tagFilter"
           placeholder="标签筛选"
+          multiple
+          collapse-tags
+          collapse-tags-tooltip
           clearable
           class="toolbar__select"
           @change="handleTagChange"
@@ -128,7 +131,7 @@
         </el-table-column>
 
         <!-- 接口名称列 -->
-        <el-table-column prop="name" label="名称" width="120" show-overflow-tooltip />
+        <el-table-column prop="name" label="名称" min-width="180" show-overflow-tooltip />
 
         <!-- 标签列 -->
         <el-table-column label="标签" min-width="120" show-overflow-tooltip>
@@ -367,7 +370,8 @@ function handleSelectionChange(rows) {
 const keyword = ref(apiStore.listParams.keyword)
 const methodFilter = ref(apiStore.listParams.method)
 const enabledFilter = ref(apiStore.listParams.enabled)
-const tagFilter = ref(apiStore.listParams.tagId)
+// 多标签筛选：数组形式,兼容 store 里可能残留的旧字段
+const tagFilter = ref(Array.isArray(apiStore.listParams.tagIds) ? [...apiStore.listParams.tagIds] : [])
 const currentPage = ref(apiStore.listParams.page)
 const pageSize = ref(apiStore.listParams.size)
 
@@ -533,7 +537,10 @@ async function loadApis() {
     if (enabledFilter.value !== null && enabledFilter.value !== undefined && enabledFilter.value !== '') {
       params.enabled = enabledFilter.value
     }
-    if (tagFilter.value) params.tagId = tagFilter.value
+    // 多标签以逗号拼接传给后端(命中任一即返回)
+    if (tagFilter.value && tagFilter.value.length) {
+      params.tagIds = tagFilter.value.join(',')
+    }
 
     const res = await getApis(params)
     apiList.value = res.items || []
@@ -590,7 +597,8 @@ function handleEnabledChange(val) {
 }
 
 function handleTagChange(val) {
-  apiStore.setParam('tagId', val)
+  // val 为选中的 tagId 数组
+  apiStore.setParam('tagIds', val)
   currentPage.value = 1
   loadApis()
 }
