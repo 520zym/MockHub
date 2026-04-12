@@ -17,6 +17,11 @@ dist/
 frontend/node_modules/
 frontend/dist/
 
+# Frontend build artifacts embedded in Spring Boot static resources
+# (Vite output with hash filenames; regenerated on every `npm run build`)
+src/main/resources/static/assets/
+src/main/resources/static/index.html
+
 # Data directory (runtime data, SQLite DB)
 data/
 *.db
