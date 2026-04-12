@@ -7,6 +7,8 @@ import com.mockhub.mock.model.dto.ApiDefinitionVO;
 import com.mockhub.mock.model.dto.ApiMatchResult;
 import com.mockhub.mock.model.entity.ApiDefinition;
 
+import java.util.List;
+
 /**
  * 接口定义 Service 接口
  * <p>
@@ -35,13 +37,13 @@ public interface ApiService {
      * @param method  按方法筛选（可为 null）
      * @param enabled 按启用状态筛选（可为 null）
      * @param keyword 按名称或路径模糊搜索（可为 null）
-     * @param tagId   按标签筛选（可为 null）
+     * @param tagIds  按标签筛选，命中任一即返回（可为 null 或空）
      * @param page    页码
      * @param size    每页条数
      * @return 分页结果
      */
     PageResult<ApiDefinitionVO> list(String teamId, String groupId, String method,
-                                     Boolean enabled, String keyword, String tagId,
+                                     Boolean enabled, String keyword, List<String> tagIds,
                                      int page, int size);
 
     /**

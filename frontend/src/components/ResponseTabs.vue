@@ -219,6 +219,18 @@ const currentEditorLanguage = computed(() => {
   return typeMap[manualContentType.value] || 'json'
 })
 
+// 自动识别结果变化时，同步更新手动选中的格式标签
+// 场景：用户贴入/改写响应体后，detectedContentType 实时变化，需要让格式标签跟随识别结果
+// 用户仍可手动点击格式标签进行覆盖（后续的 manualContentType watch 会处理）
+watch(detectedContentType, (val) => {
+  if (props.operationName) return
+  if (val === '未知') return
+  const next = val.toLowerCase() // 'json' | 'xml' | 'text'
+  if (manualContentType.value !== next) {
+    manualContentType.value = next
+  }
+})
+
 // 同步 manualContentType → currentResponse.contentType
 watch(manualContentType, (val) => {
   if (!currentResponse.value || props.operationName) return
@@ -282,16 +294,66 @@ function removeResponse(idx) {
   emit('update:modelValue', [...responses.value])
 }
 
-/** 格式化响应体（仅 JSON） */
+/**
+ * 简易 XML 缩进格式化
+ * 纯字符串处理，不依赖 DOMParser（浏览器对畸形 XML 的解析容错不一）。
+ * 支持自闭合标签、嵌套层级缩进；不解析 CDATA / 注释等高级结构，满足 Mock 场景足够。
+ */
+function formatXml(xml) {
+  const PADDING = '  '
+  const reg = /(>)(<)(\/*)/g
+  const compact = xml
+    .replace(/\r?\n/g, '')
+    .replace(/>\s+</g, '><')
+    .replace(reg, '$1\n$2$3')
+  let pad = 0
+  return compact.split('\n').map(function (line) {
+    let indent = 0
+    if (/^<\/\w/.test(line)) {
+      pad = Math.max(pad - 1, 0)
+    } else if (/^<\w[^>]*[^\/]>.*$/.test(line) && !/<.+<\/.+>/.test(line)) {
+      indent = 1
+    }
+    const result = PADDING.repeat(pad) + line
+    pad += indent
+    return result
+  }).join('\n')
+}
+
+/**
+ * 格式化响应体
+ * 根据当前手动选中的格式标签（manualContentType）走对应分支：
+ * - json: JSON.parse + stringify(2 空格缩进)
+ * - xml:  formatXml 纯字符串缩进
+ * - text: 纯文本无需格式化
+ * 之所以依赖 manualContentType 而非 detectedContentType，是因为用户可能手动覆盖识别结果。
+ */
 function formatBody() {
   if (!currentResponse.value) return
   const body = (currentResponse.value.responseBody || '').trim()
   if (!body) return
-  try {
-    const parsed = JSON.parse(body)
-    currentResponse.value.responseBody = JSON.stringify(parsed, null, 2)
-  } catch (e) {
-    ElMessage.warning('当前内容不是有效 JSON，无法格式化')
+
+  const type = manualContentType.value
+  if (type === 'json') {
+    try {
+      const parsed = JSON.parse(body)
+      currentResponse.value.responseBody = JSON.stringify(parsed, null, 2)
+    } catch (e) {
+      ElMessage.warning('当前内容不是有效 JSON，无法格式化')
+    }
+  } else if (type === 'xml') {
+    // 简单校验：至少包含一个闭合尖括号对
+    if (!/<[^>]+>/.test(body)) {
+      ElMessage.warning('当前内容不是有效 XML，无法格式化')
+      return
+    }
+    try {
+      currentResponse.value.responseBody = formatXml(body)
+    } catch (e) {
+      ElMessage.warning('当前内容不是有效 XML，无法格式化')
+    }
+  } else {
+    ElMessage.info('纯文本无需格式化')
   }
 }
 

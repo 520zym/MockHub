@@ -188,7 +188,7 @@ public class ApiServiceImpl implements ApiService {
 
     @Override
     public PageResult<ApiDefinitionVO> list(String teamId, String groupId, String method,
-                                            Boolean enabled, String keyword, String tagId,
+                                            Boolean enabled, String keyword, List<String> tagIds,
                                             int page, int size) {
         // 确定当前用户可访问的团队范围
         List<String> teamIds = null;
@@ -206,8 +206,8 @@ public class ApiServiceImpl implements ApiService {
         }
 
         int offset = (page - 1) * size;
-        List<ApiDefinition> apis = apiRepository.findAll(teamIds, teamId, groupId, method, enabled, keyword, tagId, offset, size);
-        long total = apiRepository.count(teamIds, teamId, groupId, method, enabled, keyword, tagId);
+        List<ApiDefinition> apis = apiRepository.findAll(teamIds, teamId, groupId, method, enabled, keyword, tagIds, offset, size);
+        long total = apiRepository.count(teamIds, teamId, groupId, method, enabled, keyword, tagIds);
 
         // 转换为 VO，填充关联数据
         List<ApiDefinitionVO> voList = new ArrayList<ApiDefinitionVO>();

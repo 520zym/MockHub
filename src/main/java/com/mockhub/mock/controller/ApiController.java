@@ -19,7 +19,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -50,7 +52,7 @@ public class ApiController {
      * @param method  按 HTTP 方法筛选（可选）
      * @param enabled 按启用状态筛选（可选）
      * @param keyword 按名称或路径模糊搜索（可选）
-     * @param tagId   按标签筛选（可选）
+     * @param tagIds  按标签筛选，支持多个标签 ID 逗号分隔；命中任一标签即返回（可选）
      * @param page    页码，默认 1
      * @param size    每页条数，默认 20
      * @return 分页结果
@@ -62,10 +64,15 @@ public class ApiController {
             @RequestParam(required = false) String method,
             @RequestParam(required = false) Boolean enabled,
             @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) String tagId,
+            @RequestParam(required = false) String tagIds,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size) {
-        PageResult<ApiDefinitionVO> result = apiService.list(teamId, groupId, method, enabled, keyword, tagId, page, size);
+        // 兼容单标签和多标签:前端以逗号分隔传递 tagIds
+        List<String> tagIdList = null;
+        if (tagIds != null && !tagIds.isEmpty()) {
+            tagIdList = Arrays.asList(tagIds.split(","));
+        }
+        PageResult<ApiDefinitionVO> result = apiService.list(teamId, groupId, method, enabled, keyword, tagIdList, page, size);
         return Result.ok(result);
     }
 

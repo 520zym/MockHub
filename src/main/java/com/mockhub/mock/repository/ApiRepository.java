@@ -140,14 +140,14 @@ public class ApiRepository {
      * @param method   按方法筛选（可为 null）
      * @param enabled  按启用状态筛选（可为 null）
      * @param keyword  按名称或路径模糊搜索（可为 null）
-     * @param tagId    按标签筛选（可为 null）
+     * @param tagIds   按标签筛选，命中任一即返回（可为 null 或空）
      * @param offset   偏移量
      * @param limit    每页条数
      * @return 接口列表（不含 responseBody）
      */
     public List<ApiDefinition> findAll(List<String> teamIds, String teamId, String groupId,
                                        String method, Boolean enabled, String keyword,
-                                       String tagId, int offset, int limit) {
+                                       List<String> tagIds, int offset, int limit) {
         StringBuilder sql = new StringBuilder();
         sql.append("SELECT a.id, a.team_id, a.group_id, a.type, a.name, a.description, a.method, a.path, ");
         sql.append("a.response_code, a.content_type, a.delay_ms, a.enabled, ");
@@ -155,16 +155,17 @@ public class ApiRepository {
         sql.append("a.created_by, a.created_at, a.updated_at, a.updated_by ");
         sql.append("FROM api_definition a ");
 
-        // 如果按标签筛选，需要 JOIN api_tag 表
-        if (tagId != null && !tagId.isEmpty()) {
-            sql.append("INNER JOIN api_tag at ON a.id = at.api_id AND at.tag_id = ? ");
-        }
-
         sql.append("WHERE 1=1 ");
 
         List<Object> params = new ArrayList<Object>();
-        if (tagId != null && !tagId.isEmpty()) {
-            params.add(tagId);
+        // 多标签筛选：命中任一标签即返回。使用 EXISTS + IN 避免 JOIN 去重问题
+        if (tagIds != null && !tagIds.isEmpty()) {
+            sql.append("AND EXISTS (SELECT 1 FROM api_tag at WHERE at.api_id = a.id AND at.tag_id IN (");
+            for (int i = 0; i < tagIds.size(); i++) {
+                sql.append(i > 0 ? ",?" : "?");
+                params.add(tagIds.get(i));
+            }
+            sql.append(")) ");
         }
 
         // 团队范围限制
@@ -218,19 +219,21 @@ public class ApiRepository {
      * 统计接口总数（支持多条件筛选，与 findAll 条件对应）
      */
     public long count(List<String> teamIds, String teamId, String groupId,
-                      String method, Boolean enabled, String keyword, String tagId) {
+                      String method, Boolean enabled, String keyword, List<String> tagIds) {
         StringBuilder sql = new StringBuilder();
         sql.append("SELECT COUNT(*) FROM api_definition a ");
-
-        if (tagId != null && !tagId.isEmpty()) {
-            sql.append("INNER JOIN api_tag at ON a.id = at.api_id AND at.tag_id = ? ");
-        }
 
         sql.append("WHERE 1=1 ");
 
         List<Object> params = new ArrayList<Object>();
-        if (tagId != null && !tagId.isEmpty()) {
-            params.add(tagId);
+        // 多标签筛选：命中任一标签即计数
+        if (tagIds != null && !tagIds.isEmpty()) {
+            sql.append("AND EXISTS (SELECT 1 FROM api_tag at WHERE at.api_id = a.id AND at.tag_id IN (");
+            for (int i = 0; i < tagIds.size(); i++) {
+                sql.append(i > 0 ? ",?" : "?");
+                params.add(tagIds.get(i));
+            }
+            sql.append(")) ");
         }
 
         if (teamId != null && !teamId.isEmpty()) {
