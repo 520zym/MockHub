@@ -105,30 +105,39 @@
             </el-button>
           </div>
         </div>
-        <div class="panel__body">
+        <div class="panel__body panel__body--table">
           <el-table
             v-if="currentVariable"
             :data="filteredValues"
-            size="small"
-            stripe
-            height="100%"
+            row-class-name="value-row"
+            style="width: 100%"
           >
-            <el-table-column prop="value" label="值" min-width="140" />
-            <el-table-column prop="description" label="描述" min-width="180" />
-            <el-table-column label="操作" width="130" fixed="right">
+            <template #empty>
+              <div class="empty-hint">暂无候选值，点右上角「新增」或「批量粘贴」</div>
+            </template>
+            <el-table-column label="值" min-width="140" show-overflow-tooltip>
+              <template #default="{ row }">
+                <span class="value-text">{{ row.value }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="description" label="描述" min-width="180" show-overflow-tooltip>
+              <template #default="{ row }">
+                <span v-if="row.description" class="desc-text">{{ row.description }}</span>
+                <span v-else class="desc-muted">—</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="130" align="right">
               <template #default="{ row }">
                 <div class="row-actions">
                   <el-button
                     link
                     type="primary"
-                    size="small"
                     :disabled="!canWrite"
                     @click="openValueDialog(row)"
                   >编辑</el-button>
                   <el-button
                     link
                     type="danger"
-                    size="small"
                     :disabled="!canWrite"
                     @click="handleDeleteValue(row)"
                   >删除</el-button>
@@ -673,10 +682,15 @@ watch(currentVariableId, () => {
 .panel {
   background: #fff;
   border-radius: 16px;
-  box-shadow: 0 4px 20px rgba(27, 37, 89, 0.04);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  transition: box-shadow 0.2s ease;
+}
+
+.panel:hover {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
 }
 
 .panel__header {
@@ -714,8 +728,41 @@ watch(currentVariableId, () => {
   min-height: 0;
 }
 
-.panel--middle .panel__body {
-  padding: 0;
+/* 表格型面板：去掉内边距让 el-table 顶格撑满 */
+.panel__body--table {
+  padding: 0 8px 8px;
+}
+
+/* 候选值行：高度与 ApiList 的 .api-row 对齐，cell 垂直居中 */
+.panel__body--table :deep(.value-row) {
+  height: 48px;
+}
+
+.panel__body--table :deep(.value-row td .cell) {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+}
+
+.panel__body--table :deep(.value-row td.is-right .cell) {
+  justify-content: flex-end;
+}
+
+.value-text {
+  font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
+  font-size: 13px;
+  color: #1B2559;
+  font-weight: 500;
+}
+
+.desc-text {
+  font-size: 13px;
+  color: #4A5568;
+}
+
+.desc-muted {
+  font-size: 13px;
+  color: #CBD5E1;
 }
 
 .empty-hint {
