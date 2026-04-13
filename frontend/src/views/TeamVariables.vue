@@ -115,21 +115,24 @@
           >
             <el-table-column prop="value" label="值" min-width="140" />
             <el-table-column prop="description" label="描述" min-width="180" />
-            <el-table-column label="操作" width="120" fixed="right">
+            <el-table-column label="操作" width="130" fixed="right">
               <template #default="{ row }">
-                <el-button
-                  type="text"
-                  size="small"
-                  :disabled="!canWrite"
-                  @click="openValueDialog(row)"
-                >编辑</el-button>
-                <el-button
-                  type="text"
-                  size="small"
-                  style="color: var(--el-color-danger)"
-                  :disabled="!canWrite"
-                  @click="handleDeleteValue(row)"
-                >删除</el-button>
+                <div class="row-actions">
+                  <el-button
+                    link
+                    type="primary"
+                    size="small"
+                    :disabled="!canWrite"
+                    @click="openValueDialog(row)"
+                  >编辑</el-button>
+                  <el-button
+                    link
+                    type="danger"
+                    size="small"
+                    :disabled="!canWrite"
+                    @click="handleDeleteValue(row)"
+                  >删除</el-button>
+                </div>
               </template>
             </el-table-column>
           </el-table>
@@ -818,5 +821,21 @@ watch(currentVariableId, () => {
   margin-top: 8px;
   font-size: 12px;
   color: #6366F1;
+}
+
+/**
+ * 候选值表格操作列：强制两个 link 按钮横向排列
+ * 背景：Element Plus 的 el-button--link 在某些 table 单元格里可能被外部样式
+ * 影响成块级布局，此处显式 flex + nowrap 保证横排。
+ */
+.row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.row-actions .el-button + .el-button {
+  margin-left: 0;
 }
 </style>
