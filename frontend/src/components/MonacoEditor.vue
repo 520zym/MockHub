@@ -93,14 +93,28 @@ function setLatestVariablesList(list) {
   }
 }
 
-let _completionRegistered = false
+/**
+ * 注册 Monaco 动态变量补全 provider
+ *
+ * 注意：模块级 flag 在 Vite HMR 热重载后会被重置，但 Monaco 的
+ * registerCompletionItemProvider 不会自动清理旧的 provider，导致每次 HMR
+ * 都会叠加一层 → 补全项重复 N 次。为避免这个问题，把所有 disposable
+ * 挂到 window 上持久化，重新注册前先 dispose 旧的。
+ *
+ * 生产环境（非 HMR）也是幂等的：已经注册过就直接返回。
+ */
 function registerDynamicVariableCompletion() {
-  if (_completionRegistered) return
-  _completionRegistered = true
-
+  if (typeof window === 'undefined') return
+  // HMR 场景：如果存在之前注册的 disposables，先全部释放
+  if (Array.isArray(window.__mockhubDynamicVarProviders__)) {
+    for (const d of window.__mockhubDynamicVarProviders__) {
+      try { d && d.dispose && d.dispose() } catch (e) { /* ignore */ }
+    }
+  }
+  const disposables = []
   const languages = ['json', 'xml', 'plaintext']
   languages.forEach((lang) => {
-    monaco.languages.registerCompletionItemProvider(lang, {
+    const d = monaco.languages.registerCompletionItemProvider(lang, {
       triggerCharacters: ['{'],
       provideCompletionItems(model, position) {
         // 取当前行光标前的文本，判断是否以 `{{` 结尾（允许 `{{` 后紧跟部分变量名）
@@ -142,7 +156,9 @@ function registerDynamicVariableCompletion() {
         return { suggestions }
       }
     })
+    disposables.push(d)
   })
+  window.__mockhubDynamicVarProviders__ = disposables
 }
 
 const props = defineProps({
