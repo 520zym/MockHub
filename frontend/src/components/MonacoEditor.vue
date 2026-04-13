@@ -75,6 +75,24 @@ function rangesIntersect(mk, r) {
   return aBeforeOrEqB && bBeforeOrEqA
 }
 
+/**
+ * 模块级最新变量列表
+ *
+ * 补全 provider 在模块级只注册一次，但不同 MonacoEditor 实例可能带不同的
+ * dynamicVariables（例如不同团队的自定义变量）。解决方案：用一个模块级 ref
+ * 由组件 mount 时写入，provider 每次请求补全都读取这个 ref 的当前值。
+ * 同一时刻编辑器通常只有一个获得焦点，最后 mount 的实例覆盖前者即可。
+ */
+let latestVariablesList = DYNAMIC_VARIABLES.slice()
+
+function setLatestVariablesList(list) {
+  if (Array.isArray(list) && list.length > 0) {
+    latestVariablesList = list
+  } else {
+    latestVariablesList = DYNAMIC_VARIABLES.slice()
+  }
+}
+
 let _completionRegistered = false
 function registerDynamicVariableCompletion() {
   if (_completionRegistered) return
@@ -92,7 +110,7 @@ function registerDynamicVariableCompletion() {
           endLineNumber: position.lineNumber,
           endColumn: position.column
         })
-        const match = lineText.match(/\{\{(\w*)$/)
+        const match = lineText.match(/\{\{([\w.]*)$/)
         if (!match) return { suggestions: [] }
 
         // 替换范围：从 `{{` 起始位置到当前光标位置，整段替换为 `{{xxx}}`
@@ -113,7 +131,7 @@ function registerDynamicVariableCompletion() {
           endColumn
         }
 
-        const suggestions = DYNAMIC_VARIABLES.map((v) => ({
+        const suggestions = latestVariablesList.map((v) => ({
           label: `{{${v.name}}}`,
           kind: monaco.languages.CompletionItemKind.Variable,
           detail: v.desc,
@@ -139,6 +157,14 @@ const props = defineProps({
   readOnly: {
     type: Boolean,
     default: false
+  },
+  /**
+   * 动态变量列表（供补全 provider 使用）
+   * 每项 { name, desc }。未传时使用默认的内置 5 个变量。
+   */
+  dynamicVariables: {
+    type: Array,
+    default: null
   }
 })
 
@@ -175,6 +201,10 @@ onMounted(() => {
     }
   })
 
+  // 同步外部传入的动态变量列表到模块级变量，供补全 provider 使用
+  if (props.dynamicVariables) {
+    setLatestVariablesList(props.dynamicVariables)
+  }
   // 注册动态变量补全（模块级幂等）
   registerDynamicVariableCompletion()
   // 拦截 setModelMarkers，过滤掉落在 {{xxx}} 区间内的诊断标记（模块级幂等）
@@ -214,6 +244,14 @@ watch(() => props.readOnly, (newVal) => {
     editor.updateOptions({ readOnly: newVal })
   }
 })
+
+// 监听动态变量列表变化（例如父组件切换了团队或拉取回了自定义变量），
+// 写回模块级变量，provider 下次弹出补全时会读到新列表。
+watch(() => props.dynamicVariables, (newVal) => {
+  if (newVal) {
+    setLatestVariablesList(newVal)
+  }
+}, { deep: false })
 
 onBeforeUnmount(() => {
   if (editor) {

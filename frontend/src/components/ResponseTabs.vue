@@ -122,16 +122,39 @@
                 <el-icon><Search /></el-icon>
               </template>
             </el-input>
+
+            <!-- 内置变量段 -->
+            <div v-if="filteredBuiltin.length > 0" class="dynamic-var-section">内置</div>
             <div
-              v-for="v in filteredDynamicVariables"
-              :key="v.name"
+              v-for="v in filteredBuiltin"
+              :key="'builtin:' + v.name"
               class="dynamic-var-item"
               @click="insertVariable(v.name)"
             >
               <code class="dynamic-var-name">{{ '{{' + v.name + '}' + '}' }}</code>
               <span class="dynamic-var-desc">{{ v.desc }}</span>
             </div>
-            <div v-if="filteredDynamicVariables.length === 0" class="dynamic-var-empty">
+
+            <!-- 自定义变量段 -->
+            <div v-if="filteredCustom.length > 0" class="dynamic-var-section">
+              自定义（本团队）
+            </div>
+            <div
+              v-for="cv in filteredCustom"
+              :key="'custom:' + cv.id"
+              class="dynamic-var-item"
+              @click="handleCustomVariableClick(cv)"
+            >
+              <code class="dynamic-var-name">{{ '{{' + cv.name + '}' + '}' }}</code>
+              <span class="dynamic-var-desc">
+                {{ cv.description || (cv.groups.length + ' 个分组 / ' + cv.values.length + ' 个值') }}
+              </span>
+            </div>
+
+            <div
+              v-if="filteredBuiltin.length === 0 && filteredCustom.length === 0"
+              class="dynamic-var-empty"
+            >
               无匹配变量
             </div>
             <div class="dynamic-var-tip">
@@ -145,9 +168,36 @@
           ref="editorRef"
           v-model="currentResponse.responseBody"
           :language="currentEditorLanguage"
+          :dynamic-variables="combinedVariablesForEditor"
           class="response-editor"
         />
       </el-form>
+
+      <!-- 选择自定义变量分组的小对话框 -->
+      <el-dialog
+        v-model="showGroupPickDialog"
+        :title="'选择分组 - ' + (pickingVariable?.name || '')"
+        width="440px"
+      >
+        <div class="group-pick-list">
+          <div
+            class="group-pick-item"
+            @click="insertCustomPick(pickingVariable, null)"
+          >
+            <code>{{ '{{' + (pickingVariable?.name || '') + '}' + '}' }}</code>
+            <span>全部值（{{ pickingVariable?.values?.length || 0 }} 个）</span>
+          </div>
+          <div
+            v-for="g in (pickingVariable?.groups || [])"
+            :key="g.id"
+            class="group-pick-item"
+            @click="insertCustomPick(pickingVariable, g.name)"
+          >
+            <code>{{ '{{' + (pickingVariable?.name || '') + '.' + g.name + '}' + '}' }}</code>
+            <span>{{ g.valueIds.length }} 项{{ g.description ? ' · ' + g.description : '' }}</span>
+          </div>
+        </div>
+      </el-dialog>
 
       <!-- 底部操作栏 -->
       <div class="tab-actions">
@@ -188,11 +238,12 @@
  * REST 模式下 operationName 为 null，SOAP 模式下为对应的 operation 名称。
  * 支持添加、删除、切换、设为生效等操作。
  */
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { Plus, Check, MagicStick, Upload, Select, Delete, ArrowDown, Search } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import MonacoEditor from './MonacoEditor.vue'
 import { DYNAMIC_VARIABLES } from '@/constants/dynamicVariables'
+import { getTeamVariables } from '@/api/customVariable'
 
 // 动态变量元数据（用于 popover 列表渲染）
 const dynamicVariables = DYNAMIC_VARIABLES
@@ -200,14 +251,52 @@ const dynamicVariables = DYNAMIC_VARIABLES
 // 动态变量搜索关键字（支持按变量名或描述过滤，不区分大小写）
 const variableSearchKeyword = ref('')
 
-// 过滤后的变量列表：空关键字返回全部；否则在 name 和 desc 中做子串匹配
-const filteredDynamicVariables = computed(() => {
+// 团队自定义变量列表（从后端按 teamId 拉取，打开接口编辑页时加载一次）
+const customVariables = ref([])
+
+// 过滤后的内置变量
+const filteredBuiltin = computed(() => {
   const kw = variableSearchKeyword.value.trim().toLowerCase()
   if (!kw) return dynamicVariables
-  return dynamicVariables.filter((v) => {
-    return v.name.toLowerCase().includes(kw) || v.desc.toLowerCase().includes(kw)
+  return dynamicVariables.filter((v) =>
+    v.name.toLowerCase().includes(kw) || v.desc.toLowerCase().includes(kw)
+  )
+})
+
+// 过滤后的自定义变量（按变量名、描述、分组名匹配）
+const filteredCustom = computed(() => {
+  const kw = variableSearchKeyword.value.trim().toLowerCase()
+  if (!kw) return customVariables.value
+  return customVariables.value.filter((cv) => {
+    if (cv.name.toLowerCase().includes(kw)) return true
+    if (cv.description && cv.description.toLowerCase().includes(kw)) return true
+    if (cv.groups && cv.groups.some(g => g.name.toLowerCase().includes(kw))) return true
+    return false
   })
 })
+
+// 合并后的变量列表，用于 MonacoEditor 的补全 provider
+// 包含内置（带 desc）+ 自定义（展开成 {{xxx}} 和每个分组的 {{xxx.yyy}}）
+const combinedVariablesForEditor = computed(() => {
+  const list = dynamicVariables.map((v) => ({ name: v.name, desc: v.desc }))
+  for (const cv of customVariables.value) {
+    list.push({
+      name: cv.name,
+      desc: cv.description || `自定义变量（${cv.values.length} 个值）`
+    })
+    for (const g of cv.groups || []) {
+      list.push({
+        name: cv.name + '.' + g.name,
+        desc: `自定义分组（${g.valueIds.length} 项）${g.description ? ' · ' + g.description : ''}`
+      })
+    }
+  }
+  return list
+})
+
+// 选择分组的小对话框状态
+const showGroupPickDialog = ref(false)
+const pickingVariable = ref(null)
 
 // Monaco 编辑器引用，用于调用 insertAtCursor
 const editorRef = ref(null)
@@ -222,6 +311,56 @@ function insertVariable(name) {
   // 插入后清空搜索关键字，下次打开 popover 重新看到完整列表
   variableSearchKeyword.value = ''
 }
+
+/**
+ * 点击自定义变量：若有分组则弹对话框让用户选，否则直接插入 {{name}}
+ */
+function handleCustomVariableClick(cv) {
+  if (cv.groups && cv.groups.length > 0) {
+    pickingVariable.value = cv
+    showGroupPickDialog.value = true
+  } else {
+    insertVariable(cv.name)
+  }
+}
+
+/**
+ * 对话框中点某一项：插入对应占位符
+ * @param cv        自定义变量对象
+ * @param groupName 分组名；null 表示插入 {{cv.name}}（全部值）
+ */
+function insertCustomPick(cv, groupName) {
+  if (!cv) return
+  const placeholder = groupName ? `${cv.name}.${groupName}` : cv.name
+  insertVariable(placeholder)
+  showGroupPickDialog.value = false
+  pickingVariable.value = null
+}
+
+/**
+ * 拉取团队自定义变量列表
+ */
+async function loadCustomVariables() {
+  if (!props.teamId) {
+    customVariables.value = []
+    return
+  }
+  try {
+    customVariables.value = await getTeamVariables(props.teamId)
+  } catch (e) {
+    // 权限不足或其他错误时静默，响应拦截器已弹错
+    customVariables.value = []
+  }
+}
+
+onMounted(() => {
+  loadCustomVariables()
+})
+
+// teamId 变化时重新拉取（接口编辑页切换 team 的场景）
+watch(() => props.teamId, () => {
+  loadCustomVariables()
+})
 
 const props = defineProps({
   /** 返回体数组 (v-model) */
@@ -241,6 +380,11 @@ const props = defineProps({
   },
   /** 编辑器语言（SOAP 固定 xml，REST 动态切换） */
   editorLanguage: {
+    type: String,
+    default: null
+  },
+  /** 所属团队 ID，用于拉取该团队的自定义动态变量 */
+  teamId: {
     type: String,
     default: null
   }
@@ -593,6 +737,47 @@ function handleUploadFile(uploadFile) {
   color: #A3AED0;
   text-align: center;
   padding: 12px 0;
+}
+
+.dynamic-var-popover .dynamic-var-section {
+  font-size: 11px;
+  color: #A3AED0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 6px 10px 2px;
+  margin-top: 2px;
+}
+
+.group-pick-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.group-pick-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.group-pick-item:hover {
+  background: #F1F5F9;
+}
+
+.group-pick-item code {
+  font-family: 'SFMono-Regular', Consolas, Menlo, monospace;
+  font-size: 13px;
+  color: #6366F1;
+}
+
+.group-pick-item span {
+  font-size: 12px;
+  color: #64748B;
 }
 
 .dynamic-var-popover .dynamic-var-item {

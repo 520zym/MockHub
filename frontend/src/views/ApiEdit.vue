@@ -156,6 +156,7 @@
           <ResponseTabs
             v-model="op.responses"
             :operation-name="op.operationName"
+            :team-id="form.teamId"
             default-content-type="text/xml"
             editor-language="xml"
           />
@@ -170,7 +171,7 @@
     <!-- 卡片：返回体配置（REST 模式，使用 ResponseTabs 组件） -->
     <div class="soft-card section-card" v-if="form.type === 'REST'">
       <h3 class="section-title">返回体配置</h3>
-      <ResponseTabs v-model="form.responses" />
+      <ResponseTabs v-model="form.responses" :team-id="form.teamId" />
     </div>
 
     <!-- 卡片：标签 -->
