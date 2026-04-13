@@ -189,3 +189,61 @@ CREATE TABLE IF NOT EXISTS api_response (
 
 CREATE INDEX IF NOT EXISTS idx_api_response_api_id ON api_response(api_id);
 CREATE INDEX IF NOT EXISTS idx_api_response_active ON api_response(api_id, is_active);
+
+-- ========== 自定义动态变量 ==========
+-- 团队级维护的自定义动态变量，如机场四码、情报区代码等
+-- 响应体中通过 {{varname}} 从全部值随机挑选，{{varname.groupname}} 从指定分组随机挑选
+
+CREATE TABLE IF NOT EXISTS custom_variable (
+    id          TEXT PRIMARY KEY,
+    team_id     TEXT NOT NULL,
+    name        TEXT NOT NULL,   -- 变量名，只允许 \w{1,32}，团队内唯一，不允许与内置变量重名
+    description TEXT,            -- 变量描述，可选
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL,
+    FOREIGN KEY (team_id) REFERENCES team(id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_custom_variable_team_name ON custom_variable(team_id, name);
+CREATE INDEX IF NOT EXISTS idx_custom_variable_team_id ON custom_variable(team_id);
+
+-- ========== 自定义动态变量-候选值 ==========
+-- 一个变量下的候选值集合，Mock 响应时从中随机挑选
+
+CREATE TABLE IF NOT EXISTS custom_variable_value (
+    id          TEXT PRIMARY KEY,
+    variable_id TEXT NOT NULL,
+    value       TEXT NOT NULL,   -- 实际值，长度 1~256
+    description TEXT,            -- 人类可读描述（如机场四码对应的机场全称），可选，不参与替换输出
+    sort_order  INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (variable_id) REFERENCES custom_variable(id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_custom_variable_value_unique ON custom_variable_value(variable_id, value);
+CREATE INDEX IF NOT EXISTS idx_custom_variable_value_variable_id ON custom_variable_value(variable_id);
+
+-- ========== 自定义动态变量-分组 ==========
+-- 同一变量下的候选值可以按分组划分，一个值可以同时属于多个分组
+
+CREATE TABLE IF NOT EXISTS custom_variable_group (
+    id          TEXT PRIMARY KEY,
+    variable_id TEXT NOT NULL,
+    name        TEXT NOT NULL,   -- 分组名，只允许 \w{1,32}，同一变量下唯一
+    description TEXT,
+    FOREIGN KEY (variable_id) REFERENCES custom_variable(id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_custom_variable_group_unique ON custom_variable_group(variable_id, name);
+CREATE INDEX IF NOT EXISTS idx_custom_variable_group_variable_id ON custom_variable_group(variable_id);
+
+-- ========== 自定义动态变量-分组与值的多对多关联 ==========
+
+CREATE TABLE IF NOT EXISTS custom_variable_group_value (
+    group_id TEXT NOT NULL,
+    value_id TEXT NOT NULL,
+    PRIMARY KEY (group_id, value_id),
+    FOREIGN KEY (group_id) REFERENCES custom_variable_group(id) ON DELETE CASCADE,
+    FOREIGN KEY (value_id) REFERENCES custom_variable_value(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_custom_variable_group_value_value_id ON custom_variable_group_value(value_id);

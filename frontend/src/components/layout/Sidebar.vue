@@ -83,6 +83,7 @@ const userStore = useUserStore()
 // 导航菜单配置
 const navItems = [
   { path: '/apis', label: '接口管理', icon: 'Connection', requiresSuperAdmin: false },
+  { path: '/variables', label: '动态变量', icon: 'MagicStick', requiresSuperAdmin: false },
   { path: '/teams', label: '团队管理', icon: 'OfficeBuilding', requiresSuperAdmin: true },
   { path: '/users', label: '用户管理', icon: 'User', requiresSuperAdmin: true },
   { path: '/logs/operation', label: '日志', icon: 'Document', requiresSuperAdmin: false },

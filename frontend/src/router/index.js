@@ -41,6 +41,12 @@ const routes = [
         meta: { title: '团队管理', requiresSuperAdmin: true }
       },
       {
+        path: 'variables',
+        name: 'TeamVariables',
+        component: () => import('@/views/TeamVariables.vue'),
+        meta: { title: '动态变量' }
+      },
+      {
         path: 'users',
         name: 'UserManage',
         component: () => import('@/views/UserManage.vue'),
