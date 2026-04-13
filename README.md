@@ -25,6 +25,10 @@
 |:---:|:---:|
 | ![日志](screenshots/logs.png) | ![全局设置](screenshots/settings.png) |
 
+| 动态变量 |
+|:---:|
+| ![动态变量](screenshots/dynamic-variables.png) |
+
 ---
 
 ## 功能特性
