@@ -1,8 +1,10 @@
 package com.mockhub.mock.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.mockhub.common.util.DynamicVariableUtil;
+import com.mockhub.common.exception.UnresolvedPlaceholderException;
+import com.mockhub.common.model.Result;
 import com.mockhub.log.service.LogService;
 import com.mockhub.log.model.RequestLog;
 import com.mockhub.mock.model.SoapConfig;
@@ -64,19 +66,22 @@ public class MockDispatchService {
     private final GlobalHeaderService globalHeaderService;
     private final LogService logService;
     private final ObjectMapper objectMapper;
+    private final DynamicVariableResolver dynamicVariableResolver;
 
     public MockDispatchService(TeamService teamService,
                                ApiService apiService,
                                ApiResponseRepository apiResponseRepository,
                                GlobalHeaderService globalHeaderService,
                                LogService logService,
-                               ObjectMapper objectMapper) {
+                               ObjectMapper objectMapper,
+                               DynamicVariableResolver dynamicVariableResolver) {
         this.teamService = teamService;
         this.apiService = apiService;
         this.apiResponseRepository = apiResponseRepository;
         this.globalHeaderService = globalHeaderService;
         this.logService = logService;
         this.objectMapper = objectMapper;
+        this.dynamicVariableResolver = dynamicVariableResolver;
     }
 
     /**
@@ -198,9 +203,19 @@ public class MockDispatchService {
         }
 
         // ====== 5. 动态变量替换 ======
+        // 使用 DynamicVariableResolver 编排内置变量、路径参数和自定义变量。
+        // 当自定义变量的目标分组不存在或为空时会抛 UnresolvedPlaceholderException，
+        // 在此捕获并返回 HTTP 500 + 统一 {code,msg,data} 错误响应。
         if (responseBody != null && !responseBody.isEmpty()) {
-            responseBody = DynamicVariableUtil.replace(responseBody, pathVariables);
-            log.debug("动态变量替换完成, 响应体长度={}", responseBody.length());
+            try {
+                responseBody = dynamicVariableResolver.resolve(responseBody, teamId, teamIdentifier, pathVariables);
+                log.debug("动态变量替换完成, 响应体长度={}", responseBody.length());
+            } catch (UnresolvedPlaceholderException ex) {
+                log.warn("动态变量占位符无法解析: teamIdentifier={}, placeholder={}",
+                        teamIdentifier, ex.getPlaceholder());
+                return buildResultErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR,
+                        50101, ex.getMessage());
+            }
         }
 
         // ====== 6. 全局响应头叠加 ======
@@ -404,6 +419,30 @@ public class MockDispatchService {
         String body = "{\"error\": \"" + escapeJson(message) + "\"}";
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
+        return new ResponseEntity<String>(body, headers, status);
+    }
+
+    /**
+     * 构建统一 Result 格式的错误响应
+     * <p>
+     * Mock 系统自身抛出的错误（如动态变量占位符无法解析）使用与管理接口一致的
+     * {@code {code, msg, data}} 格式，便于下游统一按 HTTP 状态码和 body.code 判断。
+     * 用户配置的 Mock 响应体仍保持原样不包装（在正常流程里），此方法只服务于异常场景。
+     *
+     * @param status  HTTP 状态码
+     * @param code    业务错误码（如 50101 代表未解析的占位符）
+     * @param message 错误描述
+     */
+    private ResponseEntity<String> buildResultErrorResponse(HttpStatus status, int code, String message) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        String body;
+        try {
+            body = objectMapper.writeValueAsString(Result.error(code, message));
+        } catch (JsonProcessingException e) {
+            // 极小概率：ObjectMapper 序列化一个简单 POJO 失败 → 降级到手写 JSON
+            body = "{\"code\":" + code + ",\"msg\":\"" + escapeJson(message) + "\",\"data\":null}";
+        }
         return new ResponseEntity<String>(body, headers, status);
     }
 
