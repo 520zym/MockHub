@@ -245,6 +245,36 @@ import MonacoEditor from './MonacoEditor.vue'
 import { DYNAMIC_VARIABLES } from '@/constants/dynamicVariables'
 import { getTeamVariables } from '@/api/customVariable'
 
+const props = defineProps({
+  /** 返回体数组 (v-model) */
+  modelValue: {
+    type: Array,
+    default: () => []
+  },
+  /** SOAP operation 名称，null 表示 REST 模式 */
+  operationName: {
+    type: String,
+    default: null
+  },
+  /** 默认 Content-Type */
+  defaultContentType: {
+    type: String,
+    default: 'application/json'
+  },
+  /** 编辑器语言（SOAP 固定 xml，REST 动态切换） */
+  editorLanguage: {
+    type: String,
+    default: null
+  },
+  /** 所属团队 ID，用于拉取该团队的自定义动态变量 */
+  teamId: {
+    type: String,
+    default: null
+  }
+})
+
+const emit = defineEmits(['update:modelValue'])
+
 // 动态变量元数据（用于 popover 列表渲染）
 const dynamicVariables = DYNAMIC_VARIABLES
 
@@ -361,36 +391,6 @@ onMounted(() => {
 watch(() => props.teamId, () => {
   loadCustomVariables()
 })
-
-const props = defineProps({
-  /** 返回体数组 (v-model) */
-  modelValue: {
-    type: Array,
-    default: () => []
-  },
-  /** SOAP operation 名称，null 表示 REST 模式 */
-  operationName: {
-    type: String,
-    default: null
-  },
-  /** 默认 Content-Type */
-  defaultContentType: {
-    type: String,
-    default: 'application/json'
-  },
-  /** 编辑器语言（SOAP 固定 xml，REST 动态切换） */
-  editorLanguage: {
-    type: String,
-    default: null
-  },
-  /** 所属团队 ID，用于拉取该团队的自定义动态变量 */
-  teamId: {
-    type: String,
-    default: null
-  }
-})
-
-const emit = defineEmits(['update:modelValue'])
 
 // 当前选中的 Tab 索引
 const activeIndex = ref(0)
