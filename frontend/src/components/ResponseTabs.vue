@@ -96,10 +96,53 @@
               上传文件
             </el-button>
           </el-upload>
+          <!-- 动态变量插入入口：点击后弹出 popover，选择变量后插入到编辑器光标位置 -->
+          <el-popover
+            placement="bottom-start"
+            :width="320"
+            trigger="click"
+            popper-class="dynamic-var-popover"
+          >
+            <template #reference>
+              <el-button size="small">
+                <el-icon><MagicStick /></el-icon>
+                插入变量
+                <el-icon style="margin-left: 2px"><ArrowDown /></el-icon>
+              </el-button>
+            </template>
+            <div class="dynamic-var-header">动态变量（点击插入）</div>
+            <el-input
+              v-model="variableSearchKeyword"
+              size="small"
+              placeholder="搜索变量名或描述"
+              clearable
+              class="dynamic-var-search"
+            >
+              <template #prefix>
+                <el-icon><Search /></el-icon>
+              </template>
+            </el-input>
+            <div
+              v-for="v in filteredDynamicVariables"
+              :key="v.name"
+              class="dynamic-var-item"
+              @click="insertVariable(v.name)"
+            >
+              <code class="dynamic-var-name">{{ '{{' + v.name + '}' + '}' }}</code>
+              <span class="dynamic-var-desc">{{ v.desc }}</span>
+            </div>
+            <div v-if="filteredDynamicVariables.length === 0" class="dynamic-var-empty">
+              无匹配变量
+            </div>
+            <div class="dynamic-var-tip">
+              提示：在编辑器中输入 <code>{{ '{{' }}</code> 也会弹出补全建议
+            </div>
+          </el-popover>
         </div>
 
         <!-- Monaco 编辑器 -->
         <MonacoEditor
+          ref="editorRef"
           v-model="currentResponse.responseBody"
           :language="currentEditorLanguage"
           class="response-editor"
@@ -146,9 +189,39 @@
  * 支持添加、删除、切换、设为生效等操作。
  */
 import { ref, computed, watch } from 'vue'
-import { Plus, Check, MagicStick, Upload, Select, Delete } from '@element-plus/icons-vue'
+import { Plus, Check, MagicStick, Upload, Select, Delete, ArrowDown, Search } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import MonacoEditor from './MonacoEditor.vue'
+import { DYNAMIC_VARIABLES } from '@/constants/dynamicVariables'
+
+// 动态变量元数据（用于 popover 列表渲染）
+const dynamicVariables = DYNAMIC_VARIABLES
+
+// 动态变量搜索关键字（支持按变量名或描述过滤，不区分大小写）
+const variableSearchKeyword = ref('')
+
+// 过滤后的变量列表：空关键字返回全部；否则在 name 和 desc 中做子串匹配
+const filteredDynamicVariables = computed(() => {
+  const kw = variableSearchKeyword.value.trim().toLowerCase()
+  if (!kw) return dynamicVariables
+  return dynamicVariables.filter((v) => {
+    return v.name.toLowerCase().includes(kw) || v.desc.toLowerCase().includes(kw)
+  })
+})
+
+// Monaco 编辑器引用，用于调用 insertAtCursor
+const editorRef = ref(null)
+
+/**
+ * 在 Monaco 编辑器光标位置插入动态变量占位符
+ * @param {string} name 变量名，如 'timestamp'
+ */
+function insertVariable(name) {
+  if (!editorRef.value) return
+  editorRef.value.insertAtCursor(`{{${name}}}`)
+  // 插入后清空搜索关键字，下次打开 popover 重新看到完整列表
+  variableSearchKeyword.value = ''
+}
 
 const props = defineProps({
   /** 返回体数组 (v-model) */
@@ -497,5 +570,74 @@ function handleUploadFile(uploadFile) {
   display: flex;
   align-items: center;
   gap: 4px;
+}
+</style>
+
+<!-- 动态变量 popover 样式（非 scoped，因 popover 渲染在 body 下） -->
+<style>
+.dynamic-var-popover .dynamic-var-header {
+  font-size: 12px;
+  color: #A3AED0;
+  padding: 4px 8px 8px;
+  border-bottom: 1px solid #F1F5F9;
+  margin-bottom: 4px;
+}
+
+.dynamic-var-popover .dynamic-var-search {
+  margin: 0 4px 6px;
+  width: calc(100% - 8px);
+}
+
+.dynamic-var-popover .dynamic-var-empty {
+  font-size: 12px;
+  color: #A3AED0;
+  text-align: center;
+  padding: 12px 0;
+}
+
+.dynamic-var-popover .dynamic-var-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.dynamic-var-popover .dynamic-var-item:hover {
+  background: #F1F5F9;
+}
+
+.dynamic-var-popover .dynamic-var-name {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 13px;
+  color: #6366F1;
+  background: transparent;
+  padding: 0;
+}
+
+.dynamic-var-popover .dynamic-var-desc {
+  font-size: 12px;
+  color: #64748B;
+  text-align: right;
+  flex: 1;
+}
+
+.dynamic-var-popover .dynamic-var-tip {
+  font-size: 11px;
+  color: #A3AED0;
+  padding: 8px 10px 2px;
+  margin-top: 4px;
+  border-top: 1px solid #F1F5F9;
+}
+
+.dynamic-var-popover .dynamic-var-tip code {
+  background: #F1F5F9;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-family: 'SFMono-Regular', Consolas, monospace;
+  color: #6366F1;
 }
 </style>
