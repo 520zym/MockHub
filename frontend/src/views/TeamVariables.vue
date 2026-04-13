@@ -210,7 +210,7 @@
         <el-form-item label="变量名" required>
           <el-input
             v-model="variableForm.name"
-            placeholder="如 airport，只允许字母数字下划线 1~32 字符"
+            placeholder="如 pet，只允许字母数字下划线 1~32 字符"
             maxlength="32"
           />
         </el-form-item>
@@ -237,12 +237,12 @@
     >
       <el-form :model="valueForm" label-width="80px">
         <el-form-item label="值" required>
-          <el-input v-model="valueForm.value" placeholder="如 ZBAA" maxlength="256" />
+          <el-input v-model="valueForm.value" placeholder="如 旺财" maxlength="256" />
         </el-form-item>
         <el-form-item label="描述">
           <el-input
             v-model="valueForm.description"
-            placeholder="如 北京首都（仅展示用，不参与替换输出）"
+            placeholder="如 拉布拉多（仅展示用，不参与替换输出）"
             maxlength="256"
           />
         </el-form-item>
@@ -256,14 +256,14 @@
     <!-- 批量粘贴对话框 -->
     <el-dialog v-model="showBatchDialog" title="批量粘贴候选值" width="640px">
       <div class="batch-hint">
-        每行一条。可用制表符或多空格分隔 <code>值</code> 和 <code>描述</code>，
+        每行一条，用<strong>英文逗号</strong>分隔 <code>值</code> 和 <code>描述</code>，
         描述可省略。重复值将被跳过。
       </div>
       <el-input
         v-model="batchText"
         type="textarea"
         :rows="10"
-        placeholder="ZBAA  北京首都&#10;ZSPD  上海浦东&#10;ZGGG  广州白云"
+        placeholder="旺财,拉布拉多&#10;小黑,金毛&#10;咪咪,英短&#10;豆豆,柯基"
       />
       <template #footer>
         <el-button @click="showBatchDialog = false">取消</el-button>
@@ -509,10 +509,16 @@ async function handleBatchInsert() {
   for (const raw of lines) {
     const line = raw.trim()
     if (!line) continue
-    // 按制表符或连续两个及以上空白分隔
-    const parts = line.split(/\t+|\s{2,}/)
-    const value = parts[0].trim()
-    const description = parts.length > 1 ? parts.slice(1).join(' ').trim() : ''
+    // 按首个英文逗号分隔：逗号前为值，之后全部作为描述（允许描述里再含逗号）
+    const commaIdx = line.indexOf(',')
+    let value, description
+    if (commaIdx === -1) {
+      value = line
+      description = ''
+    } else {
+      value = line.substring(0, commaIdx).trim()
+      description = line.substring(commaIdx + 1).trim()
+    }
     if (value) {
       values.push({ value, description })
     }
