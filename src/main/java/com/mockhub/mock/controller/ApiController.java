@@ -53,6 +53,7 @@ public class ApiController {
      * @param enabled 按启用状态筛选（可选）
      * @param keyword 按名称或路径模糊搜索（可选）
      * @param tagIds  按标签筛选，支持多个标签 ID 逗号分隔；命中任一标签即返回（可选）
+     * @param type    按接口类型筛选（REST / SOAP，可选）
      * @param page    页码，默认 1
      * @param size    每页条数，默认 20
      * @return 分页结果
@@ -65,6 +66,7 @@ public class ApiController {
             @RequestParam(required = false) Boolean enabled,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String tagIds,
+            @RequestParam(required = false) String type,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size) {
         // 兼容单标签和多标签:前端以逗号分隔传递 tagIds
@@ -72,7 +74,7 @@ public class ApiController {
         if (tagIds != null && !tagIds.isEmpty()) {
             tagIdList = Arrays.asList(tagIds.split(","));
         }
-        PageResult<ApiDefinitionVO> result = apiService.list(teamId, groupId, method, enabled, keyword, tagIdList, page, size);
+        PageResult<ApiDefinitionVO> result = apiService.list(teamId, groupId, method, enabled, keyword, tagIdList, type, page, size);
         return Result.ok(result);
     }
 

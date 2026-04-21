@@ -141,13 +141,14 @@ public class ApiRepository {
      * @param enabled  按启用状态筛选（可为 null）
      * @param keyword  按名称或路径模糊搜索（可为 null）
      * @param tagIds   按标签筛选，命中任一即返回（可为 null 或空）
+     * @param type     按接口类型筛选（REST / SOAP，可为 null）
      * @param offset   偏移量
      * @param limit    每页条数
      * @return 接口列表（不含 responseBody）
      */
     public List<ApiDefinition> findAll(List<String> teamIds, String teamId, String groupId,
                                        String method, Boolean enabled, String keyword,
-                                       List<String> tagIds, int offset, int limit) {
+                                       List<String> tagIds, String type, int offset, int limit) {
         StringBuilder sql = new StringBuilder();
         sql.append("SELECT a.id, a.team_id, a.group_id, a.type, a.name, a.description, a.method, a.path, ");
         sql.append("a.response_code, a.content_type, a.delay_ms, a.enabled, ");
@@ -196,6 +197,11 @@ public class ApiRepository {
             params.add(method);
         }
 
+        if (type != null && !type.isEmpty()) {
+            sql.append("AND a.type = ? ");
+            params.add(type);
+        }
+
         if (enabled != null) {
             sql.append("AND a.enabled = ? ");
             params.add(enabled ? 1 : 0);
@@ -219,7 +225,7 @@ public class ApiRepository {
      * 统计接口总数（支持多条件筛选，与 findAll 条件对应）
      */
     public long count(List<String> teamIds, String teamId, String groupId,
-                      String method, Boolean enabled, String keyword, List<String> tagIds) {
+                      String method, Boolean enabled, String keyword, List<String> tagIds, String type) {
         StringBuilder sql = new StringBuilder();
         sql.append("SELECT COUNT(*) FROM api_definition a ");
 
@@ -261,6 +267,11 @@ public class ApiRepository {
         if (method != null && !method.isEmpty()) {
             sql.append("AND a.method = ? ");
             params.add(method);
+        }
+
+        if (type != null && !type.isEmpty()) {
+            sql.append("AND a.type = ? ");
+            params.add(type);
         }
 
         if (enabled != null) {
