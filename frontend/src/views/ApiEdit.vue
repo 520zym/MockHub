@@ -307,11 +307,18 @@ const mockUrl = computed(() => {
   return `${base}/mock/${currentTeamIdentifier.value}${form.path || '/'}`
 })
 
-/** WSDL 托管地址 */
+/**
+ * WSDL 托管地址（方案 A：ASMX 风格，和 mockUrl 同源）
+ *
+ * 行为：
+ *   GET  {mockUrl}?wsdl  → 返回 WSDL 文件（后端动态替换 location）
+ *   POST {mockUrl}       → SOAP 调用
+ *
+ * 上传 WSDL 前返回空串，避免显示无效链接。
+ */
 const wsdlHostUrl = computed(() => {
   if (!form.soapConfig || !form.soapConfig.wsdlFileName) return ''
-  const base = serverAddress.value || window.location.origin
-  return `${base}/wsdl/${form.soapConfig.wsdlFileName}`
+  return `${mockUrl.value}?wsdl`
 })
 
 // --- 数据加载（编辑模式） ---
