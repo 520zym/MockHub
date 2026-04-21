@@ -48,12 +48,28 @@ public class WsdlParseResult {
         /** SOAP Action 标识 */
         private String soapAction;
 
+        /**
+         * 按 WSDL 里的 XSD 递归生成的响应体骨架（SOAP Envelope XML 字符串）。
+         * <p>
+         * 前端合并策略：仅当对应 operation 的 responseBody 为空时才使用此值，
+         * 已有的用户响应体不会被覆盖。
+         * <p>
+         * 可为 null（例如 XSD 解析失败）。
+         */
+        private String suggestedResponseBody;
+
         public WsdlOperation() {
         }
 
         public WsdlOperation(String operationName, String soapAction) {
             this.operationName = operationName;
             this.soapAction = soapAction;
+        }
+
+        public WsdlOperation(String operationName, String soapAction, String suggestedResponseBody) {
+            this.operationName = operationName;
+            this.soapAction = soapAction;
+            this.suggestedResponseBody = suggestedResponseBody;
         }
 
         public String getOperationName() {
@@ -70,6 +86,14 @@ public class WsdlParseResult {
 
         public void setSoapAction(String soapAction) {
             this.soapAction = soapAction;
+        }
+
+        public String getSuggestedResponseBody() {
+            return suggestedResponseBody;
+        }
+
+        public void setSuggestedResponseBody(String suggestedResponseBody) {
+            this.suggestedResponseBody = suggestedResponseBody;
         }
     }
 }

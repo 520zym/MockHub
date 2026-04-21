@@ -7,6 +7,7 @@ export const useApiStore = defineStore('api', {
       method: null,
       enabled: null,
       tagIds: [],
+      type: null,
       page: 1,
       size: 20
     }
@@ -26,6 +27,7 @@ export const useApiStore = defineStore('api', {
         method: null,
         enabled: null,
         tagIds: [],
+        type: null,
         page: 1,
         size: 20
       }

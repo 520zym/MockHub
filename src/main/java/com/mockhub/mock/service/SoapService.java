@@ -39,9 +39,11 @@ public class SoapService {
     private static final Logger log = LoggerFactory.getLogger(SoapService.class);
 
     private final DataProperties dataProperties;
+    private final SoapSkeletonGenerator skeletonGenerator;
 
-    public SoapService(DataProperties dataProperties) {
+    public SoapService(DataProperties dataProperties, SoapSkeletonGenerator skeletonGenerator) {
         this.dataProperties = dataProperties;
+        this.skeletonGenerator = skeletonGenerator;
     }
 
     /**
@@ -109,14 +111,14 @@ public class SoapService {
     }
 
     /**
-     * 读取 WSDL 文件内容，并动态替换 soap:address location 为实际服务地址
+     * 读取 WSDL 文件内容，并动态替换 soap:address location 为指定的 mock URL。
      *
-     * @param fileName  WSDL 文件名
-     * @param serverUrl 当前服务器 URL（如 http://192.168.1.100:8080）
+     * @param fileName WSDL 文件名
+     * @param mockUrl  完整的 Mock 接口 URL（如 http://host:8080/mock/EFB/ck/release）
      * @return 替换后的 WSDL 文件内容
      * @throws BizException code=40701，文件不存在时抛出
      */
-    public String getWsdlContent(String fileName, String serverUrl) {
+    public String getWsdlContent(String fileName, String mockUrl) {
         Path filePath = getWsdlDir().resolve(fileName);
         if (!Files.exists(filePath)) {
             throw new BizException(40701, "WSDL 文件不存在: " + fileName);
@@ -125,14 +127,15 @@ public class SoapService {
         try {
             String content = new String(Files.readAllBytes(filePath), "UTF-8");
 
-            // 动态替换 soap:address location
-            // 匹配 <soap:address location="..."/> 或 <soap12:address location="..."/>
+            // 动态替换 <soap:address location="..."/> 或 <soap12:address location="..."/>
+            // 正则捕获组 1 = location="，组 2 = "；替换为 location="{mockUrl}"
+            // 用 Matcher.quoteReplacement 防止 mockUrl 里的 $ 或 \ 干扰正则替换
             content = content.replaceAll(
                     "(location=\")[^\"]*?(\")",
-                    "$1" + serverUrl + "/mock/$2"
+                    "$1" + java.util.regex.Matcher.quoteReplacement(mockUrl) + "$2"
             );
 
-            log.debug("WSDL 托管: fileName={}, serverUrl={}", fileName, serverUrl);
+            log.debug("WSDL 托管: fileName={}, mockUrl={}", fileName, mockUrl);
             return content;
         } catch (IOException e) {
             log.error("读取 WSDL 文件失败: {}", filePath, e);
@@ -141,21 +144,14 @@ public class SoapService {
     }
 
     /**
-     * 使用 DOM 解析 WSDL 文件，提取 operation 名称和 soapAction
-     * <p>
-     * 解析逻辑：
-     * <ol>
-     *   <li>查找所有 wsdl:operation（或 operation）元素</li>
-     *   <li>从子元素 soap:operation（或 soap12:operation）中提取 soapAction 属性</li>
-     * </ol>
+     * 使用 DOM 解析 WSDL 文件，提取 operation 名称 + soapAction +（可选）响应体骨架。
      *
      * @param filePath WSDL 文件路径
-     * @return 操作列表
+     * @return 操作列表（含 suggestedResponseBody，可为 null）
      * @throws BizException code=40701，解析失败时抛出
      */
     private List<WsdlParseResult.WsdlOperation> parseWsdlFile(Path filePath) {
-        List<WsdlParseResult.WsdlOperation> operations = new ArrayList<WsdlParseResult.WsdlOperation>();
-
+        Document doc;
         try {
             DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
             factory.setNamespaceAware(true);
@@ -166,58 +162,83 @@ public class SoapService {
 
             DocumentBuilder builder = factory.newDocumentBuilder();
             InputStream is = Files.newInputStream(filePath);
-            Document doc;
             try {
                 doc = builder.parse(is);
             } finally {
                 is.close();
             }
-
-            // 查找 binding 下的 operation 元素
-            // WSDL 1.1 的 binding/operation 中包含 soap:operation
-            NodeList bindingOps = doc.getElementsByTagNameNS("http://schemas.xmlsoap.org/wsdl/", "operation");
-            if (bindingOps.getLength() == 0) {
-                // 尝试不带命名空间
-                bindingOps = doc.getElementsByTagName("operation");
-            }
-
-            for (int i = 0; i < bindingOps.getLength(); i++) {
-                Element opElement = (Element) bindingOps.item(i);
-                String operationName = opElement.getAttribute("name");
-                if (operationName == null || operationName.isEmpty()) {
-                    continue;
-                }
-
-                // 提取 soapAction
-                String soapAction = extractSoapAction(opElement);
-
-                // 只收集有 soapAction 的操作（即 binding 中的 operation）
-                if (soapAction != null) {
-                    // 避免重复添加（portType 和 binding 中的同名 operation）
-                    boolean exists = false;
-                    for (WsdlParseResult.WsdlOperation existing : operations) {
-                        if (operationName.equals(existing.getOperationName())) {
-                            exists = true;
-                            break;
-                        }
-                    }
-                    if (!exists) {
-                        operations.add(new WsdlParseResult.WsdlOperation(operationName, soapAction));
-                        log.debug("解析到 SOAP operation: name={}, soapAction={}", operationName, soapAction);
-                    }
-                }
-            }
-
-            // 如果通过命名空间方式没找到带 soapAction 的，尝试直接查找 soap:operation 元素
-            if (operations.isEmpty()) {
-                parseSoapOperationElements(doc, operations);
-            }
-
         } catch (BizException e) {
             throw e;
         } catch (Exception e) {
             log.error("解析 WSDL 文件失败: {}", filePath, e);
             throw new BizException(40701, "WSDL 文件解析失败: " + e.getMessage());
+        }
+
+        // 提取 operation 名 + soapAction
+        List<WsdlParseResult.WsdlOperation> operations = extractOperations(doc);
+
+        // 提取 targetNamespace 供骨架生成使用
+        String tns = doc.getDocumentElement().getAttribute("targetNamespace");
+
+        // 为每个 operation 生成响应体骨架（失败时 suggestedResponseBody 保持 null，不致命）
+        for (WsdlParseResult.WsdlOperation op : operations) {
+            try {
+                String skeleton = skeletonGenerator.generate(doc, op.getOperationName(), tns);
+                op.setSuggestedResponseBody(skeleton);
+            } catch (Exception e) {
+                log.warn("生成 operation 骨架失败: {}, error={}",
+                        op.getOperationName(), e.getMessage());
+            }
+        }
+
+        return operations;
+    }
+
+    /**
+     * 从已解析的 WSDL Document 中提取 operation 列表。
+     * 原 parseWsdlFile 的提取逻辑，从 Document 解析拆离，与骨架生成解耦。
+     */
+    private List<WsdlParseResult.WsdlOperation> extractOperations(Document doc) {
+        List<WsdlParseResult.WsdlOperation> operations = new ArrayList<WsdlParseResult.WsdlOperation>();
+
+        // 查找 binding 下的 operation 元素
+        // WSDL 1.1 的 binding/operation 中包含 soap:operation
+        NodeList bindingOps = doc.getElementsByTagNameNS("http://schemas.xmlsoap.org/wsdl/", "operation");
+        if (bindingOps.getLength() == 0) {
+            // 尝试不带命名空间
+            bindingOps = doc.getElementsByTagName("operation");
+        }
+
+        for (int i = 0; i < bindingOps.getLength(); i++) {
+            Element opElement = (Element) bindingOps.item(i);
+            String operationName = opElement.getAttribute("name");
+            if (operationName == null || operationName.isEmpty()) {
+                continue;
+            }
+
+            // 提取 soapAction
+            String soapAction = extractSoapAction(opElement);
+
+            // 只收集有 soapAction 的操作（即 binding 中的 operation）
+            if (soapAction != null) {
+                // 避免重复添加（portType 和 binding 中的同名 operation）
+                boolean exists = false;
+                for (WsdlParseResult.WsdlOperation existing : operations) {
+                    if (operationName.equals(existing.getOperationName())) {
+                        exists = true;
+                        break;
+                    }
+                }
+                if (!exists) {
+                    operations.add(new WsdlParseResult.WsdlOperation(operationName, soapAction));
+                    log.debug("解析到 SOAP operation: name={}, soapAction={}", operationName, soapAction);
+                }
+            }
+        }
+
+        // 如果通过命名空间方式没找到带 soapAction 的，尝试直接查找 soap:operation 元素
+        if (operations.isEmpty()) {
+            parseSoapOperationElements(doc, operations);
         }
 
         return operations;

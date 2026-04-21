@@ -30,8 +30,6 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
             .authorizeRequests()
                 // Mock 请求路径，无需认证
                 .antMatchers("/mock/**").permitAll()
-                // WSDL 托管路径，无需认证
-                .antMatchers("/wsdl/**").permitAll()
                 // 健康检查，无需认证
                 .antMatchers("/api/health", "/api/server-address").permitAll()
                 // 登录接口，无需认证
