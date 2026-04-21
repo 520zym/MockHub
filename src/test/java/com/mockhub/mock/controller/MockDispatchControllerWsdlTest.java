@@ -19,7 +19,7 @@ import static org.mockito.Mockito.when;
  * MockDispatchController 的 WSDL 分支路由测试。
  * 直接 mock MockDispatchService，验证路由分派（serveWsdl vs dispatch）正确。
  */
-class MockDispatchControllerWsdlIT {
+class MockDispatchControllerWsdlTest {
 
     private MockHttpServletRequest buildRequest(String method, String uri, String query) {
         MockHttpServletRequest req = new MockHttpServletRequest(method, uri);
