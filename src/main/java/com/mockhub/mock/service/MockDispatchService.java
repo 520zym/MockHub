@@ -69,6 +69,7 @@ public class MockDispatchService {
     private final ObjectMapper objectMapper;
     private final DynamicVariableResolver dynamicVariableResolver;
     private final ResponseMatcher responseMatcher;
+    private final SoapService soapService;
 
     public MockDispatchService(TeamService teamService,
                                ApiService apiService,
@@ -77,7 +78,8 @@ public class MockDispatchService {
                                LogService logService,
                                ObjectMapper objectMapper,
                                DynamicVariableResolver dynamicVariableResolver,
-                               ResponseMatcher responseMatcher) {
+                               ResponseMatcher responseMatcher,
+                               SoapService soapService) {
         this.teamService = teamService;
         this.apiService = apiService;
         this.apiResponseRepository = apiResponseRepository;
@@ -86,6 +88,7 @@ public class MockDispatchService {
         this.objectMapper = objectMapper;
         this.dynamicVariableResolver = dynamicVariableResolver;
         this.responseMatcher = responseMatcher;
+        this.soapService = soapService;
     }
 
     /**
@@ -238,16 +241,20 @@ public class MockDispatchService {
         for (Map.Entry<String, String> entry : finalHeaders.entrySet()) {
             httpHeaders.add(entry.getKey(), entry.getValue());
         }
-        // 设置 Content-Type，优先使用活跃返回体的 contentType，确保包含 charset=UTF-8 避免中文乱码
+        // 设置 Content-Type
+        // SOAP 请求且未配置 respContentType 时按请求 SOAP 版本兜底（1.1 → text/xml, 1.2 → application/soap+xml）
+        // 其他情况：respContentType 优先，默认 application/json
         String respContentType = respContentTypeFromResponse != null ? respContentTypeFromResponse : api.getContentType();
-        if (respContentType != null && !respContentType.isEmpty()) {
-            if (!respContentType.toLowerCase().contains("charset")) {
-                respContentType = respContentType + "; charset=UTF-8";
+        if (respContentType == null || respContentType.isEmpty()) {
+            if (isSoap) {
+                respContentType = resolveSoapResponseContentType(contentType);
+            } else {
+                respContentType = "application/json; charset=UTF-8";
             }
-            httpHeaders.set(HttpHeaders.CONTENT_TYPE, respContentType);
-        } else {
-            httpHeaders.set(HttpHeaders.CONTENT_TYPE, "application/json; charset=UTF-8");
+        } else if (!respContentType.toLowerCase().contains("charset")) {
+            respContentType = respContentType + "; charset=UTF-8";
         }
+        httpHeaders.set(HttpHeaders.CONTENT_TYPE, respContentType);
 
         long durationMs = System.currentTimeMillis() - startTime;
         log.info("Mock 响应: apiId={}, statusCode={}, duration={}ms", api.getId(), responseCode, durationMs);
@@ -259,6 +266,77 @@ public class MockDispatchService {
                 responseBody != null ? responseBody : "",
                 httpHeaders,
                 HttpStatus.valueOf(responseCode));
+    }
+
+    /**
+     * 托管 WSDL 文件：GET /mock/{teamIdentifier}{path}?wsdl 命中此分支。
+     * <p>
+     * 流程：查团队 → 查 method=POST + apiType=SOAP 接口 → 取 soapConfig.wsdlFileName
+     *   → 构造 mockUrl → 委托 SoapService.getWsdlContent 读盘并替换 location。
+     *
+     * @param teamIdentifier 团队短标识
+     * @param path           接口路径（含前导 /）
+     * @param request        原始请求（用于拼服务器地址）
+     * @return WSDL XML 响应
+     */
+    public ResponseEntity<String> serveWsdl(String teamIdentifier, String path, HttpServletRequest request) {
+        // 1. 查找团队
+        Team team = teamService.findByIdentifier(teamIdentifier);
+        if (team == null) {
+            return buildErrorResponse(HttpStatus.NOT_FOUND, "Team not found: " + teamIdentifier);
+        }
+
+        // 2. 查找接口：team + path + POST（SOAP 接口固定 POST）
+        ApiMatchResult matchResult = apiService.findMatch(team.getId(), "POST", path);
+        if (matchResult == null || matchResult.getApi() == null) {
+            return buildErrorResponse(HttpStatus.NOT_FOUND,
+                    "No SOAP mock found for " + path);
+        }
+        ApiDefinition api = matchResult.getApi();
+
+        // 3. 必须是 SOAP 类型且已上传 WSDL
+        if (!"SOAP".equalsIgnoreCase(api.getType())) {
+            return buildErrorResponse(HttpStatus.NOT_FOUND,
+                    "Not a SOAP interface: " + path);
+        }
+        String soapConfigJson = api.getSoapConfig();
+        if (soapConfigJson == null || soapConfigJson.isEmpty()) {
+            return buildErrorResponse(HttpStatus.NOT_FOUND,
+                    "No WSDL uploaded for " + path);
+        }
+
+        String wsdlFileName;
+        try {
+            SoapConfig cfg = objectMapper.readValue(soapConfigJson, SoapConfig.class);
+            wsdlFileName = cfg.getWsdlFileName();
+        } catch (Exception e) {
+            log.error("解析 SoapConfig 失败: {}", e.getMessage(), e);
+            return buildErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "SOAP config parse error");
+        }
+        if (wsdlFileName == null || wsdlFileName.isEmpty()) {
+            return buildErrorResponse(HttpStatus.NOT_FOUND,
+                    "No WSDL uploaded for " + path);
+        }
+
+        // 4. 构造 mockUrl
+        String scheme = request.getScheme();
+        String serverName = request.getServerName();
+        int serverPort = request.getServerPort();
+        StringBuilder mockUrl = new StringBuilder();
+        mockUrl.append(scheme).append("://").append(serverName);
+        if (("http".equals(scheme) && serverPort != 80)
+                || ("https".equals(scheme) && serverPort != 443)) {
+            mockUrl.append(":").append(serverPort);
+        }
+        mockUrl.append("/mock/").append(teamIdentifier).append(path);
+
+        // 5. 读取 WSDL 并替换 location
+        String content = soapService.getWsdlContent(wsdlFileName, mockUrl.toString());
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set(HttpHeaders.CONTENT_TYPE, "text/xml; charset=UTF-8");
+        return new ResponseEntity<String>(content, headers, HttpStatus.OK);
     }
 
     /**
@@ -279,13 +357,38 @@ public class MockDispatchService {
     }
 
     /**
+     * 根据请求 Content-Type 推导 SOAP 响应 Content-Type。
+     * <p>
+     * SOAP 1.2（application/soap+xml）响应保持 1.2；其余都用 SOAP 1.1 的 text/xml 兜底。
+     * 无论输入是否包含 charset，输出都统一追加 charset=UTF-8（避免中文乱码）。
+     *
+     * @param requestContentType 请求头 Content-Type
+     * @return 响应应使用的 Content-Type（一定非空）
+     */
+    String resolveSoapResponseContentType(String requestContentType) {
+        if (requestContentType != null
+                && requestContentType.toLowerCase().contains("application/soap+xml")) {
+            return "application/soap+xml; charset=UTF-8";
+        }
+        return "text/xml; charset=UTF-8";
+    }
+
+    /**
      * 从 SoapConfig JSON 中匹配指定 soapAction 对应的 operation
+     * <p>
+     * 采用两遍扫描策略，优先级由高到低：
+     * <ol>
+     *   <li>第一遍：全量精确匹配 soapAction 字段，命中即返回，不继续扫描</li>
+     *   <li>第二遍：全量尾部匹配，要求 soapAction 以 {@code "/" + operationName} 结尾，
+     *       避免 {@code XxxGetNavi} 误命中 {@code GetNavi}</li>
+     *   <li>兜底：soapAction 为 null 且 operation 只有一个时，直接返回该 operation</li>
+     * </ol>
      *
      * @param soapConfigJson 接口定义中存储的 SoapConfig JSON 字符串
-     * @param soapAction     请求头中的 SOAPAction 值（已去除引号）
+     * @param soapAction     请求头中的 SOAPAction 值（已去除引号），可为 null
      * @return 匹配到的 SoapOperation，未匹配返回 null
      */
-    private SoapOperation matchSoapOperation(String soapConfigJson, String soapAction) {
+    SoapOperation matchSoapOperation(String soapConfigJson, String soapAction) {
         if (soapConfigJson == null || soapConfigJson.isEmpty()) {
             return null;
         }
@@ -296,18 +399,29 @@ public class MockDispatchService {
                 return null;
             }
 
-            for (SoapOperation op : config.getOperations()) {
-                // 匹配 soapAction（支持精确匹配和尾部匹配）
-                if (soapAction != null && op.getSoapAction() != null) {
-                    if (soapAction.equals(op.getSoapAction()) ||
-                            soapAction.endsWith(op.getOperationName())) {
+            // 第一遍：全量精确 soapAction 匹配，优先级最高
+            if (soapAction != null) {
+                for (SoapOperation op : config.getOperations()) {
+                    if (soapAction.equals(op.getSoapAction())) {
                         return op;
                     }
                 }
-                // 如果 soapAction 为 null，且只有一个 operation，默认返回第一个
-                if (soapAction == null && config.getOperations().size() == 1) {
-                    return op;
+            }
+
+            // 第二遍：全量尾部 operationName 匹配（兜底）
+            // 用 "/" + operationName 避免 GetNavi 被 XxxGetNavi 类 soapAction 误命中
+            if (soapAction != null) {
+                for (SoapOperation op : config.getOperations()) {
+                    if (op.getOperationName() != null
+                            && soapAction.endsWith("/" + op.getOperationName())) {
+                        return op;
+                    }
                 }
+            }
+
+            // 单 operation 兜底：SOAPAction 为 null 时仍允许命中
+            if (soapAction == null && config.getOperations().size() == 1) {
+                return config.getOperations().get(0);
             }
         } catch (Exception e) {
             log.error("解析 SoapConfig 失败: {}", e.getMessage(), e);

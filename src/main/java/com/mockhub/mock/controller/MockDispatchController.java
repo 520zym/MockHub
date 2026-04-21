@@ -40,6 +40,12 @@ public class MockDispatchController {
      * <p>
      * 匹配 /mock/{teamIdentifier}/ 后面的所有路径，
      * 从 request 中提取实际请求路径和 HTTP 方法。
+     * <p>
+     * <b>路由规则</b>：
+     * <ul>
+     *   <li>GET + query 含独立 wsdl 参数（不区分大小写）→ {@link MockDispatchService#serveWsdl} WSDL 托管</li>
+     *   <li>其他情况 → {@link MockDispatchService#dispatch} 普通 Mock 分发</li>
+     * </ul>
      *
      * @param teamIdentifier 团队短标识（如 "FE"、"BE"）
      * @param request        原始 HttpServletRequest
@@ -65,8 +71,32 @@ public class MockDispatchController {
 
         String method = request.getMethod().toUpperCase();
 
-        log.debug("Mock 请求入口: teamIdentifier={}, method={}, path={}", teamIdentifier, method, path);
+        // 方案 A：GET + 独立 wsdl 参数 → 走 WSDL 托管（和 .NET ASMX 风格一致）
+        if ("GET".equals(method) && hasWsdlParam(request.getQueryString())) {
+            log.debug("WSDL 托管请求: teamIdentifier={}, path={}", teamIdentifier, path);
+            return mockDispatchService.serveWsdl(teamIdentifier, path, request);
+        }
 
+        log.debug("Mock 请求入口: teamIdentifier={}, method={}, path={}", teamIdentifier, method, path);
         return mockDispatchService.dispatch(teamIdentifier, method, path, request);
+    }
+
+    /**
+     * 判断 query 里是否含独立的 wsdl 参数（不区分大小写）。
+     * <p>
+     * 命中：?wsdl / ?WSDL / ?wsdl= / ?foo=bar&amp;wsdl
+     * 不命中：?foo=mywsdlvalue / ?xwsdl=1
+     *
+     * @param queryString 原始 query 字符串，可为 null
+     * @return 是否命中独立 wsdl 参数
+     */
+    private boolean hasWsdlParam(String queryString) {
+        if (queryString == null || queryString.isEmpty()) return false;
+        for (String part : queryString.split("&")) {
+            int eq = part.indexOf('=');
+            String key = (eq < 0 ? part : part.substring(0, eq));
+            if ("wsdl".equalsIgnoreCase(key)) return true;
+        }
+        return false;
     }
 }

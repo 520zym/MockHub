@@ -644,18 +644,17 @@ function formatXml(xml) {
 
 /**
  * 格式化响应体
- * 根据当前手动选中的格式标签（manualContentType）走对应分支：
- * - json: JSON.parse + stringify(2 空格缩进)
- * - xml:  formatXml 纯字符串缩进
- * - text: 纯文本无需格式化
- * 之所以依赖 manualContentType 而非 detectedContentType，是因为用户可能手动覆盖识别结果。
+ * SOAP 模式（operationName 非空）强制走 XML；REST 模式根据 manualContentType 分支。
+ * 背景：SOAP 模式下 Content-Type 切换器被 v-if="!operationName" 隐藏，
+ *       manualContentType 保持默认 'json' 永远不会变，不能作为判断依据。
  */
 function formatBody() {
   if (!currentResponse.value) return
   const body = (currentResponse.value.responseBody || '').trim()
   if (!body) return
 
-  const type = manualContentType.value
+  const type = props.operationName ? 'xml' : manualContentType.value
+
   if (type === 'json') {
     try {
       const parsed = JSON.parse(body)
@@ -664,7 +663,6 @@ function formatBody() {
       ElMessage.warning('当前内容不是有效 JSON，无法格式化')
     }
   } else if (type === 'xml') {
-    // 简单校验：至少包含一个闭合尖括号对
     if (!/<[^>]+>/.test(body)) {
       ElMessage.warning('当前内容不是有效 XML，无法格式化')
       return
