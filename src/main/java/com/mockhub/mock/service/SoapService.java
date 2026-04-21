@@ -109,14 +109,14 @@ public class SoapService {
     }
 
     /**
-     * 读取 WSDL 文件内容，并动态替换 soap:address location 为实际服务地址
+     * 读取 WSDL 文件内容，并动态替换 soap:address location 为指定的 mock URL。
      *
-     * @param fileName  WSDL 文件名
-     * @param serverUrl 当前服务器 URL（如 http://192.168.1.100:8080）
+     * @param fileName WSDL 文件名
+     * @param mockUrl  完整的 Mock 接口 URL（如 http://host:8080/mock/EFB/ck/release）
      * @return 替换后的 WSDL 文件内容
      * @throws BizException code=40701，文件不存在时抛出
      */
-    public String getWsdlContent(String fileName, String serverUrl) {
+    public String getWsdlContent(String fileName, String mockUrl) {
         Path filePath = getWsdlDir().resolve(fileName);
         if (!Files.exists(filePath)) {
             throw new BizException(40701, "WSDL 文件不存在: " + fileName);
@@ -125,14 +125,15 @@ public class SoapService {
         try {
             String content = new String(Files.readAllBytes(filePath), "UTF-8");
 
-            // 动态替换 soap:address location
-            // 匹配 <soap:address location="..."/> 或 <soap12:address location="..."/>
+            // 动态替换 <soap:address location="..."/> 或 <soap12:address location="..."/>
+            // 正则捕获组 1 = location="，组 2 = "；替换为 location="{mockUrl}"
+            // 用 Matcher.quoteReplacement 防止 mockUrl 里的 $ 或 \ 干扰正则替换
             content = content.replaceAll(
                     "(location=\")[^\"]*?(\")",
-                    "$1" + serverUrl + "/mock/$2"
+                    "$1" + java.util.regex.Matcher.quoteReplacement(mockUrl) + "$2"
             );
 
-            log.debug("WSDL 托管: fileName={}, serverUrl={}", fileName, serverUrl);
+            log.debug("WSDL 托管: fileName={}, mockUrl={}", fileName, mockUrl);
             return content;
         } catch (IOException e) {
             log.error("读取 WSDL 文件失败: {}", filePath, e);
