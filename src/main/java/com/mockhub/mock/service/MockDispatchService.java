@@ -280,12 +280,20 @@ public class MockDispatchService {
 
     /**
      * 从 SoapConfig JSON 中匹配指定 soapAction 对应的 operation
+     * <p>
+     * 采用两遍扫描策略，优先级由高到低：
+     * <ol>
+     *   <li>第一遍：全量精确匹配 soapAction 字段，命中即返回，不继续扫描</li>
+     *   <li>第二遍：全量尾部匹配，要求 soapAction 以 {@code "/" + operationName} 结尾，
+     *       避免 {@code XxxGetNavi} 误命中 {@code GetNavi}</li>
+     *   <li>兜底：soapAction 为 null 且 operation 只有一个时，直接返回该 operation</li>
+     * </ol>
      *
      * @param soapConfigJson 接口定义中存储的 SoapConfig JSON 字符串
-     * @param soapAction     请求头中的 SOAPAction 值（已去除引号）
+     * @param soapAction     请求头中的 SOAPAction 值（已去除引号），可为 null
      * @return 匹配到的 SoapOperation，未匹配返回 null
      */
-    private SoapOperation matchSoapOperation(String soapConfigJson, String soapAction) {
+    SoapOperation matchSoapOperation(String soapConfigJson, String soapAction) {
         if (soapConfigJson == null || soapConfigJson.isEmpty()) {
             return null;
         }
@@ -296,18 +304,29 @@ public class MockDispatchService {
                 return null;
             }
 
-            for (SoapOperation op : config.getOperations()) {
-                // 匹配 soapAction（支持精确匹配和尾部匹配）
-                if (soapAction != null && op.getSoapAction() != null) {
-                    if (soapAction.equals(op.getSoapAction()) ||
-                            soapAction.endsWith(op.getOperationName())) {
+            // 第一遍：全量精确 soapAction 匹配，优先级最高
+            if (soapAction != null) {
+                for (SoapOperation op : config.getOperations()) {
+                    if (soapAction.equals(op.getSoapAction())) {
                         return op;
                     }
                 }
-                // 如果 soapAction 为 null，且只有一个 operation，默认返回第一个
-                if (soapAction == null && config.getOperations().size() == 1) {
-                    return op;
+            }
+
+            // 第二遍：全量尾部 operationName 匹配（兜底）
+            // 用 "/" + operationName 避免 GetNavi 被 XxxGetNavi 类 soapAction 误命中
+            if (soapAction != null) {
+                for (SoapOperation op : config.getOperations()) {
+                    if (op.getOperationName() != null
+                            && soapAction.endsWith("/" + op.getOperationName())) {
+                        return op;
+                    }
                 }
+            }
+
+            // 单 operation 兜底：SOAPAction 为 null 时仍允许命中
+            if (soapAction == null && config.getOperations().size() == 1) {
+                return config.getOperations().get(0);
             }
         } catch (Exception e) {
             log.error("解析 SoapConfig 失败: {}", e.getMessage(), e);
