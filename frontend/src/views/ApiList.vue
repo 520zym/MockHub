@@ -15,6 +15,18 @@
           @keyup.enter="handleKeywordChange"
         />
 
+        <!-- 接口类型筛选：REST / SOAP -->
+        <el-select
+          v-model="typeFilter"
+          placeholder="接口类型"
+          clearable
+          class="toolbar__select"
+          @change="handleTypeChange"
+        >
+          <el-option label="REST" value="REST" />
+          <el-option label="SOAP" value="SOAP" />
+        </el-select>
+
         <!-- HTTP 方法筛选 -->
         <el-select
           v-model="methodFilter"
@@ -116,6 +128,13 @@
           </div>
         </template>
 
+        <!-- 接口类型列（REST / SOAP） -->
+        <el-table-column label="类型" width="70" align="center">
+          <template #default="{ row }">
+            <ApiTypeTag :type="row.type || 'REST'" />
+          </template>
+        </el-table-column>
+
         <!-- HTTP 方法列 -->
         <el-table-column label="方法" width="80" align="center">
           <template #default="{ row }">
@@ -174,7 +193,12 @@
         <el-table-column label="操作" width="200" align="center" class-name="action-col">
           <template #default="{ row }">
             <div class="action-buttons" @click.stop>
-              <el-button text size="small" @click="handleCopyUrl(row)" title="复制 Mock 地址">
+              <el-button
+                text
+                size="small"
+                @click="handleCopyUrl(row)"
+                :title="row.type === 'SOAP' ? '复制 WSDL 地址' : '复制 Mock 地址'"
+              >
                 <el-icon><DocumentCopy /></el-icon>
               </el-button>
               <el-button text size="small" type="primary" @click="handleEdit(row)" title="编辑">
@@ -347,6 +371,7 @@ import { getApis, deleteApi, copyApi, toggleApi, importApis, exportApis } from '
 import { getTags, createTag, updateTag, deleteTag } from '@/api/tags'
 import { getServerAddress } from '@/api/settings'
 import HttpMethodTag from '@/components/HttpMethodTag.vue'
+import ApiTypeTag from '@/components/ApiTypeTag.vue'
 import TeamTag from '@/components/TeamTag.vue'
 
 const router = useRouter()
@@ -370,6 +395,7 @@ function handleSelectionChange(rows) {
 const keyword = ref(apiStore.listParams.keyword)
 const methodFilter = ref(apiStore.listParams.method)
 const enabledFilter = ref(apiStore.listParams.enabled)
+const typeFilter = ref(apiStore.listParams.type)
 // 多标签筛选：数组形式,兼容 store 里可能残留的旧字段
 const tagFilter = ref(Array.isArray(apiStore.listParams.tagIds) ? [...apiStore.listParams.tagIds] : [])
 const currentPage = ref(apiStore.listParams.page)
@@ -534,6 +560,7 @@ async function loadApis() {
     // 工具栏筛选
     if (keyword.value) params.keyword = keyword.value
     if (methodFilter.value) params.method = methodFilter.value
+    if (typeFilter.value) params.type = typeFilter.value
     if (enabledFilter.value !== null && enabledFilter.value !== undefined && enabledFilter.value !== '') {
       params.enabled = enabledFilter.value
     }
@@ -586,6 +613,12 @@ function handleKeywordChange() {
 
 function handleMethodChange(val) {
   apiStore.setParam('method', val)
+  currentPage.value = 1
+  loadApis()
+}
+
+function handleTypeChange(val) {
+  apiStore.setParam('type', val)
   currentPage.value = 1
   loadApis()
 }
@@ -645,15 +678,22 @@ function handleEdit(row) {
   router.push(`/apis/${row.id}/edit`)
 }
 
-/** 复制 Mock 地址到剪贴板 */
+/**
+ * 复制接口地址到剪贴板。
+ * SOAP 接口复制 WSDL 托管地址（`{mockUrl}?wsdl`，方案 A），
+ * REST 接口复制普通 Mock 地址（`{mockUrl}`）。
+ */
 async function handleCopyUrl(row) {
   const base = serverAddress.value || window.location.origin
-  const url = `${base}/mock/${row.teamIdentifier || ''}${row.path || '/'}`
+  const mockUrl = `${base}/mock/${row.teamIdentifier || ''}${row.path || '/'}`
+  const isSoap = row.type === 'SOAP'
+  const url = isSoap ? `${mockUrl}?wsdl` : mockUrl
+  const label = isSoap ? 'WSDL 地址' : 'Mock 地址'
   try {
     await navigator.clipboard.writeText(url)
-    ElMessage.success('Mock 地址已复制')
+    ElMessage.success(`${label}已复制`)
   } catch (err) {
-    // 降级方案
+    // 降级方案：无权限使用 Clipboard API 时改用 textarea + execCommand
     const textarea = document.createElement('textarea')
     textarea.value = url
     textarea.style.position = 'fixed'
@@ -662,7 +702,7 @@ async function handleCopyUrl(row) {
     textarea.select()
     document.execCommand('copy')
     document.body.removeChild(textarea)
-    ElMessage.success('Mock 地址已复制')
+    ElMessage.success(`${label}已复制`)
   }
 }
 
