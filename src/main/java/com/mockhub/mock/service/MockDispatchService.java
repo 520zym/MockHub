@@ -69,6 +69,7 @@ public class MockDispatchService {
     private final ObjectMapper objectMapper;
     private final DynamicVariableResolver dynamicVariableResolver;
     private final ResponseMatcher responseMatcher;
+    private final SoapService soapService;
 
     public MockDispatchService(TeamService teamService,
                                ApiService apiService,
@@ -77,7 +78,8 @@ public class MockDispatchService {
                                LogService logService,
                                ObjectMapper objectMapper,
                                DynamicVariableResolver dynamicVariableResolver,
-                               ResponseMatcher responseMatcher) {
+                               ResponseMatcher responseMatcher,
+                               SoapService soapService) {
         this.teamService = teamService;
         this.apiService = apiService;
         this.apiResponseRepository = apiResponseRepository;
@@ -86,6 +88,7 @@ public class MockDispatchService {
         this.objectMapper = objectMapper;
         this.dynamicVariableResolver = dynamicVariableResolver;
         this.responseMatcher = responseMatcher;
+        this.soapService = soapService;
     }
 
     /**
@@ -263,6 +266,77 @@ public class MockDispatchService {
                 responseBody != null ? responseBody : "",
                 httpHeaders,
                 HttpStatus.valueOf(responseCode));
+    }
+
+    /**
+     * 托管 WSDL 文件：GET /mock/{teamIdentifier}{path}?wsdl 命中此分支。
+     * <p>
+     * 流程：查团队 → 查 method=POST + apiType=SOAP 接口 → 取 soapConfig.wsdlFileName
+     *   → 构造 mockUrl → 委托 SoapService.getWsdlContent 读盘并替换 location。
+     *
+     * @param teamIdentifier 团队短标识
+     * @param path           接口路径（含前导 /）
+     * @param request        原始请求（用于拼服务器地址）
+     * @return WSDL XML 响应
+     */
+    public ResponseEntity<String> serveWsdl(String teamIdentifier, String path, HttpServletRequest request) {
+        // 1. 查找团队
+        Team team = teamService.findByIdentifier(teamIdentifier);
+        if (team == null) {
+            return buildErrorResponse(HttpStatus.NOT_FOUND, "Team not found: " + teamIdentifier);
+        }
+
+        // 2. 查找接口：team + path + POST（SOAP 接口固定 POST）
+        ApiMatchResult matchResult = apiService.findMatch(team.getId(), "POST", path);
+        if (matchResult == null || matchResult.getApi() == null) {
+            return buildErrorResponse(HttpStatus.NOT_FOUND,
+                    "No SOAP mock found for " + path);
+        }
+        ApiDefinition api = matchResult.getApi();
+
+        // 3. 必须是 SOAP 类型且已上传 WSDL
+        if (!"SOAP".equalsIgnoreCase(api.getType())) {
+            return buildErrorResponse(HttpStatus.NOT_FOUND,
+                    "Not a SOAP interface: " + path);
+        }
+        String soapConfigJson = api.getSoapConfig();
+        if (soapConfigJson == null || soapConfigJson.isEmpty()) {
+            return buildErrorResponse(HttpStatus.NOT_FOUND,
+                    "No WSDL uploaded for " + path);
+        }
+
+        String wsdlFileName;
+        try {
+            SoapConfig cfg = objectMapper.readValue(soapConfigJson, SoapConfig.class);
+            wsdlFileName = cfg.getWsdlFileName();
+        } catch (Exception e) {
+            log.error("解析 SoapConfig 失败: {}", e.getMessage(), e);
+            return buildErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "SOAP config parse error");
+        }
+        if (wsdlFileName == null || wsdlFileName.isEmpty()) {
+            return buildErrorResponse(HttpStatus.NOT_FOUND,
+                    "No WSDL uploaded for " + path);
+        }
+
+        // 4. 构造 mockUrl
+        String scheme = request.getScheme();
+        String serverName = request.getServerName();
+        int serverPort = request.getServerPort();
+        StringBuilder mockUrl = new StringBuilder();
+        mockUrl.append(scheme).append("://").append(serverName);
+        if (("http".equals(scheme) && serverPort != 80)
+                || ("https".equals(scheme) && serverPort != 443)) {
+            mockUrl.append(":").append(serverPort);
+        }
+        mockUrl.append("/mock/").append(teamIdentifier).append(path);
+
+        // 5. 读取 WSDL 并替换 location
+        String content = soapService.getWsdlContent(wsdlFileName, mockUrl.toString());
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set(HttpHeaders.CONTENT_TYPE, "text/xml; charset=UTF-8");
+        return new ResponseEntity<String>(content, headers, HttpStatus.OK);
     }
 
     /**
