@@ -38,13 +38,14 @@ public interface ApiService {
      * @param enabled 按启用状态筛选（可为 null）
      * @param keyword 按名称或路径模糊搜索（可为 null）
      * @param tagIds  按标签筛选，命中任一即返回（可为 null 或空）
+     * @param type    按接口类型筛选（REST / SOAP，可为 null）
      * @param page    页码
      * @param size    每页条数
      * @return 分页结果
      */
     PageResult<ApiDefinitionVO> list(String teamId, String groupId, String method,
                                      Boolean enabled, String keyword, List<String> tagIds,
-                                     int page, int size);
+                                     String type, int page, int size);
 
     /**
      * 获取接口详情（含 responseBody、返回体列表、标签列表）
