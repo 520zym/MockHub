@@ -1,5 +1,7 @@
 package com.mockhub.mock.model.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+
 /**
  * 接口返回体创建/更新请求体
  * <p>
@@ -33,6 +35,12 @@ public class ApiResponseDTO {
 
     /** 排序序号 */
     private int sortOrder;
+
+    /**
+     * 条件匹配规则 JSON 字符串，格式为 MatchRule 序列化结果。
+     * null 或空对象表示无规则（兜底返回体）。
+     */
+    private String conditions;
 
     public ApiResponseDTO() {
     }
@@ -97,6 +105,13 @@ public class ApiResponseDTO {
         return isActive;
     }
 
+    /**
+     * Jackson 默认把 getter isActive() 映射成 JSON 字段 "active"，
+     * 但前端历史上一直用 "isActive" 键名发送 → 该字段被 FAIL_ON_UNKNOWN_PROPERTIES=false 静默丢弃。
+     * 旧版 dispatch 会回退到 api_definition 的 legacy 字段所以不显问题；v1.4.3 接入 matcher 后暴露。
+     * 用 @JsonAlias 额外接受 "isActive" 作为反序列化键名，序列化仍为 "active" 保持向后兼容。
+     */
+    @JsonAlias("isActive")
     public void setActive(boolean active) {
         isActive = active;
     }
@@ -107,5 +122,13 @@ public class ApiResponseDTO {
 
     public void setSortOrder(int sortOrder) {
         this.sortOrder = sortOrder;
+    }
+
+    public String getConditions() {
+        return conditions;
+    }
+
+    public void setConditions(String conditions) {
+        this.conditions = conditions;
     }
 }

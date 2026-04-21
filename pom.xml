@@ -13,7 +13,7 @@
 
     <groupId>com.mockhub</groupId>
     <artifactId>mockhub</artifactId>
-    <version>1.4.2</version>
+    <version>1.4.3</version>
     <packaging>jar</packaging>
     <name>MockHub</name>
     <description>接口模拟服务，支持 REST 和 SOAP 接口的 Mock</description>
@@ -103,6 +103,12 @@
                     <source>1.8</source>
                     <target>1.8</target>
                 </configuration>
+            </plugin>
+            <!-- 升级 surefire，原父 pom 2.22.2 与 JUnit 5.8.2 的 platform 版本不匹配，会导致 tests run: 0 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.2.5</version>
             </plugin>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
