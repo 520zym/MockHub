@@ -238,16 +238,20 @@ public class MockDispatchService {
         for (Map.Entry<String, String> entry : finalHeaders.entrySet()) {
             httpHeaders.add(entry.getKey(), entry.getValue());
         }
-        // 设置 Content-Type，优先使用活跃返回体的 contentType，确保包含 charset=UTF-8 避免中文乱码
+        // 设置 Content-Type
+        // SOAP 请求且未配置 respContentType 时按请求 SOAP 版本兜底（1.1 → text/xml, 1.2 → application/soap+xml）
+        // 其他情况：respContentType 优先，默认 application/json
         String respContentType = respContentTypeFromResponse != null ? respContentTypeFromResponse : api.getContentType();
-        if (respContentType != null && !respContentType.isEmpty()) {
-            if (!respContentType.toLowerCase().contains("charset")) {
-                respContentType = respContentType + "; charset=UTF-8";
+        if (respContentType == null || respContentType.isEmpty()) {
+            if (isSoap) {
+                respContentType = resolveSoapResponseContentType(contentType);
+            } else {
+                respContentType = "application/json; charset=UTF-8";
             }
-            httpHeaders.set(HttpHeaders.CONTENT_TYPE, respContentType);
-        } else {
-            httpHeaders.set(HttpHeaders.CONTENT_TYPE, "application/json; charset=UTF-8");
+        } else if (!respContentType.toLowerCase().contains("charset")) {
+            respContentType = respContentType + "; charset=UTF-8";
         }
+        httpHeaders.set(HttpHeaders.CONTENT_TYPE, respContentType);
 
         long durationMs = System.currentTimeMillis() - startTime;
         log.info("Mock 响应: apiId={}, statusCode={}, duration={}ms", api.getId(), responseCode, durationMs);
@@ -276,6 +280,23 @@ public class MockDispatchService {
         }
         String ct = contentType.toLowerCase();
         return ct.contains("text/xml") || ct.contains("application/soap+xml");
+    }
+
+    /**
+     * 根据请求 Content-Type 推导 SOAP 响应 Content-Type。
+     * <p>
+     * SOAP 1.2（application/soap+xml）响应保持 1.2；其余都用 SOAP 1.1 的 text/xml 兜底。
+     * 无论输入是否包含 charset，输出都统一追加 charset=UTF-8（避免中文乱码）。
+     *
+     * @param requestContentType 请求头 Content-Type
+     * @return 响应应使用的 Content-Type（一定非空）
+     */
+    String resolveSoapResponseContentType(String requestContentType) {
+        if (requestContentType != null
+                && requestContentType.toLowerCase().contains("application/soap+xml")) {
+            return "application/soap+xml; charset=UTF-8";
+        }
+        return "text/xml; charset=UTF-8";
     }
 
     /**

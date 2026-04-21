@@ -117,4 +117,29 @@ class MockDispatchServiceSoapMatchTest {
         String json = mapper.writeValueAsString(cfg);
         assertNull(service.matchSoapOperation(json, "http://tempuri.org/Foo"));
     }
+
+    @Test
+    void resolveSoapResponseContentTypeSoap11() {
+        assertEquals("text/xml; charset=UTF-8",
+                service.resolveSoapResponseContentType("text/xml; charset=UTF-8"));
+        assertEquals("text/xml; charset=UTF-8",
+                service.resolveSoapResponseContentType("text/xml"));
+    }
+
+    @Test
+    void resolveSoapResponseContentTypeSoap12() {
+        assertEquals("application/soap+xml; charset=UTF-8",
+                service.resolveSoapResponseContentType("application/soap+xml; charset=UTF-8"));
+        assertEquals("application/soap+xml; charset=UTF-8",
+                service.resolveSoapResponseContentType("application/soap+xml"));
+    }
+
+    @Test
+    void resolveSoapResponseContentTypeDefaultsToSoap11() {
+        // 异常场景：SOAP 命中但请求 CT 不标准，默认 SOAP 1.1
+        assertEquals("text/xml; charset=UTF-8",
+                service.resolveSoapResponseContentType(null));
+        assertEquals("text/xml; charset=UTF-8",
+                service.resolveSoapResponseContentType("application/xml"));
+    }
 }
