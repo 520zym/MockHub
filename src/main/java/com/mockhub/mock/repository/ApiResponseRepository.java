@@ -97,6 +97,10 @@ public class ApiResponseRepository {
 
     /**
      * 查询 REST 接口的活跃返回体（soap_operation_name IS NULL 且 is_active=1）
+     * <p>
+     * 历史单选语义：同一接口仅一条 active。v1.4.3 起 is_active 语义扩展为"启用"，
+     * 多条可同时 active；此方法仍保留 LIMIT 1 供 SOAP 分支和旧代码回退使用。
+     * REST 主路径改走 {@link #findEnabledByApiId(String)}。
      *
      * @param apiId 接口 ID
      * @return 活跃返回体，无则返回 null
@@ -106,6 +110,21 @@ public class ApiResponseRepository {
                 "SELECT * FROM api_response WHERE api_id = ? AND soap_operation_name IS NULL AND is_active = 1 LIMIT 1",
                 ROW_MAPPER, apiId);
         return list.isEmpty() ? null : list.get(0);
+    }
+
+    /**
+     * 查询 REST 接口所有启用的返回体，按 sort_order 升序排列。
+     * <p>
+     * v1.4.3 新增，用于条件响应匹配引擎 {@code ResponseMatcher}。
+     * 启用数 == 1 时 matcher 会短路直接返回该条；启用数 >= 2 时按顺序遍历做条件匹配。
+     *
+     * @param apiId 接口 ID
+     * @return 启用返回体列表，按 sort_order 升序
+     */
+    public List<ApiResponse> findEnabledByApiId(String apiId) {
+        return jdbcTemplate.query(
+                "SELECT * FROM api_response WHERE api_id = ? AND soap_operation_name IS NULL AND is_active = 1 ORDER BY sort_order ASC",
+                ROW_MAPPER, apiId);
     }
 
     /**

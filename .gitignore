@@ -42,3 +42,6 @@ CLAUDE.md
 docs/
 
 .playwright-mcp/
+
+# Superpowers brainstorm session（可视化伴侣生成的 mockup 文件，仅本地）
+.superpowers/

@@ -13,6 +13,7 @@ import com.mockhub.mock.model.dto.ApiMatchResult;
 import com.mockhub.mock.model.entity.ApiDefinition;
 import com.mockhub.mock.model.entity.ApiResponse;
 import com.mockhub.mock.repository.ApiResponseRepository;
+import com.mockhub.mock.service.match.ResponseMatcher;
 import com.mockhub.system.model.entity.Team;
 import com.mockhub.system.service.TeamService;
 import org.slf4j.Logger;
@@ -67,6 +68,7 @@ public class MockDispatchService {
     private final LogService logService;
     private final ObjectMapper objectMapper;
     private final DynamicVariableResolver dynamicVariableResolver;
+    private final ResponseMatcher responseMatcher;
 
     public MockDispatchService(TeamService teamService,
                                ApiService apiService,
@@ -74,7 +76,8 @@ public class MockDispatchService {
                                GlobalHeaderService globalHeaderService,
                                LogService logService,
                                ObjectMapper objectMapper,
-                               DynamicVariableResolver dynamicVariableResolver) {
+                               DynamicVariableResolver dynamicVariableResolver,
+                               ResponseMatcher responseMatcher) {
         this.teamService = teamService;
         this.apiService = apiService;
         this.apiResponseRepository = apiResponseRepository;
@@ -82,6 +85,7 @@ public class MockDispatchService {
         this.logService = logService;
         this.objectMapper = objectMapper;
         this.dynamicVariableResolver = dynamicVariableResolver;
+        this.responseMatcher = responseMatcher;
     }
 
     /**
@@ -100,6 +104,11 @@ public class MockDispatchService {
                                            String path, HttpServletRequest request) {
         long startTime = System.currentTimeMillis();
         log.info("收到 Mock 请求: {} /mock/{}/{}", method, teamIdentifier, path);
+
+        // ====== 0. 预读请求体缓存到 attribute ======
+        // 背景：HttpServletRequest 流只能读一次。v1.4.3 起 ResponseMatcher 需读 body 做条件匹配，
+        // 日志写入也要 body。这里一次性读完缓存到 attribute，后续 matcher 和 log 都从 attribute 取。
+        cacheRequestBody(request);
 
         // ====== 1. 通过团队标识查找团队 ======
         Team team = teamService.findByIdentifier(teamIdentifier);
@@ -173,14 +182,14 @@ public class MockDispatchService {
                 delayMs = api.getDelayMs();
             }
         } else {
-            // REST 请求处理：优先从 api_response 表查询活跃返回体
-            ApiResponse activeResponse = apiResponseRepository.findActiveByApiId(api.getId());
+            // REST 请求处理：v1.4.3 起走条件匹配引擎（启用数 == 1 时会短路等同旧单返回体行为）
+            ApiResponse activeResponse = responseMatcher.match(api.getId(), request);
             if (activeResponse != null) {
                 responseBody = activeResponse.getResponseBody();
                 responseCode = activeResponse.getResponseCode();
                 delayMs = activeResponse.getDelayMs();
                 respContentTypeFromResponse = activeResponse.getContentType();
-                log.debug("使用 api_response 表的 REST 活跃返回体: respId={}, name={}",
+                log.debug("使用 api_response 表的 REST 匹配返回体: respId={}, name={}",
                         activeResponse.getId(), activeResponse.getName());
             } else {
                 // 兼容旧数据：从 api_definition 读取
@@ -376,33 +385,56 @@ public class MockDispatchService {
             }
             reqLog.setRequestParams(objectMapper.writeValueAsString(params));
 
-            // 收集请求体（尝试读取，若已被消费则忽略）
-            try {
-                BufferedReader reader = request.getReader();
-                if (reader != null) {
-                    StringBuilder body = new StringBuilder();
-                    char[] buffer = new char[4096];
-                    int bytesRead;
-                    while ((bytesRead = reader.read(buffer)) != -1) {
-                        body.append(buffer, 0, bytesRead);
-                        // 限制请求体日志大小，超过 1MB 截断
-                        if (body.length() > 1024 * 1024) {
-                            body.append("...(truncated)");
-                            break;
-                        }
-                    }
-                    reqLog.setRequestBody(body.toString());
-                }
-            } catch (Exception e) {
-                // 请求体可能已被消费，忽略
-                log.debug("读取请求体失败（可能已被消费）: {}", e.getMessage());
+            // 收集请求体：v1.4.3 起从 dispatch 开始时缓存到 attribute 的 raw body 读取，
+            // 避免 request reader 被 matcher / 自身读取后二次读空
+            String cachedBody = (String) request.getAttribute(ResponseMatcher.ATTR_RAW_BODY);
+            if (cachedBody == null) {
                 reqLog.setRequestBody("");
+            } else if (cachedBody.length() > 1024 * 1024) {
+                reqLog.setRequestBody(cachedBody.substring(0, 1024 * 1024) + "...(truncated)");
+            } else {
+                reqLog.setRequestBody(cachedBody);
             }
 
             logService.asyncLogRequest(reqLog);
         } catch (Exception e) {
             // 日志写入失败不影响 Mock 响应
             log.error("写入请求日志失败: {}", e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 把请求体一次性读入内存并缓存到 request attribute，供后续 matcher 与日志记录复用。
+     * <p>
+     * HttpServletRequest 的 reader 只能读一次；v1.4.3 起条件匹配引擎和请求日志都要 body，
+     * 统一在分发入口预读。读取失败时 attribute 保持 null，下游按"无 body"处理。
+     * 限制读取大小到 10MB，超出截断并写 warn 日志（和响应体上限一致，防止超大请求拖垮内存）。
+     */
+    private void cacheRequestBody(HttpServletRequest request) {
+        // 幂等：若已被其他前置过滤器缓存过（如 ContentCachingRequestWrapper），尊重已有值
+        if (request.getAttribute(ResponseMatcher.ATTR_RAW_BODY) != null) {
+            return;
+        }
+        try {
+            BufferedReader reader = request.getReader();
+            if (reader == null) {
+                return;
+            }
+            StringBuilder sb = new StringBuilder();
+            char[] buf = new char[4096];
+            int n;
+            int limit = 10 * 1024 * 1024;
+            while ((n = reader.read(buf)) != -1) {
+                sb.append(buf, 0, n);
+                if (sb.length() > limit) {
+                    log.warn("请求体超过 {}MB 上限，后续部分已丢弃", limit / 1024 / 1024);
+                    break;
+                }
+            }
+            request.setAttribute(ResponseMatcher.ATTR_RAW_BODY, sb.toString());
+        } catch (Exception e) {
+            // 流被上游过滤器消费、GET 请求无 body 等情况下正常走到这里
+            log.debug("预读请求体失败（可能无 body 或已被上游消费）: {}", e.getMessage());
         }
     }
 

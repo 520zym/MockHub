@@ -19,6 +19,7 @@ import com.mockhub.mock.repository.ApiRepository;
 import com.mockhub.mock.repository.ApiResponseRepository;
 import com.mockhub.mock.repository.ApiTagRepository;
 import com.mockhub.mock.repository.TagRepository;
+import com.mockhub.mock.service.match.ResponseValidator;
 import com.mockhub.log.service.LogService;
 import com.mockhub.log.model.OperationLog;
 import com.mockhub.system.model.entity.Team;
@@ -556,6 +557,9 @@ public class ApiServiceImpl implements ApiService {
             return;
         }
 
+        // v1.4.3 新增：多启用 + 条件匹配前置校验，失败抛 BizException 由全局处理器转为 40410~40416 错误码
+        ResponseValidator.validateDtos(responses);
+
         List<ApiResponse> entities = new ArrayList<ApiResponse>();
         for (int i = 0; i < responses.size(); i++) {
             ApiResponseDTO dto = responses.get(i);
@@ -570,6 +574,7 @@ public class ApiServiceImpl implements ApiService {
             entity.setDelayMs(dto.getDelayMs());
             entity.setActive(dto.isActive());
             entity.setSortOrder(dto.getSortOrder());
+            entity.setConditions(dto.getConditions());
             entity.setCreatedAt(now);
             entity.setUpdatedAt(now);
             entities.add(entity);

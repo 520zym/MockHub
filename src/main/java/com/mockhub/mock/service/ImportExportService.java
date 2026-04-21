@@ -15,6 +15,7 @@ import com.mockhub.mock.repository.ApiTagRepository;
 import com.mockhub.mock.repository.GlobalHeaderRepository;
 import com.mockhub.mock.repository.GroupRepository;
 import com.mockhub.mock.repository.TagRepository;
+import com.mockhub.mock.service.match.ResponseValidator;
 import com.mockhub.system.model.entity.Team;
 import com.mockhub.system.service.TeamService;
 import org.slf4j.Logger;
@@ -223,7 +224,8 @@ public class ImportExportService {
 
         // 导入返回体
         if (data.getApiResponses() != null && !data.getApiResponses().isEmpty()) {
-            int respImported = 0;
+            // 先按新 apiId 分组 + 逐组校验（v1.4.3 新增条件响应相关约束，避免写入后数据异常）
+            Map<String, List<ApiResponse>> grouped = new HashMap<String, List<ApiResponse>>();
             for (ApiResponse resp : data.getApiResponses()) {
                 String newApiId = apiIdMap.get(resp.getApiId());
                 if (newApiId == null) {
@@ -234,8 +236,22 @@ public class ImportExportService {
                 resp.setApiId(newApiId);
                 resp.setCreatedAt(now);
                 resp.setUpdatedAt(now);
-                apiResponseRepository.insert(resp);
-                respImported++;
+                List<ApiResponse> list = grouped.get(newApiId);
+                if (list == null) {
+                    list = new ArrayList<ApiResponse>();
+                    grouped.put(newApiId, list);
+                }
+                list.add(resp);
+            }
+            for (List<ApiResponse> group : grouped.values()) {
+                ResponseValidator.validateEntities(group);
+            }
+            int respImported = 0;
+            for (List<ApiResponse> group : grouped.values()) {
+                for (ApiResponse resp : group) {
+                    apiResponseRepository.insert(resp);
+                    respImported++;
+                }
             }
             log.info("导入返回体: 数量={}", respImported);
         } else if (!apiIdMap.isEmpty()) {

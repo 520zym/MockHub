@@ -514,6 +514,53 @@ function removeHeaderOverride(idx) {
 
 // --- 保存 ---
 
+/**
+ * v1.4.3 新增：前端提前校验多启用 + 条件匹配约束，避免来回网络。
+ * 返回错误文案（字符串），null 表示通过。
+ * 后端 ResponseValidator 仍做最终校验，这里只是 UX 优化。
+ */
+function validateResponsesLocal() {
+  // REST：全部 responses 放一组；SOAP：按 operation 分组
+  let groups = []
+  if (form.type === 'REST') {
+    groups.push({ label: 'REST', list: form.responses || [] })
+  } else if (form.type === 'SOAP' && form.soapConfig && form.soapConfig.operations) {
+    form.soapConfig.operations.forEach(op => {
+      groups.push({
+        label: 'SOAP · ' + op.operationName,
+        list: op.responses || []
+      })
+    })
+  }
+
+  for (const g of groups) {
+    const enabled = g.list.filter(r => r.isActive)
+    if (enabled.length === 0) {
+      return `[${g.label}] 至少需要一个启用的返回体`
+    }
+    if (enabled.length >= 2) {
+      const noRule = enabled.filter(r => isConditionsEmptyLocal(r.conditions))
+      if (noRule.length === 0) {
+        return `[${g.label}] 多启用返回体时必须有一个无规则的作为兜底`
+      }
+      if (noRule.length > 1) {
+        return `[${g.label}] 只允许一个无规则的启用返回体作为兜底，当前有 ${noRule.length} 个`
+      }
+    }
+  }
+  return null
+}
+
+function isConditionsEmptyLocal(json) {
+  if (!json) return true
+  try {
+    const obj = JSON.parse(json)
+    return !Array.isArray(obj?.conditions) || obj.conditions.length === 0
+  } catch {
+    return true
+  }
+}
+
 async function handleSave() {
   // 基本校验
   if (!form.name.trim()) {
@@ -526,6 +573,13 @@ async function handleSave() {
   }
   if (!form.path.trim()) {
     ElMessage.warning('请输入接口路径')
+    return
+  }
+
+  // v1.4.3 新增：多启用 + 条件匹配前置校验（前端提前拦截，后端仍做最终校验）
+  const err = validateResponsesLocal()
+  if (err) {
+    ElMessage.error(err)
     return
   }
 

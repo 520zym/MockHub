@@ -6,13 +6,29 @@
         v-for="(resp, idx) in responses"
         :key="idx"
         class="tab-item"
-        :class="{ active: activeIndex === idx }"
+        :class="{
+          active: activeIndex === idx,
+          disabled: !resp.isActive
+        }"
         @click="activeIndex = idx"
       >
-        <span v-if="resp.isActive" class="active-dot"></span>
-        <span v-if="!editingTabIndex !== idx" class="tab-name" @dblclick="startEditTabName(idx)">
+        <!-- 启用/禁用指示点：启用=绿，禁用=灰 -->
+        <span class="active-dot" :class="{ on: resp.isActive, off: !resp.isActive }"></span>
+        <!-- 序号角标 -->
+        <span class="tab-index">{{ ['①','②','③','④','⑤','⑥','⑦','⑧','⑨'][idx] || (idx + 1) }}</span>
+        <!-- 兜底 Tab ⭐ 标记（派生：启用且无规则，且总启用数>=2） -->
+        <el-tooltip
+          v-if="isFallbackTab(idx)"
+          effect="dark"
+          content="兜底返回体：当其他条件都不命中时返回这条"
+          placement="top"
+        >
+          <el-icon class="fallback-star"><StarFilled /></el-icon>
+        </el-tooltip>
+        <span v-if="editingTabIndex !== idx" class="tab-name" @dblclick="startEditTabName(idx)">
           {{ resp.name || 'Response ' + (idx + 1) }}
         </span>
+        <span v-if="editingTabIndex !== idx && !resp.isActive" class="disabled-badge">未启用</span>
         <el-input
           v-if="editingTabIndex === idx"
           v-model="resp.name"
@@ -30,6 +46,11 @@
 
     <!-- 当前 Tab 内容 -->
     <div v-if="currentResponse" class="tab-content">
+      <!-- v1.4.3 新增：响应规则面板，仅 REST 启用（SOAP v1 不做条件匹配） -->
+      <ConditionPanel
+        v-if="!operationName"
+        v-model="currentResponse.conditions"
+      />
       <el-form label-position="top">
         <el-row :gutter="16">
           <!-- 名称 -->
@@ -201,20 +222,27 @@
 
       <!-- 底部操作栏 -->
       <div class="tab-actions">
+        <!-- 启用/禁用切换（取代原"设为生效"单选语义；多条可同时启用） -->
         <el-button
           v-if="!currentResponse.isActive"
           type="success"
           size="small"
           plain
-          @click="setActive(activeIndex)"
+          @click="toggleEnabled(activeIndex)"
         >
           <el-icon><Select /></el-icon>
-          设为生效
+          启用此返回体
         </el-button>
-        <el-tag v-else type="success" size="small" effect="dark" class="active-tag">
-          <el-icon><Select /></el-icon>
-          当前生效
-        </el-tag>
+        <el-button
+          v-else
+          type="warning"
+          size="small"
+          plain
+          @click="toggleEnabled(activeIndex)"
+        >
+          <el-icon><CircleClose /></el-icon>
+          禁用此返回体
+        </el-button>
         <el-button
           type="danger"
           size="small"
@@ -239,9 +267,13 @@
  * 支持添加、删除、切换、设为生效等操作。
  */
 import { ref, computed, watch, onMounted } from 'vue'
-import { Plus, Check, MagicStick, Upload, Select, Delete, ArrowDown, Search } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import {
+  Plus, Check, MagicStick, Upload, Select, Delete, ArrowDown, Search,
+  StarFilled, CircleClose
+} from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import MonacoEditor from './MonacoEditor.vue'
+import ConditionPanel from './match/ConditionPanel.vue'
 import { DYNAMIC_VARIABLES } from '@/constants/dynamicVariables'
 import { getTeamVariables } from '@/api/customVariable'
 
@@ -479,31 +511,104 @@ function addResponse() {
     contentType: props.defaultContentType,
     responseBody: '',
     delayMs: 0,
+    // 新 Tab 默认未启用，用户显式启用才参与匹配
     isActive: false,
-    sortOrder: responses.value.length
+    sortOrder: responses.value.length,
+    // v1.4.3 新增：条件规则 JSON 字符串，空串=无规则
+    conditions: ''
   }
   responses.value.push(newResp)
   activeIndex.value = responses.value.length - 1
   emit('update:modelValue', [...responses.value])
 }
 
-/** 设置指定返回体为活跃 */
-function setActive(idx) {
-  responses.value.forEach((r, i) => {
-    r.isActive = (i === idx)
-  })
+/**
+ * 判断某个 Tab 是否为当前派生的"兜底"返回体
+ * 条件：启用数 >= 2 && 此 Tab 启用 && 此 Tab 无规则
+ */
+function isFallbackTab(idx) {
+  const r = responses.value[idx]
+  if (!r || !r.isActive) return false
+  const enabled = responses.value.filter((x) => x.isActive)
+  if (enabled.length < 2) return false
+  return isEmptyConditions(r.conditions)
+}
+
+function isEmptyConditions(json) {
+  if (!json) return true
+  try {
+    const obj = JSON.parse(json)
+    return !Array.isArray(obj?.conditions) || obj.conditions.length === 0
+  } catch {
+    return true
+  }
+}
+
+/**
+ * 切换启用/禁用。v1.4.3 起取代原 setActive（单选语义）：
+ * - 启用第 2 个 Tab 时弹 confirm 解释条件匹配模式
+ * - 禁用当前唯一兜底 Tab 时弹 warning 拦截
+ */
+async function toggleEnabled(idx) {
+  const r = responses.value[idx]
+  if (!r) return
+
+  // REST 按全部 Tab 聚合；SOAP 按 operation 聚合
+  const group = groupMates(idx)
+  const enabledCount = group.filter((x) => x.isActive).length
+
+  if (!r.isActive) {
+    // 启用
+    if (enabledCount === 1) {
+      // 即将成为第 2 个启用 → 弹解释对话框
+      try {
+        await ElMessageBox.confirm(
+          '再启用一个返回体将进入"条件匹配模式"：至少保留一个启用返回体无规则作为兜底，其他都需配置响应规则。系统会按 Tab 顺序匹配第一条命中的规则。',
+          '进入条件匹配模式',
+          {
+            confirmButtonText: '继续启用',
+            cancelButtonText: '取消',
+            type: 'info'
+          }
+        )
+      } catch {
+        return
+      }
+    }
+    r.isActive = true
+    emit('update:modelValue', [...responses.value])
+    return
+  }
+
+  // 禁用：检查是否是当前唯一的"启用+无规则"兜底 Tab
+  if (enabledCount >= 2 && isEmptyConditions(r.conditions)) {
+    // 看是否还有其他启用+无规则 Tab
+    const otherFallback = group.some((x, i) => {
+      const gIdx = responses.value.indexOf(x)
+      return gIdx !== idx && x.isActive && isEmptyConditions(x.conditions)
+    })
+    if (!otherFallback) {
+      ElMessage.warning('这是当前的兜底返回体，请先给它配规则或先禁用其他带规则的 Tab')
+      return
+    }
+  }
+  r.isActive = false
   emit('update:modelValue', [...responses.value])
+}
+
+/**
+ * 返回和当前索引同组（同 operation）的所有 Tab。
+ * REST 模式下 operationName 都是 null，相当于全部。
+ */
+function groupMates(idx) {
+  const op = responses.value[idx]?.soapOperationName || null
+  return responses.value.filter((x) => (x.soapOperationName || null) === op)
 }
 
 /** 删除返回体 */
 function removeResponse(idx) {
   if (responses.value.length <= 1) return
-  const wasActive = responses.value[idx].isActive
   responses.value.splice(idx, 1)
-  // 如果删除的是活跃项，自动激活第一个
-  if (wasActive && responses.value.length > 0) {
-    responses.value[0].isActive = true
-  }
   // 调整 activeIndex
   if (activeIndex.value >= responses.value.length) {
     activeIndex.value = responses.value.length - 1
@@ -635,8 +740,39 @@ function handleUploadFile(uploadFile) {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #22C55E;
   flex-shrink: 0;
+  transition: background 0.2s;
+}
+.active-dot.on { background: #22C55E; }
+.active-dot.off { background: #D1D5DB; }
+
+/* v1.4.3：序号角标 */
+.tab-index {
+  font-size: 11px;
+  color: #6366F1;
+  font-weight: 600;
+  user-select: none;
+}
+
+/* v1.4.3：兜底 ⭐ */
+.fallback-star {
+  color: #F59E0B;
+  font-size: 14px;
+}
+
+/* v1.4.3：未启用 Tab 视觉 */
+.tab-item.disabled .tab-name {
+  color: #9CA3AF;
+  text-decoration: line-through dashed;
+  text-decoration-color: #D1D5DB;
+}
+.disabled-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  background: #F3F4F6;
+  color: #9CA3AF;
+  border-radius: 8px;
+  margin-left: 2px;
 }
 
 .tab-name {
