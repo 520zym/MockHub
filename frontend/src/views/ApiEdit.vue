@@ -461,15 +461,24 @@ function createDefaultResponse() {
   }
 }
 
-/** 创建默认 SOAP operation 返回体 */
-function createDefaultSoapResponse(operationName) {
+/**
+ * 创建默认 SOAP operation 返回体。
+ *
+ * 若传入 suggestedResponseBody（非空）则使用它（WSDL XSD 递归生成的骨架）；
+ * 否则回退到简易 Envelope 占位（含注释）。
+ *
+ * @param {string} operationName       operation 名称
+ * @param {string=} suggestedResponseBody  后端返回的骨架（可选）
+ */
+function createDefaultSoapResponse(operationName, suggestedResponseBody) {
+  const fallback = `<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">\n  <soap:Body>\n    <!-- ${operationName} response -->\n  </soap:Body>\n</soap:Envelope>`
   return {
     id: null,
     soapOperationName: operationName,
     name: 'Default',
     responseCode: 200,
     contentType: 'text/xml',
-    responseBody: `<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">\n  <soap:Body>\n    <!-- ${operationName} response -->\n  </soap:Body>\n</soap:Envelope>`,
+    responseBody: suggestedResponseBody && suggestedResponseBody.trim() ? suggestedResponseBody : fallback,
     delayMs: 0,
     isActive: true,
     sortOrder: 0
@@ -490,16 +499,34 @@ async function handleUploadWsdl() {
     formData.append('file', wsdlFile.value)
     const res = await uploadWsdl(formData)
 
-    // 初始化 soapConfig，每个 operation 有默认返回体
+    // 合并策略：
+    // - 已存在且有 responses（用户编辑过）→ 保留原 responses，只更新 soapAction
+    // - 不存在 → 用 suggestedResponseBody 骨架，无骨架则 fallback
+    const existingOpMap = {}
+    if (form.soapConfig && form.soapConfig.operations) {
+      for (const old of form.soapConfig.operations) {
+        existingOpMap[old.operationName] = old
+      }
+    }
+
     form.soapConfig = {
       wsdlFileName: res.fileName,
-      operations: (res.operations || []).map(op => ({
-        operationName: op.operationName,
-        soapAction: op.soapAction,
-        responses: [createDefaultSoapResponse(op.operationName)]
-      }))
+      operations: (res.operations || []).map(op => {
+        const existing = existingOpMap[op.operationName]
+        if (existing && existing.responses && existing.responses.length > 0) {
+          return {
+            operationName: op.operationName,
+            soapAction: op.soapAction,
+            responses: existing.responses
+          }
+        }
+        return {
+          operationName: op.operationName,
+          soapAction: op.soapAction,
+          responses: [createDefaultSoapResponse(op.operationName, op.suggestedResponseBody)]
+        }
+      })
     }
-    // SOAP 模式使用 POST 方法
     form.method = 'POST'
     ElMessage.success(`WSDL 解析成功，共 ${res.operations.length} 个 Operation`)
   } catch (e) {
