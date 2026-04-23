@@ -247,3 +247,12 @@ CREATE TABLE IF NOT EXISTS custom_variable_group_value (
 );
 
 CREATE INDEX IF NOT EXISTS idx_custom_variable_group_value_value_id ON custom_variable_group_value(value_id);
+
+-- ========== schema 版本追踪（v1.4.4 引入） ==========
+-- 记录已应用的 DB 迁移版本，DataSourceConfig.executeMigrations 按此幂等执行
+-- version 为已应用的最大版本号；applied_at 为执行时间；description 为迁移说明
+CREATE TABLE IF NOT EXISTS schema_version (
+    version     INTEGER PRIMARY KEY,
+    applied_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    description TEXT
+);
