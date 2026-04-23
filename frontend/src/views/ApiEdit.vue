@@ -153,6 +153,14 @@
             <span class="operation-name">{{ op.operationName }}</span>
             <span class="operation-action">SOAPAction: {{ op.soapAction }}</span>
           </div>
+          <!-- v1.4.4 引入：operation 级别接口描述（选填） -->
+          <el-input
+            v-model="op.description"
+            type="textarea"
+            :autosize="{ minRows: 1, maxRows: 4 }"
+            placeholder="接口描述（选填，建议 200 字内说明用途 / 参数 / 注意事项）"
+            class="operation-description"
+          />
           <ResponseTabs
             v-model="op.responses"
             :operation-name="op.operationName"
@@ -397,6 +405,8 @@ async function loadApiDetail() {
             operations: (soapConfig.operations || []).map(op => ({
               operationName: op.operationName,
               soapAction: op.soapAction,
+              // v1.4.4：operation 级描述，老数据为 undefined/null 时回退空串便于 v-model 绑定
+              description: op.description || '',
               responses: responsesByOp[op.operationName] || [createDefaultSoapResponse(op.operationName)]
             }))
           }
@@ -427,6 +437,7 @@ async function loadApiDetail() {
         operations: (soapConfig.operations || []).map(op => ({
           operationName: op.operationName,
           soapAction: op.soapAction,
+          description: op.description || '',
           responses: [createDefaultSoapResponse(op.operationName)]
         }))
       }
@@ -513,16 +524,22 @@ async function handleUploadWsdl() {
       wsdlFileName: res.fileName,
       operations: (res.operations || []).map(op => {
         const existing = existingOpMap[op.operationName]
+        // v1.4.4：description 合并策略与 responses 一致——已有非空值不覆盖
+        const mergedDescription = existing && existing.description && existing.description.trim()
+          ? existing.description
+          : (op.description || '')
         if (existing && existing.responses && existing.responses.length > 0) {
           return {
             operationName: op.operationName,
             soapAction: op.soapAction,
+            description: mergedDescription,
             responses: existing.responses
           }
         }
         return {
           operationName: op.operationName,
           soapAction: op.soapAction,
+          description: mergedDescription,
           responses: [createDefaultSoapResponse(op.operationName, op.suggestedResponseBody)]
         }
       })
@@ -654,7 +671,9 @@ async function handleSave() {
         wsdlFileName: form.soapConfig.wsdlFileName,
         operations: (form.soapConfig.operations || []).map(op => ({
           operationName: op.operationName,
-          soapAction: op.soapAction
+          soapAction: op.soapAction,
+          // v1.4.4：operation 级描述持久化；空字符串转 null 避免落库冗余
+          description: (op.description && op.description.trim()) ? op.description.trim() : null
         }))
       }
     }
@@ -836,6 +855,11 @@ onMounted(async () => {
   font-size: 12px;
   color: #A3AED0;
   font-family: monospace;
+}
+
+/* v1.4.4：operation 级描述输入区 */
+.operation-description {
+  margin-bottom: 12px;
 }
 
 .empty-operations {
