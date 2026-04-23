@@ -142,32 +142,54 @@
       </el-form>
 
       <!-- Operation 列表（每个 operation 使用 ResponseTabs 管理多返回体） -->
+      <!-- v1.4.4 性能：默认折叠。展开才挂载 ResponseTabs（含 Monaco 编辑器）。 -->
       <div v-if="form.soapConfig && form.soapConfig.operations && form.soapConfig.operations.length" class="operations-list">
-        <h4 class="operations-title">Operations（{{ form.soapConfig.operations.length }} 个）</h4>
+        <div class="operations-toolbar">
+          <h4 class="operations-title">Operations（{{ form.soapConfig.operations.length }} 个）</h4>
+          <div class="operations-actions">
+            <el-button text size="small" @click="expandAllOps">全部展开</el-button>
+            <el-button text size="small" @click="collapseAllOps">全部折叠</el-button>
+          </div>
+        </div>
         <div
           v-for="(op, idx) in form.soapConfig.operations"
           :key="idx"
           class="operation-card soft-card"
+          :class="{ 'operation-card--collapsed': isOpCollapsed(op) }"
         >
-          <div class="operation-header">
+          <!-- 标题行可点击整行切换折叠（编辑响应体前必须先展开） -->
+          <div class="operation-header" @click="toggleOpCollapsed(op)">
+            <el-icon class="operation-chevron">
+              <ArrowDown v-if="isOpCollapsed(op)" />
+              <ArrowUp v-else />
+            </el-icon>
             <span class="operation-name">{{ op.operationName }}</span>
             <span class="operation-action">SOAPAction: {{ op.soapAction }}</span>
+            <!-- 折叠态展示描述首行预览，便于不展开就知道该 operation 做什么 -->
+            <span
+              v-if="isOpCollapsed(op) && op.description"
+              class="operation-desc-preview"
+              :title="op.description"
+            >{{ getDescriptionPreview(op.description) }}</span>
           </div>
-          <!-- v1.4.4 引入：operation 级别接口描述（选填） -->
-          <el-input
-            v-model="op.description"
-            type="textarea"
-            :autosize="{ minRows: 1, maxRows: 4 }"
-            placeholder="接口描述（选填，建议 200 字内说明用途 / 参数 / 注意事项）"
-            class="operation-description"
-          />
-          <ResponseTabs
-            v-model="op.responses"
-            :operation-name="op.operationName"
-            :team-id="form.teamId"
-            default-content-type="text/xml"
-            editor-language="xml"
-          />
+
+          <!-- 展开后才渲染编辑区：描述输入 + 返回体 tabs（含 Monaco） -->
+          <template v-if="!isOpCollapsed(op)">
+            <el-input
+              v-model="op.description"
+              type="textarea"
+              :autosize="{ minRows: 1, maxRows: 4 }"
+              placeholder="接口描述（选填，建议 200 字内说明用途 / 参数 / 注意事项）"
+              class="operation-description"
+            />
+            <ResponseTabs
+              v-model="op.responses"
+              :operation-name="op.operationName"
+              :team-id="form.teamId"
+              default-content-type="text/xml"
+              editor-language="xml"
+            />
+          </template>
         </div>
       </div>
 
@@ -259,6 +281,45 @@ const httpMethods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
 const isEdit = computed(() => !!route.params.id)
 const pageLoading = ref(false)
 const saving = ref(false)
+
+/**
+ * v1.4.4 性能：SOAP operation 折叠态管理。
+ *
+ * 默认全部折叠——大响应体（含 base64）场景下，一个 SOAP 接口 N 个 operation
+ * 全量挂 Monaco 是整页滑动卡顿的关键来源。折叠时用 v-if 销毁 ResponseTabs
+ * 及内部 Monaco 实例，只为当前在看的 operation 付出渲染成本。
+ *
+ * 用 reactive(Set) 追踪折叠的 operation（按 operationName 索引）。
+ */
+const collapsedOps = reactive(new Set())
+
+function isOpCollapsed(op) {
+  return collapsedOps.has(op.operationName)
+}
+
+function toggleOpCollapsed(op) {
+  if (collapsedOps.has(op.operationName)) {
+    collapsedOps.delete(op.operationName)
+  } else {
+    collapsedOps.add(op.operationName)
+  }
+}
+
+function collapseAllOps() {
+  if (!form.soapConfig || !form.soapConfig.operations) return
+  form.soapConfig.operations.forEach(op => collapsedOps.add(op.operationName))
+}
+
+function expandAllOps() {
+  collapsedOps.clear()
+}
+
+/** 获取描述的首行预览（供折叠态标题旁展示，超 80 字符 … 截断） */
+function getDescriptionPreview(desc) {
+  if (!desc) return ''
+  const firstLine = desc.split('\n')[0]
+  return firstLine.length > 80 ? firstLine.slice(0, 80) + '…' : firstLine
+}
 
 // --- 表单数据 ---
 const form = reactive({
@@ -410,6 +471,8 @@ async function loadApiDetail() {
               responses: responsesByOp[op.operationName] || [createDefaultSoapResponse(op.operationName)]
             }))
           }
+          // v1.4.4 性能：加载已有接口时默认全部折叠，避免 N 个 Monaco 一次性挂载
+          collapseAllOps()
         }
       }
     } else {
@@ -441,6 +504,7 @@ async function loadApiDetail() {
           responses: [createDefaultSoapResponse(op.operationName)]
         }))
       }
+      collapseAllOps()
     }
 
     // 将 globalHeaderOverrides 对象转为可编辑列表
@@ -545,6 +609,8 @@ async function handleUploadWsdl() {
       })
     }
     form.method = 'POST'
+    // v1.4.4 性能：WSDL 上传后默认全部折叠；用户点击标题展开时才挂 Monaco
+    collapseAllOps()
     ElMessage.success(`WSDL 解析成功，共 ${res.operations.length} 个 Operation`)
   } catch (e) {
     // 错误已由拦截器处理
@@ -830,19 +896,51 @@ onMounted(async () => {
   font-size: 14px;
   font-weight: 600;
   color: #4A5568;
+  margin-bottom: 0;
+}
+
+/* v1.4.4：Operations 区头部工具条（标题 + 展开/折叠全部） */
+.operations-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   margin-bottom: 12px;
+}
+
+.operations-actions {
+  display: flex;
+  gap: 4px;
 }
 
 .operation-card {
   margin-bottom: 16px;
   padding: 16px;
+  transition: padding 0.2s ease;
+}
+
+/* v1.4.4：折叠态的卡片内边距减小，视觉更紧凑 */
+.operation-card--collapsed {
+  padding: 12px 16px;
 }
 
 .operation-header {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   margin-bottom: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+/* 折叠态下 header 本身就是唯一可见区，去掉 margin-bottom 避免额外空白 */
+.operation-card--collapsed .operation-header {
+  margin-bottom: 0;
+}
+
+/* 展开/折叠指示箭头 */
+.operation-chevron {
+  color: #8392AB;
+  font-size: 14px;
 }
 
 .operation-name {
@@ -855,6 +953,18 @@ onMounted(async () => {
   font-size: 12px;
   color: #A3AED0;
   font-family: monospace;
+  flex-shrink: 0;
+}
+
+/* v1.4.4：折叠态下标题行右侧的描述首行预览 */
+.operation-desc-preview {
+  color: #8392AB;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
 }
 
 /* v1.4.4：operation 级描述输入区 */
