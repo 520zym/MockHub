@@ -22,6 +22,11 @@ public class SoapOperation {
     /** 响应体（SOAP XML） */
     private String responseBody;
 
+    /** 接口描述（operation 级别，v1.4.4 引入，选填）；
+     * 反序列化老 JSON 时为 null，前后端均需判空
+     */
+    private String description;
+
     public SoapOperation() {
     }
 
@@ -65,6 +70,14 @@ public class SoapOperation {
         this.responseBody = responseBody;
     }
 
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
     @Override
     public String toString() {
         return "SoapOperation{" +
@@ -72,6 +85,7 @@ public class SoapOperation {
                 ", soapAction='" + soapAction + '\'' +
                 ", responseCode=" + responseCode +
                 ", delayMs=" + delayMs +
+                ", description='" + description + '\'' +
                 '}';
     }
 }
