@@ -192,6 +192,17 @@ let editor = null
 // 大文本阈值（超过 100KB 禁用 minimap）
 const LARGE_TEXT_THRESHOLD = 100 * 1024
 
+/**
+ * v1.4.4 性能优化：替换 Monaco 的 automaticLayout（内部 100ms 轮询容器尺寸）
+ * 为 ResizeObserver + requestAnimationFrame 去抖。
+ *
+ * 背景：页面中多个 MonacoEditor 实例并存时（例如 SOAP 多 operation），
+ * automaticLayout 会叠加 N 个定时器持续轮询 DOM，拖累滚动帧率。
+ * ResizeObserver 是事件驱动的浏览器原生 API，尺寸不变时零开销。
+ */
+let resizeObserver = null
+let resizeRafId = null
+
 onMounted(() => {
   if (!editorContainer.value) return
 
@@ -202,7 +213,8 @@ onMounted(() => {
     language: props.language,
     readOnly: props.readOnly,
     minimap: { enabled: !isLargeText },
-    automaticLayout: true,
+    // v1.4.4：关闭 Monaco 自带轮询，改用下方 ResizeObserver 事件驱动触发 layout
+    automaticLayout: false,
     fontSize: 14,
     lineNumbers: 'on',
     scrollBeyondLastLine: false,
@@ -216,6 +228,24 @@ onMounted(() => {
       horizontalScrollbarSize: 6
     }
   })
+
+  // 挂 ResizeObserver：容器尺寸变化时 rAF 去抖触发 editor.layout()
+  if (typeof ResizeObserver !== 'undefined') {
+    resizeObserver = new ResizeObserver((entries) => {
+      const entry = entries && entries[0]
+      // 过滤尺寸为 0 的情况（display:none、折叠态切换瞬间等），避免 Monaco layout 异常
+      if (!entry) return
+      const { width, height } = entry.contentRect
+      if (width === 0 || height === 0) return
+
+      if (resizeRafId) cancelAnimationFrame(resizeRafId)
+      resizeRafId = requestAnimationFrame(() => {
+        if (editor) editor.layout()
+        resizeRafId = null
+      })
+    })
+    resizeObserver.observe(editorContainer.value)
+  }
 
   // 同步外部传入的动态变量列表到模块级变量，供补全 provider 使用
   if (props.dynamicVariables) {
@@ -270,6 +300,15 @@ watch(() => props.dynamicVariables, (newVal) => {
 }, { deep: false })
 
 onBeforeUnmount(() => {
+  // v1.4.4：清理 ResizeObserver 与 rAF，避免编辑器销毁后仍触发 layout
+  if (resizeRafId) {
+    cancelAnimationFrame(resizeRafId)
+    resizeRafId = null
+  }
+  if (resizeObserver) {
+    resizeObserver.disconnect()
+    resizeObserver = null
+  }
   if (editor) {
     editor.dispose()
     editor = null
