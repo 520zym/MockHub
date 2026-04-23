@@ -2,6 +2,38 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [1.4.4] - 2026-04-23
+
+### 新增
+
+- **SOAP operation 独立接口描述**：每个 operation 可填写独立描述（多行 autosize），
+  与接口级 description 分离，便于标注单个 operation 的用途 / 参数 / 注意事项
+- **WSDL documentation 自动填充描述**：上传 WSDL 时从 `<wsdl:documentation>` 自动
+  提取描述文本填入 operation.description；已有非空描述不被重复上传覆盖
+
+### 性能
+
+- **SOAP 编辑页大响应体滑动不再卡顿**（之前 3 × 1MB 响应体场景下掉帧明显）：
+  - `MonacoEditor` 关闭 `automaticLayout` 100ms 轮询，改 ResizeObserver + rAF
+    事件驱动触发 layout，实例数量与轮询数解耦
+  - SOAP operation 卡片默认全部折叠，展开才 `v-if` 挂载 ResponseTabs / Monaco，
+    页面顶部提供"全部展开 / 全部折叠"按钮；折叠态展示描述首行预览
+  - 响应体 > 500KB 时降级为只读预览卡，点"全文编辑"弹 fullscreen Dialog 承载
+    Monaco（草稿副本独立，确认才回写），避免大文本在长页面嵌入 Monaco 时的
+    重排成本传染到父页面滚动
+
+### 内部
+
+- **引入 `schema_version` 表**：后续 DB 迁移按版本号幂等执行，v1.4.3 老库无缝
+  升级到 v1.4.4
+  - `DataSourceConfig.executeMigrations` 重构为 `if (current < N) migrateVN`
+    分发器，每个 migrateVN 写入 schema_version 记录
+  - 整个迁移过程事务包裹，任一步失败全部回滚，杜绝半迁移状态
+  - 原有 `api_definition.description` 列补建、REST/SOAP 响应迁移逻辑收拢进
+    `migrateV1`，保持幂等
+  - 覆盖 4 种启动场景的单元测试：全新库 / v1.4.3 老库 / 已跑过
+    soap-mock-enhancement 的本地库 / 二次启动
+
 ## [1.4.2] - 2026-04-13
 
 ### 新增
