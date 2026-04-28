@@ -39,13 +39,16 @@ public interface ApiService {
      * @param keyword 按名称或路径模糊搜索（可为 null）
      * @param tagIds  按标签筛选，命中任一即返回（可为 null 或空）
      * @param type    按接口类型筛选（REST / SOAP，可为 null）
+     * @param sortBy  排序字段（updatedAt/createdAt/name/path，白名单外回退默认；可为 null）
+     * @param sortDir 排序方向（asc/desc，默认 desc；可为 null）
      * @param page    页码
      * @param size    每页条数
      * @return 分页结果
      */
     PageResult<ApiDefinitionVO> list(String teamId, String groupId, String method,
                                      Boolean enabled, String keyword, List<String> tagIds,
-                                     String type, int page, int size);
+                                     String type, String sortBy, String sortDir,
+                                     int page, int size);
 
     /**
      * 获取接口详情（含 responseBody、返回体列表、标签列表）
