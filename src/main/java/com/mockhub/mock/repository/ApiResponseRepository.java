@@ -194,6 +194,28 @@ public class ApiResponseRepository {
     }
 
     /**
+     * 批量删除多个接口的返回体（批量删除接口时调用）
+     *
+     * @param apiIds 接口 ID 列表
+     * @return 受影响行数
+     */
+    public int batchDeleteByApiIds(List<String> apiIds) {
+        if (apiIds == null || apiIds.isEmpty()) {
+            return 0;
+        }
+        StringBuilder sql = new StringBuilder("DELETE FROM api_response WHERE api_id IN (");
+        for (int i = 0; i < apiIds.size(); i++) {
+            sql.append(i > 0 ? ",?" : "?");
+        }
+        sql.append(")");
+        int deleted = jdbcTemplate.update(sql.toString(), apiIds.toArray());
+        if (deleted > 0) {
+            log.debug("批量删除 {} 个接口的返回体，共 {} 条", apiIds.size(), deleted);
+        }
+        return deleted;
+    }
+
+    /**
      * 替换接口的所有返回体（先删后批量插入，用于保存时整体替换）
      *
      * @param apiId     接口 ID

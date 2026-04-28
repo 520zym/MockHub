@@ -130,16 +130,58 @@
 
     <!-- 接口表格 -->
     <div class="table-card soft-card">
+      <!--
+        批量操作条：选中至少一项时显示。reserve-selection 跨页保留选择，
+        所以可能跨团队，move-group 时再校验同团队。
+      -->
+      <transition name="batch-bar-fade">
+        <div v-if="selectedRows.length > 0" class="batch-bar">
+          <span class="batch-bar__count">已选 <strong>{{ selectedRows.length }}</strong> 项</span>
+          <el-button size="small" :disabled="batchLoading" @click="handleBatchEnable">
+            <el-icon><Select /></el-icon>批量启用
+          </el-button>
+          <el-button size="small" :disabled="batchLoading" @click="handleBatchDisable">
+            <el-icon><CloseBold /></el-icon>批量禁用
+          </el-button>
+          <el-dropdown
+            trigger="click"
+            :disabled="batchLoading || availableGroups.length === 0 && !canMoveToNoGroup"
+            @command="handleBatchMoveGroup"
+          >
+            <el-button size="small" :disabled="batchLoading">
+              <el-icon><FolderAdd /></el-icon>移动到分组<el-icon class="el-icon--right"><ArrowDown /></el-icon>
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item :command="'__none__'">未分组</el-dropdown-item>
+                <el-dropdown-item v-for="g in availableGroups" :key="g.id" :command="g.id">
+                  {{ g.name }}
+                </el-dropdown-item>
+                <el-dropdown-item v-if="availableGroups.length === 0" disabled>
+                  当前团队无分组
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+          <el-button size="small" type="danger" :loading="batchLoading" @click="handleBatchDelete">
+            <el-icon><Delete /></el-icon>批量删除
+          </el-button>
+          <el-button text size="small" @click="handleClearSelection">清除选中</el-button>
+        </div>
+      </transition>
       <el-table
         ref="tableRef"
         :data="apiList"
         v-loading="loading"
         style="width: 100%"
-        row-class-name="api-row"
+        row-key="id"
+        :row-class-name="apiRowClass"
+        :default-sort="defaultSort"
         @selection-change="handleSelectionChange"
+        @sort-change="handleSortChange"
       >
-        <!-- 多选框列 -->
-        <el-table-column type="selection" width="40" />
+        <!-- 多选框列：reserve-selection 跨页保留勾选 -->
+        <el-table-column type="selection" width="40" reserve-selection />
 
         <!-- 空状态 -->
         <template #empty>
@@ -166,21 +208,35 @@
           </template>
         </el-table-column>
 
-        <!-- 路径列 -->
-        <el-table-column label="路径" min-width="200" show-overflow-tooltip>
+        <!-- 路径列（可排序） -->
+        <el-table-column
+          prop="path"
+          label="路径"
+          min-width="200"
+          show-overflow-tooltip
+          sortable="custom"
+          :sort-orders="['ascending', 'descending']"
+        >
           <template #default="{ row }">
             <span class="api-path">{{ row.path }}</span>
           </template>
         </el-table-column>
 
-        <!-- 接口名称列 -->
-        <el-table-column prop="name" label="名称" min-width="180" show-overflow-tooltip />
+        <!-- 接口名称列（可排序） -->
+        <el-table-column
+          prop="name"
+          label="名称"
+          min-width="180"
+          show-overflow-tooltip
+          sortable="custom"
+          :sort-orders="['ascending', 'descending']"
+        />
 
-        <!-- 分组列：未分组接口显示 "-" -->
+        <!-- 分组列：未分组 / 跨团队找不到分组 / 分组已删除——一律显示 "-" -->
         <el-table-column label="分组" min-width="100" show-overflow-tooltip>
           <template #default="{ row }">
-            <span v-if="row.groupId" class="group-name">
-              {{ groupNameMap[row.groupId] || '已删除' }}
+            <span v-if="groupNameMap[row.groupId]" class="group-name">
+              {{ groupNameMap[row.groupId] }}
             </span>
             <span v-else class="no-group">-</span>
           </template>
@@ -211,8 +267,35 @@
           </template>
         </el-table-column>
 
-        <!-- 启用开关列 -->
-        <el-table-column label="启用" width="65" align="center">
+        <!--
+          修改时间列：完整格式 yyyy-MM-dd HH:mm:ss，可排序。
+          位置：刻意放在"创建人"列之前，让"创建人"做与 fixed-right 区的缓冲列。
+          这样 sortable 列不与 fixed 列毗邻，规避 EP 已知的 fixed-right 表头双重渲染 bug
+          （sortable 排序图标导致 fixed-right 容器克隆表头时裁切不干净，文字会穿透叠字）。
+        -->
+        <el-table-column
+          prop="updatedAt"
+          label="修改时间"
+          width="170"
+          align="center"
+          sortable="custom"
+          :sort-orders="['descending', 'ascending']"
+        >
+          <template #default="{ row }">
+            <span class="time-cell">{{ formatFull(row.updatedAt) }}</span>
+          </template>
+        </el-table-column>
+
+        <!-- 创建人列（兼任 fixed-right 区前的缓冲列） -->
+        <el-table-column label="创建人" width="100" align="center" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span v-if="row.createdByName">{{ row.createdByName }}</span>
+            <span v-else class="no-creator">-</span>
+          </template>
+        </el-table-column>
+
+        <!-- 启用开关列（固定右侧，与操作列一起常驻视野） -->
+        <el-table-column label="启用" width="65" align="center" fixed="right">
           <template #default="{ row }">
             <el-switch
               :model-value="row.enabled"
@@ -223,8 +306,8 @@
           </template>
         </el-table-column>
 
-        <!-- 操作列（全图标按钮，hover 显示 title） -->
-        <el-table-column label="操作" width="200" align="center" class-name="action-col">
+        <!-- 操作列（固定在右侧，横滚时也始终可见） -->
+        <el-table-column label="操作" width="200" align="center" class-name="action-col" fixed="right">
           <template #default="{ row }">
             <div class="action-buttons" @click.stop>
               <el-button
@@ -408,7 +491,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAppStore } from '@/stores/app'
 import { useApiStore } from '@/stores/api'
 import { useUserStore } from '@/stores/user'
-import { getApis, deleteApi, copyApi, toggleApi, importApis, exportApis } from '@/api/apis'
+import { getApis, deleteApi, copyApi, toggleApi, importApis, exportApis, batchApis } from '@/api/apis'
 import { getTags, createTag, updateTag, deleteTag } from '@/api/tags'
 import { getGroups } from '@/api/groups'
 import { getServerAddress } from '@/api/settings'
@@ -416,6 +499,7 @@ import HttpMethodTag from '@/components/HttpMethodTag.vue'
 import ApiTypeTag from '@/components/ApiTypeTag.vue'
 import TeamTag from '@/components/TeamTag.vue'
 import GroupManageDialog from '@/components/GroupManageDialog.vue'
+import { formatFull } from '@/utils/time'
 
 const router = useRouter()
 const appStore = useAppStore()
@@ -428,10 +512,30 @@ const total = ref(0)
 const loading = ref(false)
 const tableRef = ref(null)
 const selectedRows = ref([])
+const batchLoading = ref(false)
+
+// 批量操作下拉里的"未分组"项是否可见：始终可见（即使当前团队没分组也可以把接口移到未分组状态）
+const canMoveToNoGroup = computed(() => true)
 
 /** 多选变化 */
 function handleSelectionChange(rows) {
   selectedRows.value = rows
+}
+
+/**
+ * 行 className：禁用接口降透明度，让一眼能看出哪些是禁用状态。
+ * row-key + reserve-selection 配合时，row 是 row-key 命中的同一引用，写入安全。
+ */
+function apiRowClass({ row }) {
+  return row.enabled ? 'api-row' : 'api-row api-row--disabled'
+}
+
+/** 清空跨页选中 */
+function handleClearSelection() {
+  if (tableRef.value) {
+    tableRef.value.clearSelection()
+  }
+  selectedRows.value = []
 }
 
 // --- 工具栏筛选状态（双向绑定到输入控件，变化后同步到 store） ---
@@ -463,6 +567,15 @@ const groupNameMap = computed(() => {
 
 // 分组管理弹窗显示状态
 const groupManagerVisible = ref(false)
+
+/**
+ * el-table 的 default-sort：把 store 中的 sortBy/sortDir 转成 el-table 期望的 {prop, order}。
+ * order 取值：'ascending' / 'descending' / null。
+ */
+const defaultSort = computed(() => ({
+  prop: apiStore.listParams.sortBy || 'updatedAt',
+  order: apiStore.listParams.sortDir === 'asc' ? 'ascending' : 'descending'
+}))
 
 // --- 服务器地址（用于拼接 Mock URL） ---
 const serverAddress = ref('')
@@ -632,6 +745,13 @@ async function loadApis() {
     } else if (groupFilter.value) {
       params.groupId = groupFilter.value
     }
+    // 排序参数（后端有白名单兜底，前端传错值不会出错，只会回退默认）
+    if (apiStore.listParams.sortBy) {
+      params.sortBy = apiStore.listParams.sortBy
+    }
+    if (apiStore.listParams.sortDir) {
+      params.sortDir = apiStore.listParams.sortDir
+    }
 
     const res = await getApis(params)
     apiList.value = res.items || []
@@ -737,6 +857,22 @@ function handleOpenGroupManager() {
     }
   }
   groupManagerVisible.value = true
+}
+
+/**
+ * 表头排序变化：order = 'ascending' / 'descending' / null（取消排序）。
+ * null 时回退到默认排序（updatedAt desc），避免后端无序返回引起列表抖动。
+ */
+function handleSortChange({ prop, order }) {
+  if (!order) {
+    apiStore.setParam('sortBy', 'updatedAt')
+    apiStore.setParam('sortDir', 'desc')
+  } else {
+    apiStore.setParam('sortBy', prop)
+    apiStore.setParam('sortDir', order === 'ascending' ? 'asc' : 'desc')
+  }
+  currentPage.value = 1
+  loadApis()
 }
 
 /** 分组弹窗中发生 CRUD 后回调：重新加载分组列表和接口列表 */
@@ -866,6 +1002,113 @@ async function handleToggle(row) {
     ElMessage.success(res.enabled ? '已启用' : '已禁用')
   } catch (e) {
     // 错误已由拦截器处理
+  }
+}
+
+// --- 批量操作 ---
+
+/**
+ * 提取选中行 ID 数组，无选中时返回 null（调用方负责提示）。
+ */
+function getSelectedIds() {
+  if (selectedRows.value.length === 0) {
+    ElMessage.warning('请先选择接口')
+    return null
+  }
+  return selectedRows.value.map(r => r.id)
+}
+
+/** 批量启用 */
+async function handleBatchEnable() {
+  const ids = getSelectedIds()
+  if (!ids) return
+  batchLoading.value = true
+  try {
+    const res = await batchApis({ action: 'enable', ids })
+    ElMessage.success(`已启用 ${res.affected} 个接口`)
+    handleClearSelection()
+    loadApis()
+  } catch (e) {
+    // 错误已由拦截器处理
+  } finally {
+    batchLoading.value = false
+  }
+}
+
+/** 批量禁用 */
+async function handleBatchDisable() {
+  const ids = getSelectedIds()
+  if (!ids) return
+  batchLoading.value = true
+  try {
+    const res = await batchApis({ action: 'disable', ids })
+    ElMessage.success(`已禁用 ${res.affected} 个接口`)
+    handleClearSelection()
+    loadApis()
+  } catch (e) {
+    // 错误已由拦截器处理
+  } finally {
+    batchLoading.value = false
+  }
+}
+
+/** 批量删除（带二次确认） */
+async function handleBatchDelete() {
+  const ids = getSelectedIds()
+  if (!ids) return
+  try {
+    await ElMessageBox.confirm(
+      `确认删除选中的 ${ids.length} 个接口？此操作不可撤销。`,
+      '批量删除确认',
+      { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' }
+    )
+  } catch (e) {
+    return // 取消
+  }
+  batchLoading.value = true
+  try {
+    const res = await batchApis({ action: 'delete', ids })
+    ElMessage.success(`已删除 ${res.affected} 个接口`)
+    handleClearSelection()
+    loadApis()
+    appStore.loadTeams()
+  } catch (e) {
+    // 错误已由拦截器处理
+  } finally {
+    batchLoading.value = false
+  }
+}
+
+/**
+ * 批量移动到分组（command 即目标分组 ID，'__none__' 表示未分组）。
+ * 跨团队所选时拒绝：分组与团队强绑定，跨团语义混乱。
+ */
+async function handleBatchMoveGroup(command) {
+  const ids = getSelectedIds()
+  if (!ids) return
+
+  // 校验所有所选行属于同一团队
+  const teamIds = new Set(selectedRows.value.map(r => r.teamId))
+  if (teamIds.size > 1) {
+    ElMessage.warning('批量移动分组要求所选接口属于同一团队')
+    return
+  }
+
+  const targetGroupId = command === '__none__' ? '' : command
+  const targetName = command === '__none__'
+    ? '未分组'
+    : (availableGroups.value.find(g => g.id === command)?.name || '指定分组')
+
+  batchLoading.value = true
+  try {
+    const res = await batchApis({ action: 'move-group', ids, targetGroupId })
+    ElMessage.success(`已将 ${res.affected} 个接口移动到「${targetName}」`)
+    handleClearSelection()
+    loadApis()
+  } catch (e) {
+    // 错误已由拦截器处理
+  } finally {
+    batchLoading.value = false
   }
 }
 
@@ -1035,12 +1278,73 @@ onMounted(async () => {
   }
 }
 
+// 批量操作条：选中至少一项时浮现，紧贴表格顶部
+.batch-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: linear-gradient(90deg, rgba(99, 102, 241, 0.06), rgba(99, 102, 241, 0.02));
+  border-bottom: 1px solid #EBEEF5;
+  border-radius: 16px 16px 0 0;
+  font-size: 13px;
+  color: #4A5568;
+
+  &__count {
+    margin-right: 8px;
+    color: #1B2559;
+
+    strong {
+      color: #6366F1;
+      font-weight: 700;
+      margin: 0 2px;
+    }
+  }
+}
+
+.batch-bar-fade-enter-active,
+.batch-bar-fade-leave-active {
+  transition: all 0.18s ease;
+}
+.batch-bar-fade-enter-from,
+.batch-bar-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
 // 表格卡片
 .table-card {
   padding: 0;
 
   :deep(.el-table) {
     border-radius: 16px;
+  }
+
+  // 防御 EP 已知 bug：横向滚动时 fixed-right 列与左侧普通列表头/单元格叠字
+  // 原因：EP 2.x 用 position: sticky 实现 fixed 列，sticky 单元格本身需有不透明背景
+  // 才能挡住下方滚过来的内容；个别情况（特别是表头）背景被清掉或 z-index 不够，
+  // 导致下层列文字穿透。这里统一加白底 + 高 z-index。
+  :deep(.el-table) {
+    th.el-table-fixed-column--right,
+    td.el-table-fixed-column--right {
+      background-color: #FFFFFF !important;
+      z-index: 3 !important;
+    }
+    // 第一根 fixed-right 列左侧补一条细分隔线，明确边界（避免被相邻列覆盖时分不清）
+    th.el-table-fixed-column--right.is-first-column::before,
+    td.el-table-fixed-column--right.is-first-column::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: -1px;
+      width: 1px;
+      background-color: #EBEEF5;
+    }
+    // 表头排序图标列降级层级，避免它在水平滚动期间漂到 fixed 区上方
+    th.el-table__cell.is-sortable {
+      z-index: 1;
+    }
   }
 }
 
@@ -1058,6 +1362,18 @@ onMounted(async () => {
   :deep(td.is-center .cell) {
     justify-content: center;
   }
+
+  // 禁用状态：整行降透明度，hover 恢复以便操作。
+  // 不加色条/灰底，避免与其他状态色（如标签色）冲突。
+  &--disabled {
+    :deep(td) {
+      opacity: 0.55;
+      transition: opacity 0.15s ease;
+    }
+    &:hover :deep(td) {
+      opacity: 1;
+    }
+  }
 }
 
 .api-path {
@@ -1072,6 +1388,19 @@ onMounted(async () => {
 }
 
 .no-group {
+  font-size: 13px;
+  color: #B0B7C3;
+}
+
+// 修改时间列：完整时间显示，等宽数字字体让多行对齐
+.time-cell {
+  font-size: 12px;
+  color: #6B7280;
+  font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
+  white-space: nowrap;
+}
+
+.no-creator {
   font-size: 13px;
   color: #B0B7C3;
 }

@@ -5,6 +5,7 @@ import com.mockhub.mock.model.dto.ApiDefinitionDTO;
 import com.mockhub.mock.model.dto.ApiDefinitionDetailVO;
 import com.mockhub.mock.model.dto.ApiDefinitionVO;
 import com.mockhub.mock.model.dto.ApiMatchResult;
+import com.mockhub.mock.model.dto.BatchApiResult;
 import com.mockhub.mock.model.entity.ApiDefinition;
 
 import java.util.List;
@@ -39,13 +40,16 @@ public interface ApiService {
      * @param keyword 按名称或路径模糊搜索（可为 null）
      * @param tagIds  按标签筛选，命中任一即返回（可为 null 或空）
      * @param type    按接口类型筛选（REST / SOAP，可为 null）
+     * @param sortBy  排序字段（updatedAt/createdAt/name/path，白名单外回退默认；可为 null）
+     * @param sortDir 排序方向（asc/desc，默认 desc；可为 null）
      * @param page    页码
      * @param size    每页条数
      * @return 分页结果
      */
     PageResult<ApiDefinitionVO> list(String teamId, String groupId, String method,
                                      Boolean enabled, String keyword, List<String> tagIds,
-                                     String type, int page, int size);
+                                     String type, String sortBy, String sortDir,
+                                     int page, int size);
 
     /**
      * 获取接口详情（含 responseBody、返回体列表、标签列表）
@@ -96,4 +100,30 @@ public interface ApiService {
      * @return 新的启用状态
      */
     boolean toggle(String id);
+
+    /**
+     * 批量操作（启用/禁用/删除/移动分组）
+     * <p>
+     * action 枚举见 {@link com.mockhub.mock.model.dto.BatchApiRequest}。
+     * 服务端按接口归属团队逐个校验权限：任一不通过则整批不执行。
+     *
+     * @param action        操作类型（enable/disable/delete/move-group）
+     * @param ids           接口 ID 列表
+     * @param targetGroupId 仅 move-group 时使用，null 或空表示置为"未分组"
+     * @return 实际处理的接口数量
+     */
+    BatchApiResult batch(String action, List<String> ids, String targetGroupId);
+
+    /**
+     * 路径冲突预检（编辑页实时校验用）
+     * <p>
+     * 同团队 + 同 method + 字面量 path 相同视为冲突；excludeId 用于排除自身（编辑场景）。
+     *
+     * @param teamId    团队 ID
+     * @param method    HTTP 方法
+     * @param path      请求路径
+     * @param excludeId 编辑时排除自身（可为 null）
+     * @return 冲突的接口名称（无冲突返回 null）
+     */
+    String findConflictingApiName(String teamId, String method, String path, String excludeId);
 }

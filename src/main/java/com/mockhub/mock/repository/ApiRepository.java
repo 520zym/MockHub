@@ -130,7 +130,21 @@ public class ApiRepository {
     }
 
     /**
-     * 分页查询接口列表（支持多条件筛选）
+     * 排序字段白名单：把前端传来的 sortBy 映射为合法的 SQL 列名。
+     * 不在白名单内的输入一律按默认排序，杜绝 SQL 注入。
+     */
+    private static final java.util.Map<String, String> SORT_COLUMN_WHITELIST;
+    static {
+        java.util.Map<String, String> m = new java.util.HashMap<String, String>();
+        m.put("updatedAt", "a.updated_at");
+        m.put("createdAt", "a.created_at");
+        m.put("name", "a.name");
+        m.put("path", "a.path");
+        SORT_COLUMN_WHITELIST = java.util.Collections.unmodifiableMap(m);
+    }
+
+    /**
+     * 分页查询接口列表（支持多条件筛选 + 自定义排序）
      * <p>
      * 不返回 response_body 字段，避免大字段影响列表查询性能。
      *
@@ -142,13 +156,17 @@ public class ApiRepository {
      * @param keyword  按名称或路径模糊搜索（可为 null）
      * @param tagIds   按标签筛选，命中任一即返回（可为 null 或空）
      * @param type     按接口类型筛选（REST / SOAP，可为 null）
+     * @param sortBy   排序字段（updatedAt/createdAt/name/path，白名单外回退默认；可为 null）
+     * @param sortDir  排序方向（asc/desc，默认 desc；可为 null）
      * @param offset   偏移量
      * @param limit    每页条数
      * @return 接口列表（不含 responseBody）
      */
     public List<ApiDefinition> findAll(List<String> teamIds, String teamId, String groupId,
                                        String method, Boolean enabled, String keyword,
-                                       List<String> tagIds, String type, int offset, int limit) {
+                                       List<String> tagIds, String type,
+                                       String sortBy, String sortDir,
+                                       int offset, int limit) {
         StringBuilder sql = new StringBuilder();
         sql.append("SELECT a.id, a.team_id, a.group_id, a.type, a.name, a.description, a.method, a.path, ");
         sql.append("a.response_code, a.content_type, a.delay_ms, a.enabled, ");
@@ -214,7 +232,15 @@ public class ApiRepository {
             params.add(likePattern);
         }
 
-        sql.append("ORDER BY a.updated_at DESC LIMIT ? OFFSET ?");
+        // 排序：白名单查表 → 防 SQL 注入；不在白名单按 a.updated_at 兜底
+        String sortColumn = SORT_COLUMN_WHITELIST.get(sortBy);
+        if (sortColumn == null) {
+            sortColumn = "a.updated_at";
+        }
+        // 排序方向只允许 ASC / DESC（大小写不敏感），其他按 DESC 兜底
+        String sortDirection = "asc".equalsIgnoreCase(sortDir) ? "ASC" : "DESC";
+        sql.append("ORDER BY ").append(sortColumn).append(" ").append(sortDirection).append(" ");
+        sql.append("LIMIT ? OFFSET ?");
         params.add(limit);
         params.add(offset);
 
@@ -371,6 +397,99 @@ public class ApiRepository {
         jdbcTemplate.update(
                 "UPDATE api_definition SET enabled = ?, updated_at = ? WHERE id = ?",
                 enabled ? 1 : 0, now, id);
+    }
+
+    // ==================== 批量操作 ====================
+
+    /**
+     * 根据 ID 列表批量查询（用于权限预校验）
+     */
+    public List<ApiDefinition> findByIds(List<String> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return java.util.Collections.<ApiDefinition>emptyList();
+        }
+        StringBuilder sql = new StringBuilder("SELECT * FROM api_definition WHERE id IN (");
+        for (int i = 0; i < ids.size(); i++) {
+            sql.append(i > 0 ? ",?" : "?");
+        }
+        sql.append(")");
+        return jdbcTemplate.query(sql.toString(), ROW_MAPPER, ids.toArray());
+    }
+
+    /**
+     * 批量启用 / 禁用接口
+     *
+     * @param ids     接口 ID 列表
+     * @param enabled 新启用状态
+     * @param now     更新时间
+     * @return 受影响行数
+     */
+    public int batchUpdateEnabled(List<String> ids, boolean enabled, String now) {
+        if (ids == null || ids.isEmpty()) {
+            return 0;
+        }
+        StringBuilder sql = new StringBuilder("UPDATE api_definition SET enabled = ?, updated_at = ? WHERE id IN (");
+        Object[] params = new Object[ids.size() + 2];
+        params[0] = enabled ? 1 : 0;
+        params[1] = now;
+        for (int i = 0; i < ids.size(); i++) {
+            sql.append(i > 0 ? ",?" : "?");
+            params[i + 2] = ids.get(i);
+        }
+        sql.append(")");
+        return jdbcTemplate.update(sql.toString(), params);
+    }
+
+    /**
+     * 批量更新分组
+     *
+     * @param ids           接口 ID 列表
+     * @param targetGroupId 目标分组 ID（null 或空字符串表示置空）
+     * @param now           更新时间
+     * @return 受影响行数
+     */
+    public int batchUpdateGroup(List<String> ids, String targetGroupId, String now) {
+        if (ids == null || ids.isEmpty()) {
+            return 0;
+        }
+        // null 或空字符串统一存 NULL，与 clearGroupId 语义一致。
+        // 注意：直接给 SQLite JDBC 传 setObject(null) 会触发驱动 NPE，
+        // 因此用 SQL 字面量 NULL 拼接的方式分支处理。
+        boolean clearGroup = targetGroupId == null || targetGroupId.isEmpty();
+        StringBuilder sql = new StringBuilder("UPDATE api_definition SET group_id = ");
+        java.util.List<Object> params = new ArrayList<Object>();
+        if (clearGroup) {
+            sql.append("NULL");
+        } else {
+            sql.append("?");
+            params.add(targetGroupId);
+        }
+        sql.append(", updated_at = ? WHERE id IN (");
+        params.add(now);
+        for (int i = 0; i < ids.size(); i++) {
+            sql.append(i > 0 ? ",?" : "?");
+            params.add(ids.get(i));
+        }
+        sql.append(")");
+        return jdbcTemplate.update(sql.toString(), params.toArray());
+    }
+
+    /**
+     * 批量删除接口
+     *
+     * @param ids 接口 ID 列表
+     * @return 受影响行数
+     */
+    public int batchDeleteByIds(List<String> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return 0;
+        }
+        StringBuilder sql = new StringBuilder("DELETE FROM api_definition WHERE id IN (");
+        for (int i = 0; i < ids.size(); i++) {
+            sql.append(i > 0 ? ",?" : "?");
+        }
+        sql.append(")");
+        return jdbcTemplate.update(sql.toString(), ids.toArray());
     }
 
     /**

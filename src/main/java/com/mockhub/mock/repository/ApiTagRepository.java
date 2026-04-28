@@ -63,6 +63,24 @@ public class ApiTagRepository {
     }
 
     /**
+     * 批量删除多个接口的标签关联（批量删除接口时调用）
+     *
+     * @param apiIds 接口 ID 列表
+     * @return 受影响行数
+     */
+    public int batchDeleteByApiIds(List<String> apiIds) {
+        if (apiIds == null || apiIds.isEmpty()) {
+            return 0;
+        }
+        StringBuilder sql = new StringBuilder("DELETE FROM api_tag WHERE api_id IN (");
+        for (int i = 0; i < apiIds.size(); i++) {
+            sql.append(i > 0 ? ",?" : "?");
+        }
+        sql.append(")");
+        return jdbcTemplate.update(sql.toString(), apiIds.toArray());
+    }
+
+    /**
      * 删除标签的所有关联（删除标签时调用）
      *
      * @param tagId 标签 ID
