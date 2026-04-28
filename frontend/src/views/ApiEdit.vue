@@ -97,9 +97,14 @@
             </el-form-item>
           </el-col>
           <el-col :span="20">
-            <el-form-item label="路径" required>
+            <el-form-item label="路径" required :error="pathConflictError">
               <el-input v-model="form.path" placeholder="/api/user/{id}">
                 <template #prepend>/mock/{{ currentTeamIdentifier }}</template>
+                <template #suffix>
+                  <el-icon v-if="pathChecking" class="path-check-icon"><Loading /></el-icon>
+                  <el-icon v-else-if="pathConflictError" class="path-check-icon path-check-icon--error"><CircleClose /></el-icon>
+                  <el-icon v-else-if="form.path && pathChecked" class="path-check-icon path-check-icon--ok"><CircleCheck /></el-icon>
+                </template>
               </el-input>
             </el-form-item>
           </el-col>
@@ -108,9 +113,14 @@
         <!-- SOAP 模式下的路径 -->
         <el-row :gutter="20" v-if="form.type === 'SOAP'">
           <el-col :span="24">
-            <el-form-item label="路径" required>
+            <el-form-item label="路径" required :error="pathConflictError">
               <el-input v-model="form.path" placeholder="/ws/notice">
                 <template #prepend>/mock/{{ currentTeamIdentifier }}</template>
+                <template #suffix>
+                  <el-icon v-if="pathChecking" class="path-check-icon"><Loading /></el-icon>
+                  <el-icon v-else-if="pathConflictError" class="path-check-icon path-check-icon--error"><CircleClose /></el-icon>
+                  <el-icon v-else-if="form.path && pathChecked" class="path-check-icon path-check-icon--ok"><CircleCheck /></el-icon>
+                </template>
               </el-input>
             </el-form-item>
           </el-col>
@@ -290,12 +300,12 @@
  * 多返回体支持：REST 和 SOAP 都使用 ResponseTabs 组件管理多个返回体，
  * 每个返回体有独立的名称、状态码、Content-Type、延迟和响应体。
  */
-import { ref, computed, onMounted, reactive, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { ref, computed, onMounted, onBeforeUnmount, reactive, watch } from 'vue'
+import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAppStore } from '@/stores/app'
 import { useUserStore } from '@/stores/user'
-import { getApiDetail, createApi, updateApi } from '@/api/apis'
+import { getApiDetail, createApi, updateApi, checkApiPath } from '@/api/apis'
 import { getGroups, createGroup } from '@/api/groups'
 import { uploadWsdl } from '@/api/soap'
 import { getServerAddress } from '@/api/settings'
@@ -405,6 +415,107 @@ const serverAddress = ref('')
 
 // 全局响应头覆盖的可编辑列表（[{key, value}]）
 const headerOverrideList = ref([])
+
+// --- 路径冲突实时校验 ---
+// pathConflictError 非空时为冲突文案，保存时拦截。
+// 检测策略：teamId/method/path 任一变化后 debounce 400ms 调后端。
+// 后端按"同团队 + 同 method + 字面 path 完全相同"判定冲突，避免与 mock 路由匹配规则不一致带来心智负担。
+const pathConflictError = ref('')
+const pathChecking = ref(false)
+const pathChecked = ref(false) // 至少做过一次完整校验，用于决定是否显示绿色对勾
+let pathCheckTimer = null
+let pathCheckSeq = 0 // 顺序号，丢弃过期响应
+
+function schedulePathConflictCheck() {
+  pathConflictError.value = ''
+  if (pathCheckTimer) clearTimeout(pathCheckTimer)
+
+  // 关键字段不全：清空校验状态
+  if (!form.teamId || !form.method || !form.path || !form.path.trim()) {
+    pathChecking.value = false
+    pathChecked.value = false
+    return
+  }
+
+  pathChecking.value = true
+  const seq = ++pathCheckSeq
+  pathCheckTimer = setTimeout(async () => {
+    try {
+      const res = await checkApiPath({
+        teamId: form.teamId,
+        method: form.type === 'SOAP' ? 'POST' : form.method,
+        path: form.path.trim(),
+        excludeId: route.params.id || ''
+      })
+      // 过期响应丢弃（用户在等待期间又改了 path/method/team）
+      if (seq !== pathCheckSeq) return
+      if (res && res.conflict) {
+        pathConflictError.value = `已存在同路径接口：${res.name || '(未命名)'}`
+      } else {
+        pathConflictError.value = ''
+      }
+      pathChecked.value = true
+    } catch (e) {
+      // 校验失败不阻断保存，仅清空标记。后端 create/update 自带唯一性校验兜底
+      if (seq === pathCheckSeq) {
+        pathConflictError.value = ''
+        pathChecked.value = false
+      }
+    } finally {
+      if (seq === pathCheckSeq) {
+        pathChecking.value = false
+      }
+    }
+  }, 400)
+}
+
+watch(() => [form.teamId, form.method, form.path, form.type], () => {
+  schedulePathConflictCheck()
+})
+
+// --- 未保存离开提示 ---
+// 在初始化（loadApiDetail 完成 / 新建模式 onMounted）之后立即拍快照，
+// 之后任意修改都让 isDirty 变 true。保存成功后重置快照让用户能正常导航。
+const formSnapshot = ref('')
+const headerSnapshot = ref('')
+const skipLeaveGuard = ref(false) // 保存成功后绕过守卫
+
+function captureSnapshot() {
+  formSnapshot.value = JSON.stringify(form)
+  headerSnapshot.value = JSON.stringify(headerOverrideList.value)
+}
+
+const isDirty = computed(() => {
+  if (skipLeaveGuard.value) return false
+  return JSON.stringify(form) !== formSnapshot.value
+      || JSON.stringify(headerOverrideList.value) !== headerSnapshot.value
+})
+
+function beforeUnloadHandler(e) {
+  if (isDirty.value) {
+    // 现代浏览器忽略自定义文案，但仍需 preventDefault + returnValue 触发原生提示
+    e.preventDefault()
+    e.returnValue = ''
+    return ''
+  }
+}
+
+onBeforeRouteLeave(async (to, from, next) => {
+  if (!isDirty.value) {
+    next()
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      '当前接口有未保存的修改，确定离开吗？',
+      '未保存提示',
+      { confirmButtonText: '离开', cancelButtonText: '继续编辑', type: 'warning' }
+    )
+    next()
+  } catch (e) {
+    next(false)
+  }
+})
 
 // --- 计算属性 ---
 
@@ -738,6 +849,12 @@ async function handleSave() {
     return
   }
 
+  // 路径冲突预检：实时校验已经报警了，再兜一次防止用户绕过 watcher
+  if (pathConflictError.value) {
+    ElMessage.warning(pathConflictError.value)
+    return
+  }
+
   // v1.4.3 新增：多启用 + 条件匹配前置校验（前端提前拦截，后端仍做最终校验）
   const err = validateResponsesLocal()
   if (err) {
@@ -815,6 +932,8 @@ async function handleSave() {
       await createApi(payload)
       ElMessage.success('创建成功')
     }
+    // 保存成功后清空脏检测，避免离开时弹"未保存"提示
+    skipLeaveGuard.value = true
     // 刷新团队数据（apiCount 可能变化）
     appStore.loadTeams()
     router.push('/apis')
@@ -917,15 +1036,24 @@ onMounted(async () => {
   if (appStore.teams.length === 0) {
     await appStore.loadTeams()
   }
-  // 编辑模式：加载接口详情
+  // 编辑模式：加载接口详情，详情就位后再拍快照（避免把"加载中→加载完"误判为脏）
   if (isEdit.value) {
-    loadApiDetail()
+    await loadApiDetail()
   } else {
     // 新建模式：如果侧边栏已选中团队，默认选中
     if (appStore.currentTeamId) {
       form.teamId = appStore.currentTeamId
     }
   }
+  // 拍下初始快照，作为脏检测基线
+  captureSnapshot()
+  // 关浏览器/刷新时拦截
+  window.addEventListener('beforeunload', beforeUnloadHandler)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('beforeunload', beforeUnloadHandler)
+  if (pathCheckTimer) clearTimeout(pathCheckTimer)
 })
 </script>
 
@@ -978,6 +1106,28 @@ onMounted(async () => {
   margin: 0 0 20px 0;
   padding-bottom: 12px;
   border-bottom: 1px solid #F1F5F9;
+}
+
+// 路径输入框右侧的实时校验图标
+.path-check-icon {
+  font-size: 16px;
+
+  // 加载中：转圈
+  animation: path-check-spin 1.2s linear infinite;
+
+  &--ok {
+    color: #10B981;
+    animation: none;
+  }
+  &--error {
+    color: #EF4444;
+    animation: none;
+  }
+}
+
+@keyframes path-check-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 // Mock 地址展示
