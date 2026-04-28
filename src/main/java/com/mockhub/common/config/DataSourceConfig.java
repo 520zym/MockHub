@@ -155,8 +155,13 @@ public class DataSourceConfig {
                     recordSchemaVersion(conn, 1,
                             "初始基线：api_definition.description 列 + api_response 表 + REST/SOAP 响应迁移");
                 }
+                if (current < 2) {
+                    migrateV2(conn);
+                    recordSchemaVersion(conn, 2,
+                            "接口分组兜底：api_definition.group_id 列幂等添加（防御早期开发版升级）");
+                }
                 // 后续版本追加：
-                // if (current < 2) { migrateV2(conn); recordSchemaVersion(conn, 2, "..."); }
+                // if (current < 3) { migrateV3(conn); recordSchemaVersion(conn, 3, "..."); }
 
                 conn.commit();
                 log.info("DB 迁移完成");
@@ -234,6 +239,20 @@ public class DataSourceConfig {
 
         // 3. SOAP operation 响应数据迁移
         migrateSoapResponses(conn);
+    }
+
+    /**
+     * v2 迁移（接口分组兜底）：幂等添加 api_definition.group_id 列。
+     * <p>
+     * 背景：schema.sql 自首次引入即包含 api_group 表和 group_id 列，
+     * 所有 v1.x 用户库通过 CREATE TABLE IF NOT EXISTS 已经覆盖，
+     * 这里仅为防御从更早开发版升级的边缘场景。
+     * <p>
+     * 注：api_group 表无需迁移——CREATE TABLE IF NOT EXISTS 在 schema.sql 中
+     * 已能为老库创建该表；但既有 api_definition 表的 group_id 列必须靠 ALTER 补上。
+     */
+    private void migrateV2(Connection conn) throws SQLException {
+        addColumnIfNotExists(conn, "api_definition", "group_id", "TEXT");
     }
 
     /**
