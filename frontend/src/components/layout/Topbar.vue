@@ -1,6 +1,17 @@
 <template>
   <div class="topbar">
     <div class="topbar__left">
+      <!-- 侧边栏折叠/展开按钮（业界主流位置：顶部左上角，最显眼） -->
+      <div
+        class="topbar__sidebar-toggle"
+        :title="appStore.sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'"
+        @click="appStore.toggleSidebar"
+      >
+        <el-icon>
+          <Fold v-if="!appStore.sidebarCollapsed" />
+          <Expand v-else />
+        </el-icon>
+      </div>
       <h1 class="topbar__title">{{ pageTitle }}</h1>
     </div>
     <div class="topbar__right">
@@ -52,11 +63,13 @@ import { ref, computed, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'
+import { useAppStore } from '@/stores/app'
 import { changePassword } from '@/api/auth'
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
+const appStore = useAppStore()
 
 const pageTitle = computed(() => {
   return route.meta.title || 'MockHub'
@@ -130,6 +143,26 @@ async function handleChangePassword() {
   &__left {
     display: flex;
     align-items: center;
+    gap: 12px;
+  }
+
+  // 侧边栏折叠/展开按钮：顶栏左侧最显眼位置
+  &__sidebar-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    cursor: pointer;
+    color: #4A5568;
+    font-size: 18px;
+    transition: all 0.2s ease;
+
+    &:hover {
+      background: #F1F5F9;
+      color: #6366F1;
+    }
   }
 
   &__title {

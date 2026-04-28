@@ -5,6 +5,8 @@ import com.mockhub.common.model.Result;
 import com.mockhub.mock.model.dto.ApiDefinitionDTO;
 import com.mockhub.mock.model.dto.ApiDefinitionDetailVO;
 import com.mockhub.mock.model.dto.ApiDefinitionVO;
+import com.mockhub.mock.model.dto.BatchApiRequest;
+import com.mockhub.mock.model.dto.BatchApiResult;
 import com.mockhub.mock.model.entity.ApiDefinition;
 import com.mockhub.mock.service.ApiService;
 import org.slf4j.Logger;
@@ -54,6 +56,8 @@ public class ApiController {
      * @param keyword 按名称或路径模糊搜索（可选）
      * @param tagIds  按标签筛选，支持多个标签 ID 逗号分隔；命中任一标签即返回（可选）
      * @param type    按接口类型筛选（REST / SOAP，可选）
+     * @param sortBy  排序字段（updatedAt/createdAt/name/path，白名单外回退 updated_at；可选）
+     * @param sortDir 排序方向（asc/desc，默认 desc；可选）
      * @param page    页码，默认 1
      * @param size    每页条数，默认 20
      * @return 分页结果
@@ -67,6 +71,8 @@ public class ApiController {
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String tagIds,
             @RequestParam(required = false) String type,
+            @RequestParam(required = false) String sortBy,
+            @RequestParam(required = false) String sortDir,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size) {
         // 兼容单标签和多标签:前端以逗号分隔传递 tagIds
@@ -74,7 +80,7 @@ public class ApiController {
         if (tagIds != null && !tagIds.isEmpty()) {
             tagIdList = Arrays.asList(tagIds.split(","));
         }
-        PageResult<ApiDefinitionVO> result = apiService.list(teamId, groupId, method, enabled, keyword, tagIdList, type, page, size);
+        PageResult<ApiDefinitionVO> result = apiService.list(teamId, groupId, method, enabled, keyword, tagIdList, type, sortBy, sortDir, page, size);
         return Result.ok(result);
     }
 
@@ -153,5 +159,44 @@ public class ApiController {
     public Result<Map<String, Boolean>> toggle(@PathVariable String id) {
         boolean newEnabled = apiService.toggle(id);
         return Result.ok(Collections.singletonMap("enabled", newEnabled));
+    }
+
+    /**
+     * 批量操作接口（启用 / 禁用 / 删除 / 移动分组）。
+     * <p>
+     * 服务端按 IDs 涉及的团队逐个校验权限：任一团队无访问权抛 403。
+     *
+     * @param request 批量请求体
+     * @return 实际处理的接口数量 {"affected": N}
+     */
+    @PostMapping("/batch")
+    public Result<BatchApiResult> batch(@RequestBody BatchApiRequest request) {
+        BatchApiResult result = apiService.batch(
+                request.getAction(), request.getIds(), request.getTargetGroupId());
+        return Result.ok(result);
+    }
+
+    /**
+     * 路径冲突预检（编辑页实时校验用）。
+     * <p>
+     * 同团队 + 同 method + 字面量 path 相同视为冲突；excludeId 用于编辑场景排除自身。
+     *
+     * @param teamId    团队 ID
+     * @param method    HTTP 方法
+     * @param path      请求路径
+     * @param excludeId 编辑时排除自身（可选）
+     * @return {"conflict": true/false, "name": "冲突接口名"}
+     */
+    @GetMapping("/check-path")
+    public Result<Map<String, Object>> checkPath(
+            @RequestParam String teamId,
+            @RequestParam String method,
+            @RequestParam String path,
+            @RequestParam(required = false) String excludeId) {
+        String conflictName = apiService.findConflictingApiName(teamId, method, path, excludeId);
+        Map<String, Object> data = new java.util.HashMap<String, Object>();
+        data.put("conflict", conflictName != null);
+        data.put("name", conflictName);
+        return Result.ok(data);
     }
 }
