@@ -1,5 +1,9 @@
 import { defineStore } from 'pinia'
 
+/**
+ * 接口列表筛选条件持久化（页面跳转后回来仍保留筛选）。
+ * groupId：null 表示全部分组，'__none__' 表示仅"未分组"，其余值是分组 ID。
+ */
 export const useApiStore = defineStore('api', {
   state: () => ({
     listParams: {
@@ -8,6 +12,7 @@ export const useApiStore = defineStore('api', {
       enabled: null,
       tagIds: [],
       type: null,
+      groupId: null,
       page: 1,
       size: 20
     }
@@ -28,6 +33,7 @@ export const useApiStore = defineStore('api', {
         enabled: null,
         tagIds: [],
         type: null,
+        groupId: null,
         page: 1,
         size: 20
       }
