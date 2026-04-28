@@ -230,8 +230,12 @@ public class SoapService {
                     }
                 }
                 if (!exists) {
-                    operations.add(new WsdlParseResult.WsdlOperation(operationName, soapAction));
-                    log.debug("解析到 SOAP operation: name={}, soapAction={}", operationName, soapAction);
+                    WsdlParseResult.WsdlOperation newOp = new WsdlParseResult.WsdlOperation(operationName, soapAction);
+                    // 从 portType/operation 下提取 <wsdl:documentation>（v1.4.4）
+                    newOp.setDescription(extractDocumentation(doc, operationName));
+                    operations.add(newOp);
+                    log.debug("解析到 SOAP operation: name={}, soapAction={}, hasDoc={}",
+                            operationName, soapAction, newOp.getDescription() != null);
                 }
             }
         }
@@ -278,7 +282,9 @@ public class SoapService {
                 Element parent = (Element) soapOp.getParentNode();
                 String operationName = parent.getAttribute("name");
                 if (operationName != null && !operationName.isEmpty() && soapAction != null) {
-                    operations.add(new WsdlParseResult.WsdlOperation(operationName, soapAction));
+                    WsdlParseResult.WsdlOperation op = new WsdlParseResult.WsdlOperation(operationName, soapAction);
+                    op.setDescription(extractDocumentation(doc, operationName));
+                    operations.add(op);
                 }
             }
         }
@@ -294,11 +300,77 @@ public class SoapService {
                     Element parent = (Element) soapOp.getParentNode();
                     String operationName = parent.getAttribute("name");
                     if (operationName != null && !operationName.isEmpty() && soapAction != null) {
-                        operations.add(new WsdlParseResult.WsdlOperation(operationName, soapAction));
+                        WsdlParseResult.WsdlOperation op = new WsdlParseResult.WsdlOperation(operationName, soapAction);
+                        op.setDescription(extractDocumentation(doc, operationName));
+                        operations.add(op);
                     }
                 }
             }
         }
+    }
+
+    /**
+     * 从 WSDL 文档中查找指定 operation 的 &lt;wsdl:documentation&gt; 文本（v1.4.4 引入）。
+     * <p>
+     * 优先查 portType 下的 operation（标准做法），兜底查 binding 下的 operation。
+     * 文本会 trim 后返回；未找到或为空时返回 null。
+     *
+     * @param doc           已解析的 WSDL Document
+     * @param operationName 目标 operation 名
+     * @return documentation 文本，或 null
+     */
+    private String extractDocumentation(Document doc, String operationName) {
+        // 1. 先查 portType 下的 operation
+        String doc1 = findDocumentationInContainer(doc, "portType", operationName);
+        if (doc1 != null) {
+            return doc1;
+        }
+        // 2. 兜底查 binding 下的 operation
+        return findDocumentationInContainer(doc, "binding", operationName);
+    }
+
+    /**
+     * 在指定容器元素（portType 或 binding）下查找目标 operation 的 documentation 文本
+     */
+    private String findDocumentationInContainer(Document doc, String containerTag, String operationName) {
+        NodeList containers = doc.getElementsByTagNameNS("http://schemas.xmlsoap.org/wsdl/", containerTag);
+        if (containers.getLength() == 0) {
+            containers = doc.getElementsByTagName(containerTag);
+        }
+        for (int i = 0; i < containers.getLength(); i++) {
+            Element container = (Element) containers.item(i);
+            NodeList ops = container.getElementsByTagNameNS("http://schemas.xmlsoap.org/wsdl/", "operation");
+            if (ops.getLength() == 0) {
+                ops = container.getElementsByTagName("operation");
+            }
+            for (int j = 0; j < ops.getLength(); j++) {
+                Element op = (Element) ops.item(j);
+                if (!operationName.equals(op.getAttribute("name"))) {
+                    continue;
+                }
+                // 只查直接子元素的 documentation，避免嵌套 operation 干扰
+                NodeList children = op.getChildNodes();
+                for (int k = 0; k < children.getLength(); k++) {
+                    if (children.item(k) instanceof Element) {
+                        Element child = (Element) children.item(k);
+                        if ("documentation".equals(child.getLocalName())
+                                && "http://schemas.xmlsoap.org/wsdl/".equals(child.getNamespaceURI())) {
+                            String text = child.getTextContent();
+                            if (text != null && !text.trim().isEmpty()) {
+                                return text.trim();
+                            }
+                        } else if ("documentation".equals(child.getTagName())) {
+                            // 无命名空间兜底
+                            String text = child.getTextContent();
+                            if (text != null && !text.trim().isEmpty()) {
+                                return text.trim();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return null;
     }
 
     /**

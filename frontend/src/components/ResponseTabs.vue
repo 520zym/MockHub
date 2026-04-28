@@ -184,15 +184,64 @@
           </el-popover>
         </div>
 
-        <!-- Monaco 编辑器 -->
+        <!-- v1.4.4 性能：响应体超过 MONACO_INLINE_MAX（500KB）时降级为只读预览 + 全文编辑 Dialog，
+             避免大响应体在长页面内嵌 Monaco 时内部重排拖累父页面滚动。 -->
         <MonacoEditor
+          v-if="!isOversize"
           ref="editorRef"
           v-model="currentResponse.responseBody"
           :language="currentEditorLanguage"
           :dynamic-variables="combinedVariablesForEditor"
           class="response-editor"
         />
+        <div v-else class="oversize-preview">
+          <div class="oversize-meta">
+            <el-icon><WarningFilled /></el-icon>
+            响应体较大（{{ formatSize(responseBodySize) }}），已启用降级预览以保证页面流畅。
+            点击下方按钮进入全屏编辑。
+          </div>
+          <pre class="oversize-head">{{ oversizePreviewText }}</pre>
+          <div class="oversize-actions">
+            <el-button type="primary" @click="openFullEditor">
+              <el-icon><EditPen /></el-icon>
+              全文编辑
+            </el-button>
+          </div>
+        </div>
       </el-form>
+
+      <!-- 全文编辑 Dialog：使用草稿副本避免编辑过程中实时写回触发父页面重渲染 -->
+      <el-dialog
+        v-model="fullEditorVisible"
+        :title="fullEditorTitle"
+        fullscreen
+        :close-on-click-modal="false"
+        :close-on-press-escape="false"
+        destroy-on-close
+        class="full-editor-dialog"
+      >
+        <div class="full-editor-toolbar">
+          <el-button size="small" @click="formatDraftBody">
+            <el-icon><MagicStick /></el-icon>
+            格式化
+          </el-button>
+          <span class="full-editor-meta">
+            大小：{{ formatSize((fullEditorDraft || '').length) }}
+          </span>
+        </div>
+        <MonacoEditor
+          v-if="fullEditorVisible"
+          ref="fullEditorRef"
+          v-model="fullEditorDraft"
+          :language="currentEditorLanguage"
+          :dynamic-variables="combinedVariablesForEditor"
+          class="full-editor-monaco"
+        />
+        <template #footer>
+          <el-button @click="cancelFullEditor">取消</el-button>
+          <el-button type="primary" @click="confirmFullEditor">保存</el-button>
+        </template>
+      </el-dialog>
 
       <!-- 选择自定义变量分组的小对话框 -->
       <el-dialog
@@ -269,7 +318,7 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import {
   Plus, Check, MagicStick, Upload, Select, Delete, ArrowDown, Search,
-  StarFilled, CircleClose
+  StarFilled, CircleClose, WarningFilled, EditPen
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import MonacoEditor from './MonacoEditor.vue'
@@ -364,12 +413,37 @@ const pickingVariable = ref(null)
 const editorRef = ref(null)
 
 /**
- * 在 Monaco 编辑器光标位置插入动态变量占位符
+ * v1.4.4 性能：响应体超过 MONACO_INLINE_MAX 时启用降级路径：
+ *
+ * - 内嵌区只渲染预览卡（首 2KB + 总大小），不挂 Monaco → 不会在父页面里因
+ *   Monaco 内部重排拖累滚动
+ * - 用户点击"全文编辑"弹 fullscreen Dialog，Dialog 内挂 Monaco 并绑定
+ *   fullEditorDraft（草稿副本），避免实时写回父页面触发重渲染
+ * - Dialog 设 destroy-on-close，关闭后 Monaco 实例被销毁释放内存
+ */
+const MONACO_INLINE_MAX = 500 * 1024 // 500KB，超过走降级路径
+const fullEditorVisible = ref(false)
+const fullEditorDraft = ref('')
+const fullEditorRef = ref(null)
+
+/**
+ * 在当前激活的 Monaco 编辑器光标位置插入动态变量占位符
+ * v1.4.4：优先用 Dialog 内的 fullEditorRef，回退到内嵌 editorRef。
+ *
  * @param {string} name 变量名，如 'timestamp'
  */
 function insertVariable(name) {
-  if (!editorRef.value) return
-  editorRef.value.insertAtCursor(`{{${name}}}`)
+  const activeRef = (fullEditorVisible.value && fullEditorRef.value)
+      ? fullEditorRef.value
+      : editorRef.value
+  if (!activeRef) {
+    // 超大模式下内嵌 Monaco 不挂载，也未打开 Dialog：提示用户先进入全文编辑
+    if (isOversize.value) {
+      ElMessage.info('响应体较大，请先点击"全文编辑"进入 Dialog 后再插入变量')
+    }
+    return
+  }
+  activeRef.insertAtCursor(`{{${name}}}`)
   // 插入后清空搜索关键字，下次打开 popover 重新看到完整列表
   variableSearchKeyword.value = ''
 }
@@ -467,6 +541,90 @@ const currentEditorLanguage = computed(() => {
   const typeMap = { json: 'json', xml: 'xml', text: 'plaintext' }
   return typeMap[manualContentType.value] || 'json'
 })
+
+/** v1.4.4：当前响应体字节数（字符长度近似） */
+const responseBodySize = computed(() => {
+  return (currentResponse.value && currentResponse.value.responseBody)
+    ? currentResponse.value.responseBody.length : 0
+})
+
+/** v1.4.4：是否超过内嵌 Monaco 阈值，超过则走降级预览 + Dialog 全屏编辑 */
+const isOversize = computed(() => responseBodySize.value > MONACO_INLINE_MAX)
+
+/** v1.4.4：超大响应体的预览文本（首 2KB + 截断提示） */
+const oversizePreviewText = computed(() => {
+  const body = (currentResponse.value && currentResponse.value.responseBody) || ''
+  if (body.length <= 2048) return body
+  return body.slice(0, 2048) + '\n\n…（点击"全文编辑"查看 / 编辑完整内容）'
+})
+
+/** v1.4.4：全屏编辑 Dialog 的标题 */
+const fullEditorTitle = computed(() => {
+  const respName = currentResponse.value ? (currentResponse.value.name || 'Response') : ''
+  return respName ? `编辑响应体 · ${respName}` : '编辑响应体'
+})
+
+/** v1.4.4：人性化格式化字节数 */
+function formatSize(bytes) {
+  if (!bytes) return '0 B'
+  const units = ['B', 'KB', 'MB']
+  let i = 0
+  let v = bytes
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024
+    i++
+  }
+  return (i === 0 ? v : v.toFixed(1)) + ' ' + units[i]
+}
+
+/** v1.4.4：打开全屏编辑 Dialog；把当前响应体复制到草稿 */
+function openFullEditor() {
+  if (!currentResponse.value) return
+  fullEditorDraft.value = currentResponse.value.responseBody || ''
+  fullEditorVisible.value = true
+}
+
+/** v1.4.4：保存草稿回写到当前响应体 */
+function confirmFullEditor() {
+  if (currentResponse.value) {
+    currentResponse.value.responseBody = fullEditorDraft.value
+    emit('update:modelValue', [...responses.value])
+  }
+  fullEditorVisible.value = false
+  fullEditorDraft.value = ''
+}
+
+/** v1.4.4：取消全屏编辑；草稿丢弃，原值保留 */
+function cancelFullEditor() {
+  fullEditorVisible.value = false
+  fullEditorDraft.value = ''
+}
+
+/** v1.4.4：Dialog 内的格式化，目标是 fullEditorDraft（不是父组件的 responseBody） */
+function formatDraftBody() {
+  const body = (fullEditorDraft.value || '').trim()
+  if (!body) return
+  const type = props.operationName ? 'xml' : manualContentType.value
+  if (type === 'json') {
+    try {
+      fullEditorDraft.value = JSON.stringify(JSON.parse(body), null, 2)
+    } catch (e) {
+      ElMessage.warning('当前内容不是有效 JSON，无法格式化')
+    }
+  } else if (type === 'xml') {
+    if (!/<[^>]+>/.test(body)) {
+      ElMessage.warning('当前内容不是有效 XML，无法格式化')
+      return
+    }
+    try {
+      fullEditorDraft.value = formatXml(body)
+    } catch (e) {
+      ElMessage.warning('当前内容不是有效 XML，无法格式化')
+    }
+  } else {
+    ElMessage.info('纯文本无需格式化')
+  }
+}
 
 // 自动识别结果变化时，同步更新手动选中的格式标签
 // 场景：用户贴入/改写响应体后，detectedContentType 实时变化，需要让格式标签跟随识别结果
@@ -832,6 +990,63 @@ function handleUploadFile(uploadFile) {
 /* Monaco 编辑器 */
 .response-editor {
   height: 350px;
+}
+
+/* v1.4.4：超大响应体降级预览卡 */
+.oversize-preview {
+  border: 2px dashed #F1F5F9;
+  border-radius: 10px;
+  padding: 16px;
+  background: #F8FAFC;
+}
+
+.oversize-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #B45309;
+  margin-bottom: 12px;
+}
+
+.oversize-head {
+  max-height: 200px;
+  overflow: auto;
+  margin: 0 0 12px 0;
+  padding: 12px;
+  background: #fff;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  font-family: 'SFMono-Regular', Consolas, Menlo, monospace;
+  font-size: 12px;
+  color: #1B2559;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.oversize-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* v1.4.4：全屏 Dialog 内的编辑器 */
+.full-editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.full-editor-meta {
+  font-size: 12px;
+  color: #A3AED0;
+}
+
+.full-editor-monaco {
+  /* 填充 Dialog 剩余高度：Dialog 默认内容区有自己的滚动容器，
+     这里显式指定高度保证 Monaco 正确 layout */
+  height: calc(100vh - 180px);
+  min-height: 400px;
 }
 
 /* 底部操作栏 */

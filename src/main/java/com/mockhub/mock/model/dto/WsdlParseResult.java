@@ -58,6 +58,14 @@ public class WsdlParseResult {
          */
         private String suggestedResponseBody;
 
+        /**
+         * 从 WSDL 的 &lt;wsdl:documentation&gt; 元素提取的接口描述（v1.4.4 引入）。
+         * <p>
+         * 合并策略与 suggestedResponseBody 一致：仅当 SoapOperation.description 为空时
+         * 才使用此值，已有描述不会被覆盖。可为 null（WSDL 未提供 documentation）。
+         */
+        private String description;
+
         public WsdlOperation() {
         }
 
@@ -94,6 +102,14 @@ public class WsdlParseResult {
 
         public void setSuggestedResponseBody(String suggestedResponseBody) {
             this.suggestedResponseBody = suggestedResponseBody;
+        }
+
+        public String getDescription() {
+            return description;
+        }
+
+        public void setDescription(String description) {
+            this.description = description;
         }
     }
 }
