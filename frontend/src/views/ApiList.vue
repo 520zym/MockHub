@@ -27,6 +27,25 @@
           <el-option label="SOAP" value="SOAP" />
         </el-select>
 
+        <!-- 分组筛选：选择特定分组、未分组或全部 -->
+        <!-- 未选中团队时禁用：跨团队分组语义混乱 -->
+        <el-select
+          v-model="groupFilter"
+          :placeholder="appStore.currentTeamId ? '分组筛选' : '请先选择团队'"
+          clearable
+          :disabled="!appStore.currentTeamId"
+          class="toolbar__select"
+          @change="handleGroupChange"
+        >
+          <el-option label="未分组" value="__none__" />
+          <el-option
+            v-for="g in availableGroups"
+            :key="g.id"
+            :label="g.name"
+            :value="g.id"
+          />
+        </el-select>
+
         <!-- HTTP 方法筛选 -->
         <el-select
           v-model="methodFilter"
@@ -81,6 +100,11 @@
       </div>
 
       <div class="toolbar__actions">
+        <!-- 分组管理按钮 -->
+        <el-button @click="handleOpenGroupManager">
+          <el-icon><Folder /></el-icon>
+          管理分组
+        </el-button>
         <!-- 标签管理按钮 -->
         <el-button @click="handleOpenTagManager">
           <el-icon><PriceTag /></el-icon>
@@ -151,6 +175,16 @@
 
         <!-- 接口名称列 -->
         <el-table-column prop="name" label="名称" min-width="180" show-overflow-tooltip />
+
+        <!-- 分组列：未分组接口显示 "-" -->
+        <el-table-column label="分组" min-width="100" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span v-if="row.groupId" class="group-name">
+              {{ groupNameMap[row.groupId] || '已删除' }}
+            </span>
+            <span v-else class="no-group">-</span>
+          </template>
+        </el-table-column>
 
         <!-- 标签列 -->
         <el-table-column label="标签" min-width="120" show-overflow-tooltip>
@@ -229,6 +263,13 @@
         />
       </div>
     </div>
+
+    <!-- 分组管理弹窗 -->
+    <GroupManageDialog
+      v-model="groupManagerVisible"
+      :team-id="appStore.currentTeamId"
+      @changed="handleGroupChanged"
+    />
 
     <!-- 标签管理抽屉 -->
     <el-drawer
@@ -369,10 +410,12 @@ import { useApiStore } from '@/stores/api'
 import { useUserStore } from '@/stores/user'
 import { getApis, deleteApi, copyApi, toggleApi, importApis, exportApis } from '@/api/apis'
 import { getTags, createTag, updateTag, deleteTag } from '@/api/tags'
+import { getGroups } from '@/api/groups'
 import { getServerAddress } from '@/api/settings'
 import HttpMethodTag from '@/components/HttpMethodTag.vue'
 import ApiTypeTag from '@/components/ApiTypeTag.vue'
 import TeamTag from '@/components/TeamTag.vue'
+import GroupManageDialog from '@/components/GroupManageDialog.vue'
 
 const router = useRouter()
 const appStore = useAppStore()
@@ -398,6 +441,8 @@ const enabledFilter = ref(apiStore.listParams.enabled)
 const typeFilter = ref(apiStore.listParams.type)
 // 多标签筛选：数组形式,兼容 store 里可能残留的旧字段
 const tagFilter = ref(Array.isArray(apiStore.listParams.tagIds) ? [...apiStore.listParams.tagIds] : [])
+// 分组筛选：null=全部，'__none__'=未分组，其余=分组 ID
+const groupFilter = ref(apiStore.listParams.groupId)
 const currentPage = ref(apiStore.listParams.page)
 const pageSize = ref(apiStore.listParams.size)
 
@@ -405,6 +450,19 @@ const httpMethods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
 
 // 当前可选标签（基于当前团队筛选加载）
 const availableTags = ref([])
+
+// 当前可选分组（基于当前团队加载，用于筛选下拉和表格分组列名映射）
+const availableGroups = ref([])
+
+// 分组 ID → 分组名 映射，给表格列展示用
+const groupNameMap = computed(() => {
+  const map = {}
+  availableGroups.value.forEach(g => { map[g.id] = g.name })
+  return map
+})
+
+// 分组管理弹窗显示状态
+const groupManagerVisible = ref(false)
 
 // --- 服务器地址（用于拼接 Mock URL） ---
 const serverAddress = ref('')
@@ -568,6 +626,12 @@ async function loadApis() {
     if (tagFilter.value && tagFilter.value.length) {
       params.tagIds = tagFilter.value.join(',')
     }
+    // 分组筛选：'__none__' 转为空字符串传给后端(后端语义：空串 = 未分组)
+    if (groupFilter.value === '__none__') {
+      params.groupId = ''
+    } else if (groupFilter.value) {
+      params.groupId = groupFilter.value
+    }
 
     const res = await getApis(params)
     apiList.value = res.items || []
@@ -577,6 +641,23 @@ async function loadApis() {
     total.value = 0
   } finally {
     loading.value = false
+  }
+}
+
+/**
+ * 加载当前团队的分组列表（用于筛选下拉和表格分组列名映射）
+ * 未选团队时清空：跨团队分组语义混乱，前端不做聚合
+ */
+async function loadGroups() {
+  if (!appStore.currentTeamId) {
+    availableGroups.value = []
+    return
+  }
+  try {
+    const list = await getGroups(appStore.currentTeamId)
+    availableGroups.value = Array.isArray(list) ? list : []
+  } catch (e) {
+    availableGroups.value = []
   }
 }
 
@@ -636,6 +717,42 @@ function handleTagChange(val) {
   loadApis()
 }
 
+/** 分组筛选变化：null=全部，'__none__'=未分组，其余=分组 ID */
+function handleGroupChange(val) {
+  apiStore.setParam('groupId', val || null)
+  currentPage.value = 1
+  loadApis()
+}
+
+/** 打开分组管理弹窗，未选团队时自动取用户所属第一个团队（与标签管理逻辑一致） */
+function handleOpenGroupManager() {
+  if (!appStore.currentTeamId) {
+    if (userStore.userTeamIds.length > 0) {
+      appStore.setFilter(userStore.userTeamIds[0])
+    } else if (appStore.teams.length > 0) {
+      appStore.setFilter(appStore.teams[0].id)
+    } else {
+      ElMessage.warning('请先选择一个团队')
+      return
+    }
+  }
+  groupManagerVisible.value = true
+}
+
+/** 分组弹窗中发生 CRUD 后回调：重新加载分组列表和接口列表 */
+async function handleGroupChanged() {
+  await loadGroups()
+  // 当前分组可能已被删除，校正筛选
+  if (groupFilter.value && groupFilter.value !== '__none__') {
+    const stillExists = availableGroups.value.some(g => g.id === groupFilter.value)
+    if (!stillExists) {
+      groupFilter.value = null
+      apiStore.setParam('groupId', null)
+    }
+  }
+  loadApis()
+}
+
 function handlePageChange(page) {
   apiStore.setParam('page', page)
   loadApis()
@@ -649,14 +766,20 @@ function handleSizeChange(size) {
   loadApis()
 }
 
-// 监听侧边栏团队筛选变化，自动刷新列表和标签
+// 监听侧边栏团队筛选变化，自动刷新列表/标签/分组
+// 团队切换后，原选中的分组 ID 已不属于当前团队，需重置避免错误筛选
 watch(
   () => appStore.currentTeamId,
   () => {
     currentPage.value = 1
     apiStore.setParam('page', 1)
+    if (groupFilter.value) {
+      groupFilter.value = null
+      apiStore.setParam('groupId', null)
+    }
     loadApis()
     loadTags()
+    loadGroups()
   }
 )
 
@@ -852,6 +975,7 @@ function responseCodeClass(code) {
 onMounted(async () => {
   loadApis()
   loadTags()
+  loadGroups()
   // 加载服务器地址用于拼接 Mock URL
   try {
     const data = await getServerAddress()
@@ -945,6 +1069,11 @@ onMounted(async () => {
 .group-name {
   font-size: 13px;
   color: #4A5568;
+}
+
+.no-group {
+  font-size: 13px;
+  color: #B0B7C3;
 }
 
 // 状态码颜色

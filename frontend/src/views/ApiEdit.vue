@@ -55,6 +55,38 @@
 
         </el-row>
 
+        <!-- 分组（可选）：选择已有分组或就地新建；切换团队后会重置并重新加载 -->
+        <el-row :gutter="20">
+          <el-col :span="8">
+            <el-form-item label="分组">
+              <el-select
+                v-model="form.groupId"
+                placeholder="未分组"
+                clearable
+                :disabled="!form.teamId"
+                style="width: 100%"
+                @change="handleGroupSelectChange"
+              >
+                <el-option
+                  v-for="g in availableGroups"
+                  :key="g.id"
+                  :label="g.name"
+                  :value="g.id"
+                />
+                <!-- 就地新建（仅团队管理员/超管可见） -->
+                <el-option
+                  v-if="canCreateGroup"
+                  key="__new__"
+                  label="+ 新建分组..."
+                  value="__new__"
+                >
+                  <span style="color: #6366F1; font-weight: 500;">+ 新建分组...</span>
+                </el-option>
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+
         <!-- REST 模式下的方法 + 路径 -->
         <el-row :gutter="20" v-if="form.type === 'REST'">
           <el-col :span="4">
@@ -258,11 +290,13 @@
  * 多返回体支持：REST 和 SOAP 都使用 ResponseTabs 组件管理多个返回体，
  * 每个返回体有独立的名称、状态码、Content-Type、延迟和响应体。
  */
-import { ref, computed, onMounted, reactive } from 'vue'
+import { ref, computed, onMounted, reactive, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAppStore } from '@/stores/app'
+import { useUserStore } from '@/stores/user'
 import { getApiDetail, createApi, updateApi } from '@/api/apis'
+import { getGroups, createGroup } from '@/api/groups'
 import { uploadWsdl } from '@/api/soap'
 import { getServerAddress } from '@/api/settings'
 import RichTextEditor from '@/components/RichTextEditor.vue'
@@ -274,8 +308,17 @@ import TagInput from '@/components/TagInput.vue'
 const route = useRoute()
 const router = useRouter()
 const appStore = useAppStore()
+const userStore = useUserStore()
 
 const httpMethods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
+
+// 当前团队的分组列表（form.teamId 变化时重新加载）
+const availableGroups = ref([])
+
+/** 当前用户在所选团队是否有创建分组的权限（团队管理员/超管） */
+const canCreateGroup = computed(() => {
+  return form.teamId ? userStore.isTeamAdmin(form.teamId) : false
+})
 
 // 是否为编辑模式
 const isEdit = computed(() => !!route.params.id)
@@ -327,6 +370,7 @@ const form = reactive({
   name: '',
   description: '',
   teamId: '',
+  groupId: null,
   method: 'GET',
   path: '',
   // 旧字段保留用于后端兼容
@@ -404,6 +448,7 @@ async function loadApiDetail() {
       name: data.name || '',
       description: data.description || '',
       teamId: data.teamId || '',
+      groupId: data.groupId || null,
       method: data.method || 'GET',
       path: data.path || '',
       responseCode: data.responseCode || 200,
@@ -749,6 +794,7 @@ async function handleSave() {
       name: form.name,
       description: form.description,
       teamId: form.teamId,
+      groupId: form.groupId || null,
       method: form.type === 'SOAP' ? 'POST' : form.method,
       path: form.path,
       responseCode: responseCode,
@@ -781,6 +827,81 @@ async function handleSave() {
 
 function goBack() {
   router.push('/apis')
+}
+
+// --- 分组（基本信息卡片中的下拉） ---
+
+/**
+ * 加载当前 form.teamId 所属团队的分组列表。
+ * 团队未选中时清空，避免显示其他团队的分组。
+ */
+async function loadGroups() {
+  if (!form.teamId) {
+    availableGroups.value = []
+    return
+  }
+  try {
+    const list = await getGroups(form.teamId)
+    availableGroups.value = Array.isArray(list) ? list : []
+  } catch (e) {
+    availableGroups.value = []
+  }
+}
+
+/**
+ * 监听团队变化：切换团队时分组归属失效，需要重置 groupId 并重新拉取该团队的分组列表。
+ * 编辑模式下加载详情时也会触发此 watch（teamId 由空变为有值），自动加载分组。
+ */
+watch(
+  () => form.teamId,
+  (newTeamId, oldTeamId) => {
+    // 团队真正切换时（非首次填充）才重置 groupId，避免编辑详情加载时把已有 groupId 清掉
+    if (oldTeamId && newTeamId !== oldTeamId) {
+      form.groupId = null
+    }
+    loadGroups()
+  }
+)
+
+/**
+ * 分组下拉选择变化：选中"+ 新建分组..."时弹出输入框就地创建。
+ * 仅团队管理员/超管能看到该选项。
+ */
+async function handleGroupSelectChange(val) {
+  if (val !== '__new__') return
+
+  // 立即把 select 值还原为 null（弹窗未确认前不应保留 sentinel）
+  form.groupId = null
+
+  try {
+    const { value: name } = await ElMessageBox.prompt('请输入分组名', '新建分组', {
+      confirmButtonText: '创建',
+      cancelButtonText: '取消',
+      inputPattern: /^.{1,30}$/,
+      inputErrorMessage: '分组名长度需在 1-30 字符之间',
+      inputValidator: (v) => {
+        const trimmed = (v || '').trim()
+        if (!trimmed) return '分组名不能为空'
+        if (availableGroups.value.some(g => g.name === trimmed)) return '已存在同名分组'
+        return true
+      }
+    })
+
+    const trimmed = name.trim()
+    // sortOrder 取最大值 + 1，新分组排在末尾
+    const maxOrder = availableGroups.value.reduce((m, g) => Math.max(m, g.sortOrder || 0), 0)
+    const created = await createGroup({
+      teamId: form.teamId,
+      name: trimmed,
+      sortOrder: maxOrder + 1
+    })
+    ElMessage.success('分组已创建')
+    // 加入本地列表并选中
+    availableGroups.value.push(created)
+    form.groupId = created.id
+  } catch (e) {
+    // 用户取消或创建失败：保持 groupId 为 null，不弹错误（拦截器已处理）
+  }
 }
 
 // --- 初始化 ---

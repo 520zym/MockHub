@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>覆盖 DataSourceConfig#executeMigrations 在四类启动场景下的正确性：
  * <ul>
  *   <li>case1：全新库——schema.sql 已建好所有表（含 description 列与 api_response 表），
- *       无任何业务数据。迁移应幂等跳过、写入 schema_version=1。</li>
+ *       无任何业务数据。迁移应幂等跳过、写入 schema_version=2（v1+v2 都已应用）。</li>
  *   <li>case2：v1.4.3 发版老库——api_definition 缺 description 列，api_response 表虽存在
  *       但为空（由 schema.sql 的 IF NOT EXISTS 建出）。迁移应真实执行建列 + REST/SOAP
  *       数据迁入，并写入 schema_version=1。</li>
@@ -182,9 +182,11 @@ class SchemaVersionMigrationTest {
 
         runMigration();
 
-        assertEquals(1, readSchemaVersion(), "全新库应记录 schema_version=1");
+        assertEquals(2, readSchemaVersion(), "全新库应记录 schema_version=2（v1+v2）");
         assertTrue(columnExists("api_definition", "description"),
                 "description 列应已存在（全新库 schema.sql 已建出）");
+        assertTrue(columnExists("api_definition", "group_id"),
+                "group_id 列应已被 v2 迁移幂等添加");
         assertEquals(0, countApiResponse(), "全新库无数据，api_response 应为空");
     }
 
@@ -198,10 +200,12 @@ class SchemaVersionMigrationTest {
 
         assertTrue(columnExists("api_definition", "description"),
                 "api_definition.description 列应在迁移后存在");
+        assertTrue(columnExists("api_definition", "group_id"),
+                "api_definition.group_id 列应被 v2 迁移幂等添加（兜底早期开发版）");
         // REST 1 条 + SOAP 1 个 operation = 共 2 条 api_response
         assertEquals(2, countApiResponse(),
                 "REST 响应 + SOAP operation 响应应被迁入 api_response 表");
-        assertEquals(1, readSchemaVersion(), "迁移完成后 schema_version 应记为 1");
+        assertEquals(2, readSchemaVersion(), "迁移完成后 schema_version 应记为 2（v1+v2）");
     }
 
     // ---------- case3：已跑过 soap-mock-enhancement 的本地库 ----------
@@ -224,7 +228,7 @@ class SchemaVersionMigrationTest {
         runMigration();
 
         assertEquals(1, countApiResponse(), "已迁移的数据不应被重复插入");
-        assertEquals(1, readSchemaVersion());
+        assertEquals(2, readSchemaVersion());
     }
 
     // ---------- case4：二次启动幂等 ----------
@@ -239,8 +243,8 @@ class SchemaVersionMigrationTest {
 
         assertEquals(firstRunResponseCount, countApiResponse(),
                 "二次迁移不应新增 api_response 数据");
-        assertEquals(1, readSchemaVersion());
-        assertEquals(1, countSchemaVersionRows(),
-                "schema_version 应只有一条 version=1 的记录");
+        assertEquals(2, readSchemaVersion());
+        assertEquals(2, countSchemaVersionRows(),
+                "schema_version 应有两条记录：version=1 与 version=2，二次执行不重复写入");
     }
 }
