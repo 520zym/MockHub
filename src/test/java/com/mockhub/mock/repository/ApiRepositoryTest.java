@@ -198,4 +198,111 @@ class ApiRepositoryTest {
         assertEquals(3, rows.size());
         assertEquals("id1", rows.get(0).getId()); // updated_at DESC
     }
+
+    // ============ 批量操作（v1.4.5 新增） ============
+
+    @Test
+    void findByIds_returnsMatched_skipsMissing() {
+        List<ApiDefinition> rows = repository.findByIds(java.util.Arrays.asList("id1", "id2", "not-exist"));
+        assertEquals(2, rows.size());
+    }
+
+    @Test
+    void findByIds_emptyOrNull_returnsEmpty() {
+        assertEquals(0, repository.findByIds(Collections.<String>emptyList()).size());
+        assertEquals(0, repository.findByIds(null).size());
+    }
+
+    @Test
+    void batchUpdateEnabled_disablesAll_andUpdatesTimestamp() {
+        int affected = repository.batchUpdateEnabled(
+                java.util.Arrays.asList("id1", "id2"), false, "2026-04-28T20:00:00");
+        assertEquals(2, affected);
+
+        Integer disabled = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM api_definition WHERE id IN ('id1','id2') AND enabled = 0",
+                Integer.class);
+        assertNotNull(disabled);
+        assertEquals(2, (int) disabled);
+
+        // id3 不应被影响
+        Integer id3Enabled = jdbc.queryForObject(
+                "SELECT enabled FROM api_definition WHERE id = 'id3'", Integer.class);
+        assertNotNull(id3Enabled);
+        assertEquals(1, (int) id3Enabled);
+    }
+
+    @Test
+    void batchUpdateEnabled_emptyIds_returnsZero() {
+        int affected = repository.batchUpdateEnabled(
+                Collections.<String>emptyList(), true, "2026-04-28T20:00:00");
+        assertEquals(0, affected);
+    }
+
+    @Test
+    void batchUpdateGroup_setsTargetGroup() {
+        int affected = repository.batchUpdateGroup(
+                java.util.Arrays.asList("id1", "id2"), "group-A", "2026-04-28T20:00:00");
+        assertEquals(2, affected);
+
+        Integer count = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM api_definition WHERE group_id = 'group-A'", Integer.class);
+        assertNotNull(count);
+        assertEquals(2, (int) count);
+    }
+
+    @Test
+    void batchUpdateGroup_emptyTarget_setsNull() {
+        // 先设值，再用空字符串清空
+        repository.batchUpdateGroup(
+                java.util.Arrays.asList("id1"), "group-A", "2026-04-28T20:00:00");
+        int affected = repository.batchUpdateGroup(
+                java.util.Arrays.asList("id1"), "", "2026-04-28T20:01:00");
+        assertEquals(1, affected);
+
+        Integer nullCount = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM api_definition WHERE id = 'id1' AND group_id IS NULL",
+                Integer.class);
+        assertNotNull(nullCount);
+        assertEquals(1, (int) nullCount);
+    }
+
+    @Test
+    void batchUpdateGroup_nullTarget_setsNull() {
+        int affected = repository.batchUpdateGroup(
+                java.util.Arrays.asList("id1"), null, "2026-04-28T20:00:00");
+        assertEquals(1, affected);
+
+        Integer nullCount = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM api_definition WHERE id = 'id1' AND group_id IS NULL",
+                Integer.class);
+        assertNotNull(nullCount);
+        assertEquals(1, (int) nullCount);
+    }
+
+    @Test
+    void batchDeleteByIds_removesRows() {
+        int affected = repository.batchDeleteByIds(java.util.Arrays.asList("id1", "id3"));
+        assertEquals(2, affected);
+
+        Integer remaining = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM api_definition", Integer.class);
+        assertNotNull(remaining);
+        assertEquals(1, (int) remaining);
+        // 剩下的应该是 id2
+        String remainingId = jdbc.queryForObject(
+                "SELECT id FROM api_definition", String.class);
+        assertEquals("id2", remainingId);
+    }
+
+    @Test
+    void batchDeleteByIds_emptyIds_returnsZero() {
+        int affected = repository.batchDeleteByIds(Collections.<String>emptyList());
+        assertEquals(0, affected);
+        // 数据没动
+        Integer count = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM api_definition", Integer.class);
+        assertNotNull(count);
+        assertEquals(3, (int) count);
+    }
 }

@@ -38,10 +38,12 @@
 - [x] **REST Mock** -- 支持 GET / POST / PUT / DELETE / PATCH，自定义状态码、响应头、响应体
 - [x] **SOAP Mock** -- 上传 WSDL 自动解析 Operation，独立配置每个操作的返回 XML
 - [x] **团队隔离** -- 多团队独立管理接口，Mock 路径按团队标识隔离，互不干扰
+- [x] **接口分组** -- 团队下可按业务维度建分组管理接口，支持拖拽排序，列表按分组筛选
 - [x] **路径参数** -- 支持 `/api/user/{id}` 风格路径匹配，响应体中通过 `{{path.id}}` 引用参数值
 - [x] **动态变量** -- 内置 `{{timestamp}}`、`{{uuid}}`、`{{date}}`、`{{datetime}}`、`{{random_int}}`；编辑器提供「插入变量」按钮和 `{{` 智能补全
 - [x] **自定义动态变量** -- 团队级维护命名值集合，支持按分组组织；响应体 `{{pet}}` 从全部值随机挑、`{{pet.mammal}}` 从指定分组随机挑；解析失败 fail-fast 返回统一错误格式
 - [x] **多返回体** -- 单个接口可配置多个响应体，支持切换活跃返回体
+- [x] **多场景响应** -- 多个返回体可配置匹配条件（请求参数 / Body / Header），命中即返回，未命中走兜底
 - [x] **接口描述** -- 支持富文本描述接口用途和说明
 - [x] **Monaco Editor** -- 内置代码编辑器，JSON / XML / 纯文本语法高亮和格式化
 - [x] **大文本支持** -- 响应体支持 5~6 MB 大文本
@@ -54,14 +56,25 @@
 - [x] **CORS 支持** -- Mock 接口默认允许跨域，可通过参数关闭
 - [x] **SQLite 存储** -- 嵌入式单文件数据库，无需安装，易于备份
 
+### 使用体验
+
+- [x] **批量操作** -- 列表多选后批量启用 / 禁用 / 删除 / 移动到分组，跨页选择保留
+- [x] **自定义排序** -- 表头点击按修改时间 / 名称 / 路径升降序，状态持久化
+- [x] **固定操作列** -- 启用开关与操作按钮固定右侧，横向滚动也始终可见
+- [x] **侧边栏折叠** -- 顶栏左上角一键折叠 / 展开侧边栏，让出更多列表空间
+- [x] **路径冲突预检** -- 编辑路径时实时校验，命中已存在接口立刻在输入框旁报警，避免提交后才报错
+- [x] **未保存提示** -- 编辑页有未保存修改时关闭 / 切走 / 刷新均会拦截，二次确认后离开
+- [x] **禁用状态可视化** -- 列表中禁用接口整行降透明度，hover 时恢复
+
 ### 计划中 (Roadmap)
 
-- [ ] **多场景响应** -- 根据请求参数 / Body 匹配不同响应（条件路由）
-- [ ] **响应延迟** -- 模拟接口耗时，支持固定延迟和随机延迟区间
+- [ ] **响应延迟随机区间** -- 当前支持固定延迟，未来支持随机区间模拟网络抖动
 - [ ] **请求校验** -- 校验请求参数是否符合预期格式，不匹配时返回自定义错误
 - [ ] **接口文档生成** -- 基于 Mock 定义自动生成简易接口文档
 - [ ] **Swagger / OpenAPI 导入** -- 从 Swagger JSON/YAML 一键导入接口定义
 - [ ] **Postman Collection 导入** -- 从 Postman 导出文件导入
+- [ ] **复制为 curl** -- 列表行支持一键复制 curl 命令，方便对接调试
+- [ ] **接口调用统计** -- 列表展示每个接口的命中次数和最近一次调用时间
 
 > 欢迎提交 [Issue](../../issues) 反馈需求或 Bug！
 
@@ -151,7 +164,7 @@ GET http://localhost:8080/mock/FE/api/user/info
 示例：
 
 ```bash
-java -jar mockhub-1.4.3.jar \
+java -jar mockhub-1.4.4.jar \
   --server.port=9090 \
   --data.path=D:/mockhub/data \
   --log.retain.mode=days \
@@ -215,7 +228,7 @@ mvn clean package -DskipTests
   <name>MockHub</name>
   <description>MockHub 接口模拟服务</description>
   <executable>java</executable>
-  <arguments>-jar mockhub-1.4.3.jar --server.port=8080 --data.path=./data</arguments>
+  <arguments>-jar mockhub-1.4.4.jar --server.port=8080 --data.path=./data</arguments>
   <workingdirectory>%BASE%</workingdirectory>
   <logpath>%BASE%\logs</logpath>
   <log mode="roll-by-size">

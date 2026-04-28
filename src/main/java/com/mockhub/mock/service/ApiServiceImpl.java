@@ -12,6 +12,7 @@ import com.mockhub.mock.model.dto.ApiDefinitionDetailVO;
 import com.mockhub.mock.model.dto.ApiDefinitionVO;
 import com.mockhub.mock.model.dto.ApiMatchResult;
 import com.mockhub.mock.model.dto.ApiResponseDTO;
+import com.mockhub.mock.model.dto.BatchApiResult;
 import com.mockhub.mock.model.entity.ApiDefinition;
 import com.mockhub.mock.model.entity.ApiResponse;
 import com.mockhub.mock.model.entity.Tag;
@@ -496,6 +497,104 @@ public class ApiServiceImpl implements ApiService {
         log.info("切换接口状态: id={}, enabled={}", id, newEnabled);
 
         return newEnabled;
+    }
+
+    @Override
+    public BatchApiResult batch(String action, List<String> ids, String targetGroupId) {
+        if (ids == null || ids.isEmpty()) {
+            return new BatchApiResult(0);
+        }
+        if (action == null || action.isEmpty()) {
+            throw new BizException(40400, "缺少 action 参数");
+        }
+
+        // 1. 一次性把目标接口加载出来（用于权限校验和审计日志）
+        List<ApiDefinition> targets = apiRepository.findByIds(ids);
+        if (targets.isEmpty()) {
+            log.warn("批量操作未匹配到任何接口: action={}, ids={}", action, ids);
+            return new BatchApiResult(0);
+        }
+
+        // 2. 按团队聚合一次去重，避免同一团队多次重复校验
+        java.util.Set<String> teamIds = new java.util.HashSet<String>();
+        for (ApiDefinition api : targets) {
+            teamIds.add(api.getTeamId());
+        }
+        for (String tid : teamIds) {
+            permissionChecker.checkTeamAccess(tid);
+        }
+
+        // 3. 收集 targets 实际命中的 id 列表（已存在的，用于 SQL 批处理）
+        List<String> validIds = new ArrayList<String>(targets.size());
+        for (ApiDefinition api : targets) {
+            validIds.add(api.getId());
+        }
+
+        String now = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss").format(new Date());
+        int affected;
+
+        if ("enable".equals(action)) {
+            affected = apiRepository.batchUpdateEnabled(validIds, true, now);
+            log.info("批量启用接口: count={}", affected);
+        } else if ("disable".equals(action)) {
+            affected = apiRepository.batchUpdateEnabled(validIds, false, now);
+            log.info("批量禁用接口: count={}", affected);
+        } else if ("delete".equals(action)) {
+            // 先清理标签关联和返回体，再删主表
+            apiTagRepository.batchDeleteByApiIds(validIds);
+            apiResponseRepository.batchDeleteByApiIds(validIds);
+            affected = apiRepository.batchDeleteByIds(validIds);
+            log.info("批量删除接口: count={}", affected);
+        } else if ("move-group".equals(action)) {
+            affected = apiRepository.batchUpdateGroup(validIds, targetGroupId, now);
+            log.info("批量移动分组: count={}, targetGroupId={}", affected, targetGroupId);
+        } else {
+            throw new BizException(40400, "不支持的批量操作: " + action);
+        }
+
+        // 4. 一条汇总操作日志（按团队分别记录，方便按团队查日志）
+        for (String tid : teamIds) {
+            int teamCount = 0;
+            for (ApiDefinition api : targets) {
+                if (tid.equals(api.getTeamId())) {
+                    teamCount++;
+                }
+            }
+            recordOperation("BATCH_" + action.toUpperCase().replace('-', '_'),
+                    "API", null, null,
+                    "批量" + actionDisplayName(action) + " " + teamCount + " 个接口", tid);
+        }
+
+        return new BatchApiResult(affected);
+    }
+
+    @Override
+    public String findConflictingApiName(String teamId, String method, String path, String excludeId) {
+        if (teamId == null || teamId.isEmpty() || method == null || path == null || path.isEmpty()) {
+            return null;
+        }
+        // 校验团队访问权限：避免被人当成枚举接口
+        permissionChecker.checkTeamAccess(teamId);
+
+        List<ApiDefinition> matches = apiRepository.findByTeamIdAndPathAndMethod(teamId, path, method);
+        for (ApiDefinition api : matches) {
+            if (excludeId != null && excludeId.equals(api.getId())) {
+                continue;
+            }
+            return api.getName();
+        }
+        return null;
+    }
+
+    /**
+     * 把 action 翻成展示名（只用于操作日志的 detail 字段）
+     */
+    private String actionDisplayName(String action) {
+        if ("enable".equals(action)) return "启用";
+        if ("disable".equals(action)) return "禁用";
+        if ("delete".equals(action)) return "删除";
+        if ("move-group".equals(action)) return "移动分组";
+        return action;
     }
 
     // ==================== 内部方法 ====================

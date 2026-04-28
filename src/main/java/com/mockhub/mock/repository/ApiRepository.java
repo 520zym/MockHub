@@ -399,6 +399,99 @@ public class ApiRepository {
                 enabled ? 1 : 0, now, id);
     }
 
+    // ==================== 批量操作 ====================
+
+    /**
+     * 根据 ID 列表批量查询（用于权限预校验）
+     */
+    public List<ApiDefinition> findByIds(List<String> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return java.util.Collections.<ApiDefinition>emptyList();
+        }
+        StringBuilder sql = new StringBuilder("SELECT * FROM api_definition WHERE id IN (");
+        for (int i = 0; i < ids.size(); i++) {
+            sql.append(i > 0 ? ",?" : "?");
+        }
+        sql.append(")");
+        return jdbcTemplate.query(sql.toString(), ROW_MAPPER, ids.toArray());
+    }
+
+    /**
+     * 批量启用 / 禁用接口
+     *
+     * @param ids     接口 ID 列表
+     * @param enabled 新启用状态
+     * @param now     更新时间
+     * @return 受影响行数
+     */
+    public int batchUpdateEnabled(List<String> ids, boolean enabled, String now) {
+        if (ids == null || ids.isEmpty()) {
+            return 0;
+        }
+        StringBuilder sql = new StringBuilder("UPDATE api_definition SET enabled = ?, updated_at = ? WHERE id IN (");
+        Object[] params = new Object[ids.size() + 2];
+        params[0] = enabled ? 1 : 0;
+        params[1] = now;
+        for (int i = 0; i < ids.size(); i++) {
+            sql.append(i > 0 ? ",?" : "?");
+            params[i + 2] = ids.get(i);
+        }
+        sql.append(")");
+        return jdbcTemplate.update(sql.toString(), params);
+    }
+
+    /**
+     * 批量更新分组
+     *
+     * @param ids           接口 ID 列表
+     * @param targetGroupId 目标分组 ID（null 或空字符串表示置空）
+     * @param now           更新时间
+     * @return 受影响行数
+     */
+    public int batchUpdateGroup(List<String> ids, String targetGroupId, String now) {
+        if (ids == null || ids.isEmpty()) {
+            return 0;
+        }
+        // null 或空字符串统一存 NULL，与 clearGroupId 语义一致。
+        // 注意：直接给 SQLite JDBC 传 setObject(null) 会触发驱动 NPE，
+        // 因此用 SQL 字面量 NULL 拼接的方式分支处理。
+        boolean clearGroup = targetGroupId == null || targetGroupId.isEmpty();
+        StringBuilder sql = new StringBuilder("UPDATE api_definition SET group_id = ");
+        java.util.List<Object> params = new ArrayList<Object>();
+        if (clearGroup) {
+            sql.append("NULL");
+        } else {
+            sql.append("?");
+            params.add(targetGroupId);
+        }
+        sql.append(", updated_at = ? WHERE id IN (");
+        params.add(now);
+        for (int i = 0; i < ids.size(); i++) {
+            sql.append(i > 0 ? ",?" : "?");
+            params.add(ids.get(i));
+        }
+        sql.append(")");
+        return jdbcTemplate.update(sql.toString(), params.toArray());
+    }
+
+    /**
+     * 批量删除接口
+     *
+     * @param ids 接口 ID 列表
+     * @return 受影响行数
+     */
+    public int batchDeleteByIds(List<String> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return 0;
+        }
+        StringBuilder sql = new StringBuilder("DELETE FROM api_definition WHERE id IN (");
+        for (int i = 0; i < ids.size(); i++) {
+            sql.append(i > 0 ? ",?" : "?");
+        }
+        sql.append(")");
+        return jdbcTemplate.update(sql.toString(), ids.toArray());
+    }
+
     /**
      * 查询团队下所有接口（导出用，含 responseBody）
      */
