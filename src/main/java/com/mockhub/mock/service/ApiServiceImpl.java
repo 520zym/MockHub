@@ -63,6 +63,7 @@ public class ApiServiceImpl implements ApiService {
     private final PermissionChecker permissionChecker;
     private final ObjectMapper objectMapper;
     private final LogService logService;
+    private final com.mockhub.system.repository.UserRepository userRepository;
 
     public ApiServiceImpl(ApiRepository apiRepository,
                           ApiResponseRepository apiResponseRepository,
@@ -71,7 +72,8 @@ public class ApiServiceImpl implements ApiService {
                           TeamService teamService,
                           PermissionChecker permissionChecker,
                           ObjectMapper objectMapper,
-                          LogService logService) {
+                          LogService logService,
+                          com.mockhub.system.repository.UserRepository userRepository) {
         this.apiRepository = apiRepository;
         this.apiResponseRepository = apiResponseRepository;
         this.apiTagRepository = apiTagRepository;
@@ -80,6 +82,7 @@ public class ApiServiceImpl implements ApiService {
         this.permissionChecker = permissionChecker;
         this.objectMapper = objectMapper;
         this.logService = logService;
+        this.userRepository = userRepository;
     }
 
     /**
@@ -190,7 +193,8 @@ public class ApiServiceImpl implements ApiService {
     @Override
     public PageResult<ApiDefinitionVO> list(String teamId, String groupId, String method,
                                             Boolean enabled, String keyword, List<String> tagIds,
-                                            String type, int page, int size) {
+                                            String type, String sortBy, String sortDir,
+                                            int page, int size) {
         // 确定当前用户可访问的团队范围
         List<String> teamIds = null;
         if (!SecurityContextUtil.isSuperAdmin()) {
@@ -207,13 +211,30 @@ public class ApiServiceImpl implements ApiService {
         }
 
         int offset = (page - 1) * size;
-        List<ApiDefinition> apis = apiRepository.findAll(teamIds, teamId, groupId, method, enabled, keyword, tagIds, type, offset, size);
+        List<ApiDefinition> apis = apiRepository.findAll(teamIds, teamId, groupId, method, enabled, keyword, tagIds, type, sortBy, sortDir, offset, size);
         long total = apiRepository.count(teamIds, teamId, groupId, method, enabled, keyword, tagIds, type);
+
+        // 一次性查全量用户，构 id → 显示名 映射，避免 N+1 查询。
+        // 用户表通常很小（< 1000 条），全表扫的成本远低于 N 次单查。
+        java.util.Map<String, String> userIdToName = new java.util.HashMap<String, String>();
+        try {
+            for (com.mockhub.system.model.entity.User u : userRepository.findAll()) {
+                String displayName = u.getDisplayName() != null && !u.getDisplayName().isEmpty()
+                        ? u.getDisplayName() : u.getUsername();
+                userIdToName.put(u.getId(), displayName);
+            }
+        } catch (Exception e) {
+            log.warn("加载用户字典失败，列表的 createdByName 将为空", e);
+        }
 
         // 转换为 VO，填充关联数据
         List<ApiDefinitionVO> voList = new ArrayList<ApiDefinitionVO>();
         for (ApiDefinition api : apis) {
             ApiDefinitionVO vo = convertToVO(api);
+            // 回填创建人显示名
+            if (api.getCreatedBy() != null) {
+                vo.setCreatedByName(userIdToName.get(api.getCreatedBy()));
+            }
             voList.add(vo);
         }
 

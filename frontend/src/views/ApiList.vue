@@ -136,7 +136,9 @@
         v-loading="loading"
         style="width: 100%"
         row-class-name="api-row"
+        :default-sort="defaultSort"
         @selection-change="handleSelectionChange"
+        @sort-change="handleSortChange"
       >
         <!-- 多选框列 -->
         <el-table-column type="selection" width="40" />
@@ -166,21 +168,35 @@
           </template>
         </el-table-column>
 
-        <!-- 路径列 -->
-        <el-table-column label="路径" min-width="200" show-overflow-tooltip>
+        <!-- 路径列（可排序） -->
+        <el-table-column
+          prop="path"
+          label="路径"
+          min-width="200"
+          show-overflow-tooltip
+          sortable="custom"
+          :sort-orders="['ascending', 'descending']"
+        >
           <template #default="{ row }">
             <span class="api-path">{{ row.path }}</span>
           </template>
         </el-table-column>
 
-        <!-- 接口名称列 -->
-        <el-table-column prop="name" label="名称" min-width="180" show-overflow-tooltip />
+        <!-- 接口名称列（可排序） -->
+        <el-table-column
+          prop="name"
+          label="名称"
+          min-width="180"
+          show-overflow-tooltip
+          sortable="custom"
+          :sort-orders="['ascending', 'descending']"
+        />
 
-        <!-- 分组列：未分组接口显示 "-" -->
+        <!-- 分组列：未分组 / 跨团队找不到分组 / 分组已删除——一律显示 "-" -->
         <el-table-column label="分组" min-width="100" show-overflow-tooltip>
           <template #default="{ row }">
-            <span v-if="row.groupId" class="group-name">
-              {{ groupNameMap[row.groupId] || '已删除' }}
+            <span v-if="groupNameMap[row.groupId]" class="group-name">
+              {{ groupNameMap[row.groupId] }}
             </span>
             <span v-else class="no-group">-</span>
           </template>
@@ -211,8 +227,35 @@
           </template>
         </el-table-column>
 
-        <!-- 启用开关列 -->
-        <el-table-column label="启用" width="65" align="center">
+        <!--
+          修改时间列：完整格式 yyyy-MM-dd HH:mm:ss，可排序。
+          位置：刻意放在"创建人"列之前，让"创建人"做与 fixed-right 区的缓冲列。
+          这样 sortable 列不与 fixed 列毗邻，规避 EP 已知的 fixed-right 表头双重渲染 bug
+          （sortable 排序图标导致 fixed-right 容器克隆表头时裁切不干净，文字会穿透叠字）。
+        -->
+        <el-table-column
+          prop="updatedAt"
+          label="修改时间"
+          width="170"
+          align="center"
+          sortable="custom"
+          :sort-orders="['descending', 'ascending']"
+        >
+          <template #default="{ row }">
+            <span class="time-cell">{{ formatFull(row.updatedAt) }}</span>
+          </template>
+        </el-table-column>
+
+        <!-- 创建人列（兼任 fixed-right 区前的缓冲列） -->
+        <el-table-column label="创建人" width="100" align="center" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span v-if="row.createdByName">{{ row.createdByName }}</span>
+            <span v-else class="no-creator">-</span>
+          </template>
+        </el-table-column>
+
+        <!-- 启用开关列（固定右侧，与操作列一起常驻视野） -->
+        <el-table-column label="启用" width="65" align="center" fixed="right">
           <template #default="{ row }">
             <el-switch
               :model-value="row.enabled"
@@ -223,8 +266,8 @@
           </template>
         </el-table-column>
 
-        <!-- 操作列（全图标按钮，hover 显示 title） -->
-        <el-table-column label="操作" width="200" align="center" class-name="action-col">
+        <!-- 操作列（固定在右侧，横滚时也始终可见） -->
+        <el-table-column label="操作" width="200" align="center" class-name="action-col" fixed="right">
           <template #default="{ row }">
             <div class="action-buttons" @click.stop>
               <el-button
@@ -416,6 +459,7 @@ import HttpMethodTag from '@/components/HttpMethodTag.vue'
 import ApiTypeTag from '@/components/ApiTypeTag.vue'
 import TeamTag from '@/components/TeamTag.vue'
 import GroupManageDialog from '@/components/GroupManageDialog.vue'
+import { formatFull } from '@/utils/time'
 
 const router = useRouter()
 const appStore = useAppStore()
@@ -463,6 +507,15 @@ const groupNameMap = computed(() => {
 
 // 分组管理弹窗显示状态
 const groupManagerVisible = ref(false)
+
+/**
+ * el-table 的 default-sort：把 store 中的 sortBy/sortDir 转成 el-table 期望的 {prop, order}。
+ * order 取值：'ascending' / 'descending' / null。
+ */
+const defaultSort = computed(() => ({
+  prop: apiStore.listParams.sortBy || 'updatedAt',
+  order: apiStore.listParams.sortDir === 'asc' ? 'ascending' : 'descending'
+}))
 
 // --- 服务器地址（用于拼接 Mock URL） ---
 const serverAddress = ref('')
@@ -632,6 +685,13 @@ async function loadApis() {
     } else if (groupFilter.value) {
       params.groupId = groupFilter.value
     }
+    // 排序参数（后端有白名单兜底，前端传错值不会出错，只会回退默认）
+    if (apiStore.listParams.sortBy) {
+      params.sortBy = apiStore.listParams.sortBy
+    }
+    if (apiStore.listParams.sortDir) {
+      params.sortDir = apiStore.listParams.sortDir
+    }
 
     const res = await getApis(params)
     apiList.value = res.items || []
@@ -737,6 +797,22 @@ function handleOpenGroupManager() {
     }
   }
   groupManagerVisible.value = true
+}
+
+/**
+ * 表头排序变化：order = 'ascending' / 'descending' / null（取消排序）。
+ * null 时回退到默认排序（updatedAt desc），避免后端无序返回引起列表抖动。
+ */
+function handleSortChange({ prop, order }) {
+  if (!order) {
+    apiStore.setParam('sortBy', 'updatedAt')
+    apiStore.setParam('sortDir', 'desc')
+  } else {
+    apiStore.setParam('sortBy', prop)
+    apiStore.setParam('sortDir', order === 'ascending' ? 'asc' : 'desc')
+  }
+  currentPage.value = 1
+  loadApis()
 }
 
 /** 分组弹窗中发生 CRUD 后回调：重新加载分组列表和接口列表 */
@@ -1042,6 +1118,33 @@ onMounted(async () => {
   :deep(.el-table) {
     border-radius: 16px;
   }
+
+  // 防御 EP 已知 bug：横向滚动时 fixed-right 列与左侧普通列表头/单元格叠字
+  // 原因：EP 2.x 用 position: sticky 实现 fixed 列，sticky 单元格本身需有不透明背景
+  // 才能挡住下方滚过来的内容；个别情况（特别是表头）背景被清掉或 z-index 不够，
+  // 导致下层列文字穿透。这里统一加白底 + 高 z-index。
+  :deep(.el-table) {
+    th.el-table-fixed-column--right,
+    td.el-table-fixed-column--right {
+      background-color: #FFFFFF !important;
+      z-index: 3 !important;
+    }
+    // 第一根 fixed-right 列左侧补一条细分隔线，明确边界（避免被相邻列覆盖时分不清）
+    th.el-table-fixed-column--right.is-first-column::before,
+    td.el-table-fixed-column--right.is-first-column::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: -1px;
+      width: 1px;
+      background-color: #EBEEF5;
+    }
+    // 表头排序图标列降级层级，避免它在水平滚动期间漂到 fixed 区上方
+    th.el-table__cell.is-sortable {
+      z-index: 1;
+    }
+  }
 }
 
 // 表格行样式
@@ -1072,6 +1175,19 @@ onMounted(async () => {
 }
 
 .no-group {
+  font-size: 13px;
+  color: #B0B7C3;
+}
+
+// 修改时间列：完整时间显示，等宽数字字体让多行对齐
+.time-cell {
+  font-size: 12px;
+  color: #6B7280;
+  font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
+  white-space: nowrap;
+}
+
+.no-creator {
   font-size: 13px;
   color: #B0B7C3;
 }
