@@ -5,17 +5,20 @@
 # ============================================
 
 APP_NAME="MockHub"
-JAR_NAME="mockhub-1.4.0.jar"
-APP_PORT=8080
+APP_PORT=18080
 PID_FILE="mockhub.pid"
 
 # 切换到脚本所在目录
 cd "$(dirname "$0")"
 
+# 自动定位当前目录下的 mockhub jar 包，避免硬编码版本号导致升级后旧服务无法停止
+# 取最新修改的一个（按 mtime 倒序）；多版本时应由用户清理
+JAR_NAME=$(ls -t mockhub-*.jar 2>/dev/null | head -n 1)
+
 # 检查 jar 是否存在
 check_jar() {
-    if [ ! -f "$JAR_NAME" ]; then
-        echo "[错误] 未找到 $JAR_NAME，请确认文件在当前目录"
+    if [ -z "$JAR_NAME" ] || [ ! -f "$JAR_NAME" ]; then
+        echo "[错误] 当前目录未找到 mockhub-*.jar，请确认 jar 与脚本同级"
         exit 1
     fi
 }

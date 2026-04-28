@@ -1,7 +1,8 @@
 # MockHub 应用配置
 
 server:
-  port: 8080
+  # 默认 18080，与启动脚本 mockhub.sh / mockhub.bat 保持一致；8080 容易被占用
+  port: 18080
   tomcat:
     # 表单提交大小限制，支持 5~6MB 的大文本响应体
     max-http-form-post-size: 10MB

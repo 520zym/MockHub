@@ -8,15 +8,19 @@ setlocal
 :: ============================================
 
 set APP_NAME=MockHub
-set JAR_NAME=mockhub-1.4.0.jar
-set APP_PORT=8080
+set APP_PORT=18080
 
 :: 切换到脚本所在目录（确保所有文件都在 jar 同级目录）
 cd /d "%~dp0"
 
-:: 检查 jar 是否存在
-if not exist "%JAR_NAME%" (
-    echo [错误] 未找到 %JAR_NAME%，请确认文件在当前目录
+:: 自动定位当前目录下的 mockhub jar 包，避免硬编码版本号导致升级后旧服务无法停止
+:: 取最新修改的一个；如有多个版本应由用户清理
+set JAR_NAME=
+for /f "delims=" %%f in ('dir /b /o-d mockhub-*.jar 2^>nul') do (
+    if not defined JAR_NAME set JAR_NAME=%%f
+)
+if "%JAR_NAME%"=="" (
+    echo [错误] 当前目录未找到 mockhub-*.jar，请确认 jar 与脚本同级
     pause
     exit /b 1
 )
@@ -54,7 +58,8 @@ echo   4. 查看状态
 echo   0. 退出
 echo  =============================
 echo.
-set /p choice=请选择操作 [0-4]:
+:: 用引号包裹整个 prompt 并在末尾留空格，避免部分 cmd 环境下光标盖在 [0-4] 之上
+set /p "choice=请选择操作 [0-4]: "
 if "%choice%"=="1" goto :start
 if "%choice%"=="2" goto :stop
 if "%choice%"=="3" goto :restart
