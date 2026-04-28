@@ -127,7 +127,7 @@ mockhub.bat start
 
 ### 3. 访问
 
-浏览器打开 `http://localhost:8080`，使用默认账号登录：
+浏览器打开 `http://localhost:18080`，使用默认账号登录：
 
 - 用户名：`admin`
 - 密码：`admin123`
@@ -145,7 +145,7 @@ http://{host}:{port}/mock/{teamIdentifier}/your/api/path
 例如团队标识为 `FE`，配置了 `GET /api/user/info`，则 Mock 地址为：
 
 ```
-GET http://localhost:8080/mock/FE/api/user/info
+GET http://localhost:18080/mock/FE/api/user/info
 ```
 
 ---
@@ -154,7 +154,7 @@ GET http://localhost:8080/mock/FE/api/user/info
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
-| `--server.port` | `8080` | 服务端口 |
+| `--server.port` | `18080` | 服务端口 |
 | `--data.path` | `./data` | 数据目录路径（SQLite 数据库、WSDL 文件） |
 | `--log.retain.mode` | `count` | 日志保留模式：`count`（按条数）或 `days`（按天数） |
 | `--log.retain.count` | `1000` | `count` 模式下保留的最大条数 |
@@ -196,7 +196,7 @@ npm install
 npm run dev
 ```
 
-前端开发服务器默认运行在 `http://localhost:5173`，API 请求会代理到后端 `http://localhost:8080`。
+前端开发服务器默认运行在 `http://localhost:5173`，API 请求会代理到后端 `http://localhost:18080`。
 
 ### 生产构建
 
@@ -228,7 +228,7 @@ mvn clean package -DskipTests
   <name>MockHub</name>
   <description>MockHub 接口模拟服务</description>
   <executable>java</executable>
-  <arguments>-jar mockhub-1.4.4.jar --server.port=8080 --data.path=./data</arguments>
+  <arguments>-jar mockhub-1.4.4.jar --server.port=18080 --data.path=./data</arguments>
   <workingdirectory>%BASE%</workingdirectory>
   <logpath>%BASE%\logs</logpath>
   <log mode="roll-by-size">
