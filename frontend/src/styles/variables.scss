@@ -31,6 +31,9 @@
   --el-border-color-light: #F1F5F9;
   --el-border-color-lighter: #F8FAFC;
 
+  // 扁平化卡片专用：极淡 hairline 边框（rgba 形式以便在不同背景下都看得见但不抢戏）
+  --app-border-color-hairline: rgba(15, 23, 42, 0.06);
+
   // ========== 背景 ==========
   --el-bg-color: #FFFFFF;
   --el-bg-color-page: transparent;
@@ -38,8 +41,10 @@
   --el-fill-color-lighter: #FAFBFC;
 
   // ========== 阴影 ==========
-  --el-box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
-  --el-box-shadow-light: 0 1px 6px rgba(0, 0, 0, 0.03);
+  // 扁平化设计：信息卡片不再使用阴影，下面两个 Element Plus 内部变量置空
+  // 浮层（Dialog/Drawer/Message/Dropdown）的阴影在各自组件覆盖中单独保留
+  --el-box-shadow: none;
+  --el-box-shadow-light: none;
 }
 
 // ========== 自定义设计变量 ==========
@@ -57,16 +62,21 @@ $text-regular: #4A5568;
 $text-secondary: #A3AED0;
 $text-placeholder: #CBD5E0;
 
-$bg-gradient: linear-gradient(135deg, #f5f7fa 0%, #e8ecf4 50%, #e0e7f1 100%);
+// 扁平化：页面底色统一为中性浅灰（替代原柔和渐变），与卡片白底形成色差
+$bg-page: #F5F5F7;
 
-$radius-card: 16px;
+$radius-card: 12px;
 $radius-button: 10px;
 $radius-input: 10px;
 $radius-capsule: 20px;
 
-$shadow-card: 0 2px 12px rgba(0, 0, 0, 0.04);
-$shadow-card-hover: 0 4px 20px rgba(0, 0, 0, 0.08);
+// 扁平化设计：信息卡片不再使用阴影，仅浮层（Dialog/Drawer 等）保留
+$shadow-card: none;
+$shadow-card-hover: none;
 $shadow-dialog: 0 8px 40px rgba(0, 0, 0, 0.08);
+
+// 扁平化卡片的极淡 hairline 边框（与 :root 中 --app-border-color-hairline 一致）
+$border-hairline: rgba(15, 23, 42, 0.06);
 
 $sidebar-width: 220px;
 $sidebar-collapsed-width: 64px;

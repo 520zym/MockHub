@@ -136,7 +136,8 @@ function handleSelectTeam(team) {
   height: 100vh;
   width: 220px;
   background: #FFFFFF;
-  box-shadow: 2px 0 12px rgba(0, 0, 0, 0.03);
+  // 扁平化：去阴影，改用极淡右边框区分侧栏与内容区
+  border-right: 1px solid var(--app-border-color-hairline);
   display: flex;
   flex-direction: column;
   transition: width 0.3s ease;

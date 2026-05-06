@@ -401,7 +401,7 @@ onMounted(async () => {
   &.active {
     background: #ffffff;
     color: #6366F1;
-    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.06);
+    // 扁平化：active tab 不再用阴影漂浮，靠白色背景与外层灰底对比
   }
 }
 
@@ -410,10 +410,10 @@ onMounted(async () => {
 }
 
 // ========== 日志卡片 ==========
+// 扁平化：去阴影 + 去边框，靠页面底色与白色卡片色差区分；圆角收紧到 12px
 .log-card {
   background: #ffffff;
-  border-radius: 16px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+  border-radius: 12px;
   padding: 20px;
 }
 
