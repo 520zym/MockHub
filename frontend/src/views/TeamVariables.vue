@@ -685,18 +685,13 @@ watch(currentVariableId, () => {
   min-height: 0;
 }
 
+/* 扁平化：去阴影 + 去边框，靠页面底色与白色卡片色差区分；圆角收紧到 12px */
 .panel {
   background: #fff;
-  border-radius: 16px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+  border-radius: 12px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  transition: box-shadow 0.2s ease;
-}
-
-.panel:hover {
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
 }
 
 .panel__header {
