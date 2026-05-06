@@ -69,6 +69,13 @@ const routes = [
         name: 'Settings',
         component: () => import('@/views/Settings.vue'),
         meta: { title: '全局设置', requiresSuperAdmin: true }
+      },
+      {
+        path: 'stats',
+        name: 'Stats',
+        component: () => import('@/views/Stats.vue'),
+        // requiresStatsAccess：超管或任意团队管理员可访问，普通成员被路由守卫拦截
+        meta: { title: '使用统计', requiresStatsAccess: true }
       }
     ]
   }
@@ -109,6 +116,24 @@ router.beforeEach((to, from, next) => {
       }
     } catch (e) {
       // JSON 解析失败，忽略
+    }
+  }
+
+  // 统计页面权限：超管 OR 任意团队的管理员；普通成员拦截回首页
+  if (to.meta.requiresStatsAccess) {
+    try {
+      const userStr = localStorage.getItem('user')
+      if (userStr) {
+        const user = JSON.parse(userStr)
+        const isSuperAdmin = user.globalRole === 'SUPER_ADMIN'
+        const isAnyTeamAdmin = (user.teams || []).some(t => t.role === 'TEAM_ADMIN')
+        if (!isSuperAdmin && !isAnyTeamAdmin) {
+          return next('/')
+        }
+      }
+    } catch (e) {
+      // JSON 解析失败，按拒绝处理
+      return next('/')
     }
   }
 
