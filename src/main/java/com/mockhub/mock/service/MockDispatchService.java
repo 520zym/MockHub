@@ -259,8 +259,10 @@ public class MockDispatchService {
         long durationMs = System.currentTimeMillis() - startTime;
         log.info("Mock 响应: apiId={}, statusCode={}, duration={}ms", api.getId(), responseCode, durationMs);
 
-        // ====== 8. 异步写入请求日志 ======
+        // ====== 8. 异步写入请求日志 + 命中统计累加 ======
         asyncWriteRequestLog(team, api, method, path, request, responseCode, durationMs);
+        // 命中统计：累加 hit_count 并刷新 last_called_at（独立线程池，失败不影响响应）
+        apiService.asyncIncrementHitCount(api.getId());
 
         return new ResponseEntity<String>(
                 responseBody != null ? responseBody : "",
