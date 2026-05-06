@@ -93,8 +93,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_api_definition_team_path_method
 CREATE INDEX IF NOT EXISTS idx_api_definition_team_id ON api_definition(team_id);
 CREATE INDEX IF NOT EXISTS idx_api_definition_group_id ON api_definition(group_id);
 CREATE INDEX IF NOT EXISTS idx_api_definition_enabled ON api_definition(team_id, enabled);
--- 僵尸接口排序：按 last_called_at 升序（含 NULL=从未调用）
-CREATE INDEX IF NOT EXISTS idx_api_definition_last_called_at ON api_definition(last_called_at);
+-- 注意：last_called_at 索引由 migrateV3 创建，避免老库 schema.sql 早于
+-- migrateV3 执行时该列尚不存在导致 CREATE INDEX 失败
 
 -- ========== 标签 ==========
 
