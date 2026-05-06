@@ -177,6 +177,7 @@ public class ApiRepository {
         sql.append("SELECT a.id, a.team_id, a.group_id, a.type, a.name, a.description, a.method, a.path, ");
         sql.append("a.response_code, a.content_type, a.delay_ms, a.enabled, ");
         sql.append("a.global_header_overrides, a.soap_config, ");
+        sql.append("a.hit_count, a.last_called_at, ");
         sql.append("a.created_by, a.created_at, a.updated_at, a.updated_by ");
         sql.append("FROM api_definition a ");
 
