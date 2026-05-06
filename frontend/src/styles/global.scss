@@ -21,7 +21,8 @@ body {
 
 #app {
   height: 100%;
-  background: linear-gradient(135deg, #f5f7fa 0%, #e8ecf4 50%, #e0e7f1 100%);
+  // 扁平化：去除柔和渐变（Soft UI 标志），改纯色浅灰底；卡片白底靠色差自然浮起
+  background: #F5F5F7;
   min-height: 100vh;
 }
 
@@ -57,16 +58,11 @@ body {
   margin-bottom: 24px;
 }
 
+// 扁平化卡片：去阴影 + 去边框，纯靠 #F5F5F7 页面底色与 #FFF 卡片色差区分；圆角收紧
 .soft-card {
   background: #FFFFFF;
-  border-radius: 16px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+  border-radius: 12px;
   padding: 20px;
-  transition: box-shadow 0.2s ease;
-
-  &:hover {
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-  }
 }
 
 // ========== 动画 ==========

@@ -160,10 +160,10 @@ onMounted(() => {
 }
 
 // ========== 设置卡片 ==========
+// 扁平化：去阴影 + 去边框，靠页面底色与白色卡片色差区分；圆角收紧到 12px
 .settings-card {
   background: #ffffff;
-  border-radius: 16px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+  border-radius: 12px;
   padding: 28px 32px;
 }
 

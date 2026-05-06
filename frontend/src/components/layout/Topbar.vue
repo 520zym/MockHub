@@ -137,7 +137,8 @@ async function handleChangePassword() {
   align-items: center;
   justify-content: space-between;
   padding: 0 24px;
-  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.03);
+  // 扁平化：去阴影，改用极淡底边框区分顶栏与内容区
+  border-bottom: 1px solid var(--app-border-color-hairline);
   z-index: 50;
 
   &__left {

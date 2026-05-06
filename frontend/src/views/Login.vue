@@ -249,15 +249,15 @@ async function handleChangePassword() {
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  // 全屏渐变背景（与全局背景一致）
-  background: linear-gradient(135deg, #f5f7fa 0%, #e8ecf4 50%, #e0e7f1 100%);
+  // 扁平化：去渐变改纯色（与全局 #app 一致）
+  background: #F5F5F7;
 }
 
 .login-card {
   width: 400px;
   background: #ffffff;
-  border-radius: 20px;
-  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
+  // 扁平化：去阴影、去边框，纯靠页面底色与卡片色差区分
   padding: 40px 36px 32px;
 }
 
