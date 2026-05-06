@@ -144,6 +144,8 @@ public class ApiRepository {
         m.put("createdAt", "a.created_at");
         m.put("name", "a.name");
         m.put("path", "a.path");
+        m.put("hitCount", "a.hit_count");
+        m.put("lastCalledAt", "a.last_called_at");
         SORT_COLUMN_WHITELIST = java.util.Collections.unmodifiableMap(m);
     }
 

@@ -267,6 +267,41 @@
           </template>
         </el-table-column>
 
+        <!-- 累计命中次数（永久累加，不受日志清理影响） -->
+        <el-table-column
+          prop="hitCount"
+          label="命中次数"
+          width="110"
+          align="right"
+          sortable="custom"
+          :sort-orders="['descending', 'ascending']"
+        >
+          <template #default="{ row }">
+            <span class="hit-count-cell">{{ formatHitCount(row.hitCount) }}</span>
+          </template>
+        </el-table-column>
+
+        <!-- 最近调用时间（相对时间显示，hover 看绝对时间） -->
+        <el-table-column
+          prop="lastCalledAt"
+          label="最近调用"
+          width="130"
+          align="center"
+          sortable="custom"
+          :sort-orders="['descending', 'ascending']"
+        >
+          <template #default="{ row }">
+            <el-tooltip
+              v-if="row.lastCalledAt"
+              :content="row.lastCalledAt"
+              placement="top"
+            >
+              <span class="last-called-cell">{{ formatRelativeTime(row.lastCalledAt) }}</span>
+            </el-tooltip>
+            <span v-else class="last-called-cell--never">从未调用</span>
+          </template>
+        </el-table-column>
+
         <!--
           修改时间列：完整格式 yyyy-MM-dd HH:mm:ss，可排序。
           位置：刻意放在"创建人"列之前，让"创建人"做与 fixed-right 区的缓冲列。
@@ -499,7 +534,18 @@ import HttpMethodTag from '@/components/HttpMethodTag.vue'
 import ApiTypeTag from '@/components/ApiTypeTag.vue'
 import TeamTag from '@/components/TeamTag.vue'
 import GroupManageDialog from '@/components/GroupManageDialog.vue'
-import { formatFull } from '@/utils/time'
+import { formatFull, fromNow } from '@/utils/time'
+
+// 命中次数千分位格式化（0 显示为占位符 '—'，避免一片 0 视觉嘈杂）
+function formatHitCount(n) {
+  if (n == null || n === 0) return '—'
+  return Number(n).toLocaleString('zh-CN')
+}
+
+// 最近调用相对时间（沿用全局 fromNow 工具，保持与日志页等地方一致）
+function formatRelativeTime(input) {
+  return fromNow(input)
+}
 
 const router = useRouter()
 const appStore = useAppStore()
@@ -1398,6 +1444,27 @@ onMounted(async () => {
   color: #6B7280;
   font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
   white-space: nowrap;
+}
+
+// 命中次数列：等宽数字便于纵向对齐
+.hit-count-cell {
+  font-size: 13px;
+  color: #1B2559;
+  font-weight: 600;
+  font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
+}
+
+// 最近调用列：相对时间常规色；从未调用降饱和度提示僵尸属性
+.last-called-cell {
+  font-size: 13px;
+  color: #4A5568;
+  cursor: help;
+
+  &--never {
+    font-size: 12px;
+    color: #B0B7C3;
+    font-style: italic;
+  }
 }
 
 .no-creator {
