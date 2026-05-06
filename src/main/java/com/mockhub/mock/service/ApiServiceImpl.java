@@ -27,6 +27,7 @@ import com.mockhub.system.model.entity.Team;
 import com.mockhub.system.service.TeamService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.text.SimpleDateFormat;
@@ -731,6 +732,30 @@ public class ApiServiceImpl implements ApiService {
         } catch (JsonProcessingException e) {
             log.error("序列化 soapConfig 失败", e);
             return null;
+        }
+    }
+
+    /**
+     * 异步累加接口命中次数 + 更新 last_called_at。
+     * <p>
+     * 由 Spring 通过 AOP 代理切到独立线程池执行，不阻塞 Mock 响应主流程。
+     * 任何异常仅打 warn 日志，吞掉不向上抛——统计写入失败不能影响 Mock 响应。
+     * <p>
+     * 接口在写入瞬间被并发删除时 update 影响 0 行属正常情况，不视为错误。
+     *
+     * @param apiId 命中的接口 ID
+     */
+    @Async
+    @Override
+    public void asyncIncrementHitCount(String apiId) {
+        if (apiId == null || apiId.isEmpty()) {
+            return;
+        }
+        try {
+            String now = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss").format(new Date());
+            apiRepository.incrementHitCount(apiId, now);
+        } catch (Exception e) {
+            log.warn("命中累加失败 apiId={}: {}", apiId, e.getMessage());
         }
     }
 }

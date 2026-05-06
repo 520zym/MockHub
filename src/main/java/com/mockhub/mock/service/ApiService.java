@@ -126,4 +126,15 @@ public interface ApiService {
      * @return 冲突的接口名称（无冲突返回 null）
      */
     String findConflictingApiName(String teamId, String method, String path, String excludeId);
+
+    /**
+     * 异步累加接口命中次数并刷新最近调用时间。
+     * <p>
+     * 由 Mock 分发器在响应处理完成后调用，独立线程池中执行避免阻塞主流程。
+     * 写入失败被实现层 swallow（仅记录 warn 日志），不向上抛出，保证 Mock
+     * 主流程的稳定性。
+     *
+     * @param apiId 命中的接口 ID
+     */
+    void asyncIncrementHitCount(String apiId);
 }
