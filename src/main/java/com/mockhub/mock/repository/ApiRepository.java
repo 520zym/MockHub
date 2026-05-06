@@ -46,6 +46,8 @@ public class ApiRepository {
             api.setGlobalHeaderOverrides(rs.getString("global_header_overrides"));
             api.setSoapConfig(rs.getString("soap_config"));
             api.setScenarios(rs.getString("scenarios"));
+            api.setHitCount(rs.getLong("hit_count"));
+            api.setLastCalledAt(rs.getString("last_called_at"));
             api.setCreatedBy(rs.getString("created_by"));
             api.setCreatedAt(rs.getString("created_at"));
             api.setUpdatedAt(rs.getString("updated_at"));
@@ -75,6 +77,8 @@ public class ApiRepository {
             api.setEnabled(rs.getInt("enabled") == 1);
             api.setGlobalHeaderOverrides(rs.getString("global_header_overrides"));
             api.setSoapConfig(rs.getString("soap_config"));
+            api.setHitCount(rs.getLong("hit_count"));
+            api.setLastCalledAt(rs.getString("last_called_at"));
             api.setCreatedBy(rs.getString("created_by"));
             api.setCreatedAt(rs.getString("created_at"));
             api.setUpdatedAt(rs.getString("updated_at"));
@@ -140,6 +144,8 @@ public class ApiRepository {
         m.put("createdAt", "a.created_at");
         m.put("name", "a.name");
         m.put("path", "a.path");
+        m.put("hitCount", "a.hit_count");
+        m.put("lastCalledAt", "a.last_called_at");
         SORT_COLUMN_WHITELIST = java.util.Collections.unmodifiableMap(m);
     }
 
@@ -171,6 +177,7 @@ public class ApiRepository {
         sql.append("SELECT a.id, a.team_id, a.group_id, a.type, a.name, a.description, a.method, a.path, ");
         sql.append("a.response_code, a.content_type, a.delay_ms, a.enabled, ");
         sql.append("a.global_header_overrides, a.soap_config, ");
+        sql.append("a.hit_count, a.last_called_at, ");
         sql.append("a.created_by, a.created_at, a.updated_at, a.updated_by ");
         sql.append("FROM api_definition a ");
 
@@ -397,6 +404,23 @@ public class ApiRepository {
         jdbcTemplate.update(
                 "UPDATE api_definition SET enabled = ?, updated_at = ? WHERE id = ?",
                 enabled ? 1 : 0, now, id);
+    }
+
+    /**
+     * 命中累加：将 hit_count + 1，同时更新 last_called_at。
+     * <p>
+     * 单条 SQL 原子完成，依赖 SQLite 行级写锁实现并发安全。不更新 updated_at
+     * 字段以免污染"最后修改时间"语义。Mock 命中后由分发器异步调用，写入失败被
+     * 上层 swallow，不影响 Mock 响应主流程。
+     *
+     * @param id           接口 ID
+     * @param lastCalledAt 命中时间（ISO 格式），由调用方提供以便测试
+     * @return 受影响行数（正常应为 1，接口被并发删除时返回 0）
+     */
+    public int incrementHitCount(String id, String lastCalledAt) {
+        return jdbcTemplate.update(
+                "UPDATE api_definition SET hit_count = hit_count + 1, last_called_at = ? WHERE id = ?",
+                lastCalledAt, id);
     }
 
     // ==================== 批量操作 ====================

@@ -57,6 +57,12 @@ public class ApiDefinition {
     /** 多场景响应配置，v1 为 null，v2 预留 */
     private String scenarios;
 
+    /** 累计命中次数，从 0 起算，永久累加（不受请求日志清理影响） */
+    private long hitCount;
+
+    /** 最近一次被命中的时间（ISO 格式），从未命中则为 null */
+    private String lastCalledAt;
+
     /** 创建人 ID */
     private String createdBy;
 
@@ -198,6 +204,22 @@ public class ApiDefinition {
 
     public void setScenarios(String scenarios) {
         this.scenarios = scenarios;
+    }
+
+    public long getHitCount() {
+        return hitCount;
+    }
+
+    public void setHitCount(long hitCount) {
+        this.hitCount = hitCount;
+    }
+
+    public String getLastCalledAt() {
+        return lastCalledAt;
+    }
+
+    public void setLastCalledAt(String lastCalledAt) {
+        this.lastCalledAt = lastCalledAt;
     }
 
     public String getCreatedBy() {

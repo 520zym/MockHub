@@ -81,12 +81,15 @@ const appStore = useAppStore()
 const userStore = useUserStore()
 
 // 导航菜单配置
+// requiresSuperAdmin: 仅超管可见
+// requiresStatsAccess: 超管或任意团队管理员可见（普通成员看不到）
 const navItems = [
-  { path: '/apis', label: '接口管理', icon: 'Connection', requiresSuperAdmin: false },
-  { path: '/variables', label: '动态变量', icon: 'MagicStick', requiresSuperAdmin: false },
+  { path: '/apis', label: '接口管理', icon: 'Connection' },
+  { path: '/variables', label: '动态变量', icon: 'MagicStick' },
+  { path: '/stats', label: '使用统计', icon: 'DataAnalysis', requiresStatsAccess: true },
   { path: '/teams', label: '团队管理', icon: 'OfficeBuilding', requiresSuperAdmin: true },
   { path: '/users', label: '用户管理', icon: 'User', requiresSuperAdmin: true },
-  { path: '/logs/operation', label: '日志', icon: 'Document', requiresSuperAdmin: false },
+  { path: '/logs/operation', label: '日志', icon: 'Document' },
   { path: '/settings', label: '全局设置', icon: 'Setting', requiresSuperAdmin: true }
 ]
 
@@ -94,6 +97,9 @@ const visibleNavItems = computed(() => {
   return navItems.filter(item => {
     if (item.requiresSuperAdmin) {
       return userStore.isSuperAdmin
+    }
+    if (item.requiresStatsAccess) {
+      return userStore.isAnyTeamAdmin
     }
     return true
   })

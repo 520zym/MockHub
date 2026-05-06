@@ -160,8 +160,13 @@ public class DataSourceConfig {
                     recordSchemaVersion(conn, 2,
                             "接口分组兜底：api_definition.group_id 列幂等添加（防御早期开发版升级）");
                 }
+                if (current < 3) {
+                    migrateV3(conn);
+                    recordSchemaVersion(conn, 3,
+                            "接口调用统计：api_definition 增加 hit_count 与 last_called_at 列");
+                }
                 // 后续版本追加：
-                // if (current < 3) { migrateV3(conn); recordSchemaVersion(conn, 3, "..."); }
+                // if (current < 4) { migrateV4(conn); recordSchemaVersion(conn, 4, "..."); }
 
                 conn.commit();
                 log.info("DB 迁移完成");
@@ -253,6 +258,24 @@ public class DataSourceConfig {
      */
     private void migrateV2(Connection conn) throws SQLException {
         addColumnIfNotExists(conn, "api_definition", "group_id", "TEXT");
+    }
+
+    /**
+     * v3 迁移（接口调用统计）：幂等添加 api_definition.hit_count 与 last_called_at 列，
+     * 并补建 last_called_at 索引以支撑僵尸接口查询。
+     * <p>
+     * hit_count：累计命中次数，从 0 起算，永久累加，不受请求日志清理影响；
+     * last_called_at：最近一次被命中的时间（ISO 格式），从未命中则为 null。
+     * <p>
+     * 所有步骤幂等：列已存在跳过 ALTER；CREATE INDEX IF NOT EXISTS 自身幂等。
+     */
+    private void migrateV3(Connection conn) throws SQLException {
+        addColumnIfNotExists(conn, "api_definition", "hit_count", "INTEGER NOT NULL DEFAULT 0");
+        addColumnIfNotExists(conn, "api_definition", "last_called_at", "TEXT");
+        try (Statement st = conn.createStatement()) {
+            st.execute("CREATE INDEX IF NOT EXISTS idx_api_definition_last_called_at " +
+                    "ON api_definition(last_called_at)");
+        }
     }
 
     /**

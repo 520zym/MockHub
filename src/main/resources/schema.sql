@@ -74,6 +74,8 @@ CREATE TABLE IF NOT EXISTS api_definition (
     global_header_overrides TEXT,           -- JSON 字符串，覆盖团队全局响应头
     soap_config            TEXT,            -- JSON 字符串，type=SOAP 时使用，见 SoapConfig
     scenarios              TEXT,            -- JSON 字符串，v1 为 null，v2 预留
+    hit_count              INTEGER NOT NULL DEFAULT 0,  -- 累计命中次数（每次 Mock 命中 +1，永久累加，不受日志清理影响）
+    last_called_at         TEXT,            -- 最近一次被命中的时间（ISO 格式），从未命中则为 null
     created_by             TEXT,
     created_at             TEXT NOT NULL,
     updated_at             TEXT NOT NULL,
@@ -91,6 +93,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_api_definition_team_path_method
 CREATE INDEX IF NOT EXISTS idx_api_definition_team_id ON api_definition(team_id);
 CREATE INDEX IF NOT EXISTS idx_api_definition_group_id ON api_definition(group_id);
 CREATE INDEX IF NOT EXISTS idx_api_definition_enabled ON api_definition(team_id, enabled);
+-- 注意：last_called_at 索引由 migrateV3 创建，避免老库 schema.sql 早于
+-- migrateV3 执行时该列尚不存在导致 CREATE INDEX 失败
 
 -- ========== 标签 ==========
 

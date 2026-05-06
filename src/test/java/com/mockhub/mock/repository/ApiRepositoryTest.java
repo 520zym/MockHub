@@ -40,6 +40,7 @@ class ApiRepositoryTest {
         jdbc = new JdbcTemplate(sds);
 
         // 与 schema.sql 中 api_definition 表保持一致的列集（最小覆盖 findAll SELECT 字段）
+        // hit_count / last_called_at 为 v3 引入，ROW_MAPPER 会读取，必须包含
         jdbc.execute(
                 "CREATE TABLE api_definition ("
                         + "id TEXT PRIMARY KEY, team_id TEXT NOT NULL, group_id TEXT, "
@@ -50,6 +51,7 @@ class ApiRepositoryTest {
                         + "response_body TEXT, delay_ms INTEGER NOT NULL DEFAULT 0, "
                         + "enabled INTEGER NOT NULL DEFAULT 1, "
                         + "global_header_overrides TEXT, soap_config TEXT, scenarios TEXT, "
+                        + "hit_count INTEGER NOT NULL DEFAULT 0, last_called_at TEXT, "
                         + "created_by TEXT, created_at TEXT NOT NULL, "
                         + "updated_at TEXT NOT NULL, updated_by TEXT)"
         );
