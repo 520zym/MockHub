@@ -621,6 +621,8 @@ public class ApiServiceImpl implements ApiService {
         vo.setCreatedBy(api.getCreatedBy());
         vo.setCreatedAt(api.getCreatedAt());
         vo.setUpdatedAt(api.getUpdatedAt());
+        vo.setHitCount(api.getHitCount());
+        vo.setLastCalledAt(api.getLastCalledAt());
 
         // 填充团队信息
         try {

@@ -40,6 +40,12 @@ public class ApiDefinitionVO {
     /** 当前生效的返回体名称 */
     private String activeResponseName;
 
+    /** 累计命中次数（永久累加，不受请求日志清理影响） */
+    private long hitCount;
+
+    /** 最近一次被命中的时间（ISO 格式），从未命中则为 null */
+    private String lastCalledAt;
+
     public ApiDefinitionVO() {
     }
 
@@ -225,5 +231,21 @@ public class ApiDefinitionVO {
 
     public void setActiveResponseName(String activeResponseName) {
         this.activeResponseName = activeResponseName;
+    }
+
+    public long getHitCount() {
+        return hitCount;
+    }
+
+    public void setHitCount(long hitCount) {
+        this.hitCount = hitCount;
+    }
+
+    public String getLastCalledAt() {
+        return lastCalledAt;
+    }
+
+    public void setLastCalledAt(String lastCalledAt) {
+        this.lastCalledAt = lastCalledAt;
     }
 }
