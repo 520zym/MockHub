@@ -157,17 +157,14 @@
 }
 
 // ========== 卡片 ==========
+// 扁平化：去阴影 + 去边框，靠页面底色与卡片色差区分；圆角统一收紧到 12px
 .el-card {
   border: none;
-  border-radius: 16px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+  border-radius: 12px;
+  box-shadow: none;
 
   .el-card__body {
     padding: 20px;
-  }
-
-  &:hover {
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
   }
 }
 
