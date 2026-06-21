@@ -36,6 +36,12 @@ public class ApiResponseRepository {
             resp.setResponseCode(rs.getInt("response_code"));
             resp.setContentType(rs.getString("content_type"));
             resp.setResponseBody(rs.getString("response_body"));
+            resp.setBodyType(defaultBodyType(rs.getString("body_type")));
+            resp.setFileName(rs.getString("file_name"));
+            resp.setFilePath(rs.getString("file_path"));
+            resp.setDownloadName(rs.getString("download_name"));
+            long fileSize = rs.getLong("file_size");
+            resp.setFileSize(rs.wasNull() ? null : fileSize);
             resp.setDelayMs(rs.getInt("delay_ms"));
             resp.setActive(rs.getInt("is_active") == 1);
             resp.setSortOrder(rs.getInt("sort_order"));
@@ -57,6 +63,12 @@ public class ApiResponseRepository {
             resp.setName(rs.getString("name"));
             resp.setResponseCode(rs.getInt("response_code"));
             resp.setContentType(rs.getString("content_type"));
+            resp.setBodyType(defaultBodyType(rs.getString("body_type")));
+            resp.setFileName(rs.getString("file_name"));
+            resp.setFilePath(rs.getString("file_path"));
+            resp.setDownloadName(rs.getString("download_name"));
+            long fileSize = rs.getLong("file_size");
+            resp.setFileSize(rs.wasNull() ? null : fileSize);
             resp.setDelayMs(rs.getInt("delay_ms"));
             resp.setActive(rs.getInt("is_active") == 1);
             resp.setSortOrder(rs.getInt("sort_order"));
@@ -149,7 +161,8 @@ public class ApiResponseRepository {
      */
     public List<ApiResponse> findSummaryByApiId(String apiId) {
         return jdbcTemplate.query(
-                "SELECT id, api_id, soap_operation_name, name, response_code, content_type, delay_ms, " +
+                "SELECT id, api_id, soap_operation_name, name, response_code, content_type, " +
+                "body_type, file_name, file_path, download_name, file_size, delay_ms, " +
                 "is_active, sort_order, created_at, updated_at FROM api_response " +
                 "WHERE api_id = ? ORDER BY soap_operation_name, sort_order",
                 SUMMARY_ROW_MAPPER, apiId);
@@ -168,16 +181,40 @@ public class ApiResponseRepository {
     }
 
     /**
+     * 统计某个文件路径被多少返回体引用，用于删除时避免误删仍被副本使用的文件。
+     */
+    public int countByFilePath(String filePath) {
+        if (filePath == null || filePath.trim().isEmpty()) {
+            return 0;
+        }
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM api_response WHERE file_path = ?", Integer.class, filePath);
+        return count != null ? count : 0;
+    }
+
+    /**
+     * 查询所有被返回体引用的文件路径，用于文件存储维护时识别孤儿文件。
+     */
+    public List<String> findAllFilePaths() {
+        return jdbcTemplate.queryForList(
+                "SELECT DISTINCT file_path FROM api_response WHERE file_path IS NOT NULL AND file_path <> ''",
+                String.class);
+    }
+
+    /**
      * 插入返回体
      */
     public void insert(ApiResponse resp) {
         jdbcTemplate.update(
                 "INSERT INTO api_response (id, api_id, soap_operation_name, name, response_code, " +
-                "content_type, response_body, delay_ms, is_active, sort_order, conditions, created_at, updated_at) " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "content_type, response_body, body_type, file_name, file_path, download_name, file_size, " +
+                "delay_ms, is_active, sort_order, conditions, created_at, updated_at) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 resp.getId(), resp.getApiId(), resp.getSoapOperationName(), resp.getName(),
                 resp.getResponseCode(), resp.getContentType(), resp.getResponseBody(),
-                resp.getDelayMs(), resp.isActive() ? 1 : 0, resp.getSortOrder(),
+                defaultBodyType(resp.getBodyType()), resp.getFileName(), resp.getFilePath(),
+                resp.getDownloadName(), resp.getFileSize(), resp.getDelayMs(),
+                resp.isActive() ? 1 : 0, resp.getSortOrder(),
                 resp.getConditions(), resp.getCreatedAt(), resp.getUpdatedAt());
     }
 
@@ -227,5 +264,9 @@ public class ApiResponseRepository {
             insert(resp);
         }
         log.debug("替换接口 {} 的返回体，共 {} 个", apiId, responses.size());
+    }
+
+    private static String defaultBodyType(String bodyType) {
+        return bodyType == null || bodyType.trim().isEmpty() ? "TEXT" : bodyType;
     }
 }

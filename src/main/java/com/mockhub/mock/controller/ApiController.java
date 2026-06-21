@@ -2,6 +2,7 @@ package com.mockhub.mock.controller;
 
 import com.mockhub.common.model.PageResult;
 import com.mockhub.common.model.Result;
+import com.mockhub.common.util.PermissionChecker;
 import com.mockhub.mock.model.dto.ApiDefinitionDTO;
 import com.mockhub.mock.model.dto.ApiDefinitionDetailVO;
 import com.mockhub.mock.model.dto.ApiDefinitionVO;
@@ -9,6 +10,7 @@ import com.mockhub.mock.model.dto.BatchApiRequest;
 import com.mockhub.mock.model.dto.BatchApiResult;
 import com.mockhub.mock.model.entity.ApiDefinition;
 import com.mockhub.mock.service.ApiService;
+import com.mockhub.mock.service.MockFileStorageService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -20,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -39,9 +42,15 @@ public class ApiController {
     private static final Logger log = LoggerFactory.getLogger(ApiController.class);
 
     private final ApiService apiService;
+    private final MockFileStorageService fileStorageService;
+    private final PermissionChecker permissionChecker;
 
-    public ApiController(ApiService apiService) {
+    public ApiController(ApiService apiService,
+                         MockFileStorageService fileStorageService,
+                         PermissionChecker permissionChecker) {
         this.apiService = apiService;
+        this.fileStorageService = fileStorageService;
+        this.permissionChecker = permissionChecker;
     }
 
     /**
@@ -174,6 +183,27 @@ public class ApiController {
         BatchApiResult result = apiService.batch(
                 request.getAction(), request.getIds(), request.getTargetGroupId());
         return Result.ok(result);
+    }
+
+    /**
+     * 上传 Mock 文件响应实体。
+     * <p>
+     * 返回文件元数据，保存接口时写入对应 ApiResponse。
+     */
+    @PostMapping("/files/upload")
+    public Result<Map<String, Object>> uploadResponseFile(
+            @RequestParam String teamId,
+            @RequestParam("file") MultipartFile file) {
+        permissionChecker.checkTeamAccess(teamId);
+        MockFileStorageService.StoredMockFile stored = fileStorageService.store(teamId, file);
+        Map<String, Object> data = new java.util.HashMap<String, Object>();
+        data.put("bodyType", "FILE");
+        data.put("fileName", stored.getFileName());
+        data.put("filePath", stored.getFilePath());
+        data.put("downloadName", stored.getFileName());
+        data.put("fileSize", stored.getFileSize());
+        data.put("contentType", stored.getContentType());
+        return Result.ok(data);
     }
 
     /**

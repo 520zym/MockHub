@@ -114,6 +114,11 @@ public class ResponseValidator {
             if (!item.enabled) {
                 continue;
             }
+            if ("FILE".equalsIgnoreCase(item.bodyType)
+                    && (item.filePath == null || item.filePath.trim().isEmpty())) {
+                throw new BizException(40417,
+                        "文件返回体必须先上传文件（分组 " + group + "）");
+            }
             enabled++;
             MatchRule rule = parseRule(item.conditions);
             boolean noRule = rule == null || rule.isEmpty();
@@ -197,15 +202,21 @@ public class ResponseValidator {
     private static final class DtoAdapter {
         final boolean enabled;
         final String conditions;
+        final String bodyType;
+        final String filePath;
 
         DtoAdapter(ApiResponseDTO dto) {
             this.enabled = dto.isActive();
             this.conditions = dto.getConditions();
+            this.bodyType = dto.getBodyType();
+            this.filePath = dto.getFilePath();
         }
 
         DtoAdapter(ApiResponse e) {
             this.enabled = e.isActive();
             this.conditions = e.getConditions();
+            this.bodyType = e.getBodyType();
+            this.filePath = e.getFilePath();
         }
     }
 }

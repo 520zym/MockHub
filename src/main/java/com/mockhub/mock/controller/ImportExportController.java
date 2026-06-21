@@ -6,6 +6,7 @@ import com.mockhub.common.model.Result;
 import com.mockhub.mock.model.dto.ImportExportData;
 import com.mockhub.mock.model.dto.ImportResult;
 import com.mockhub.mock.service.ImportExportService;
+import org.springframework.core.io.Resource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
@@ -19,6 +20,14 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
+import java.util.zip.ZipOutputStream;
 
 /**
  * 接口导入导出 Controller
@@ -59,14 +68,21 @@ public class ImportExportController {
         }
 
         ImportExportData data;
+        Map<String, ImportExportService.FileBundleEntry> bundledFiles = new HashMap<String, ImportExportService.FileBundleEntry>();
         try {
-            data = objectMapper.readValue(file.getInputStream(), ImportExportData.class);
+            if (isZipFile(file)) {
+                ImportBundle bundle = readImportBundle(file);
+                data = bundle.getData();
+                bundledFiles = bundle.getFiles();
+            } else {
+                data = objectMapper.readValue(file.getInputStream(), ImportExportData.class);
+            }
         } catch (IOException e) {
             log.error("解析导入文件失败", e);
             throw new BizException(40401, "导入文件格式错误: " + e.getMessage());
         }
 
-        ImportResult result = importExportService.importApis(teamId, data, mode);
+        ImportResult result = importExportService.importApis(teamId, data, mode, bundledFiles);
         log.info("导入完成: teamId={}, mode={}, imported={}, skipped={}, overridden={}",
                 teamId, mode, result.getImported(), result.getSkipped(), result.getOverridden());
 
@@ -82,8 +98,10 @@ public class ImportExportController {
      * @return JSON 文件下载响应
      */
     @GetMapping("/export")
-    public ResponseEntity<byte[]> exportApis(@RequestParam String teamId) {
-        ImportExportData data = importExportService.exportTeam(teamId);
+    public ResponseEntity<byte[]> exportApis(@RequestParam String teamId,
+                                             @RequestParam(required = false) List<String> ids) {
+        ImportExportService.ExportPackage exportPackage = importExportService.exportApisPackage(teamId, ids);
+        ImportExportData data = exportPackage.getData();
 
         byte[] jsonBytes;
         try {
@@ -93,13 +111,105 @@ public class ImportExportController {
             throw new BizException(50001, "导出数据序列化失败");
         }
 
-        String fileName = "mockhub-export-" + teamId + ".json";
+        String extension = exportPackage.hasFiles() ? ".zip" : ".json";
+        String fileName = "mockhub-export-" + teamId + extension;
 
         HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setContentType(exportPackage.hasFiles() ? MediaType.parseMediaType("application/zip") : MediaType.APPLICATION_JSON);
         headers.set(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"");
-        headers.setContentLength(jsonBytes.length);
 
-        return ResponseEntity.ok().headers(headers).body(jsonBytes);
+        byte[] body = exportPackage.hasFiles() ? buildZip(jsonBytes, exportPackage.getFiles()) : jsonBytes;
+        headers.setContentLength(body.length);
+        return ResponseEntity.ok().headers(headers).body(body);
+    }
+
+    private boolean isZipFile(MultipartFile file) {
+        String name = file.getOriginalFilename();
+        return name != null && name.toLowerCase().endsWith(".zip");
+    }
+
+    private ImportBundle readImportBundle(MultipartFile file) throws IOException {
+        ImportExportData data = null;
+        Map<String, ImportExportService.FileBundleEntry> files =
+                new HashMap<String, ImportExportService.FileBundleEntry>();
+        try (ZipInputStream zipInputStream = new ZipInputStream(file.getInputStream())) {
+            ZipEntry entry;
+            while ((entry = zipInputStream.getNextEntry()) != null) {
+                if (entry.isDirectory()) {
+                    continue;
+                }
+                String entryName = entry.getName();
+                byte[] bytes = readAll(zipInputStream);
+                if ("mockhub-export.json".equals(entryName)) {
+                    data = objectMapper.readValue(bytes, ImportExportData.class);
+                } else if (entryName.startsWith("files/")) {
+                    String relativePath = entryName.substring("files/".length());
+                    String fileName = relativePath;
+                    int slash = relativePath.lastIndexOf('/');
+                    if (slash >= 0) {
+                        fileName = relativePath.substring(slash + 1);
+                    }
+                    files.put(relativePath, new ImportExportService.FileBundleEntry(fileName, bytes));
+                }
+            }
+        }
+        if (data == null) {
+            throw new BizException(40401, "导入包缺少 mockhub-export.json");
+        }
+        return new ImportBundle(data, files);
+    }
+
+    private byte[] buildZip(byte[] jsonBytes, Map<String, Resource> files) {
+        try {
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+            try (ZipOutputStream zipOutputStream = new ZipOutputStream(outputStream)) {
+                zipOutputStream.putNextEntry(new ZipEntry("mockhub-export.json"));
+                zipOutputStream.write(jsonBytes);
+                zipOutputStream.closeEntry();
+                for (Map.Entry<String, Resource> entry : files.entrySet()) {
+                    zipOutputStream.putNextEntry(new ZipEntry("files/" + entry.getKey()));
+                    try (InputStream inputStream = entry.getValue().getInputStream()) {
+                        byte[] buffer = new byte[8192];
+                        int len;
+                        while ((len = inputStream.read(buffer)) != -1) {
+                            zipOutputStream.write(buffer, 0, len);
+                        }
+                    }
+                    zipOutputStream.closeEntry();
+                }
+            }
+            return outputStream.toByteArray();
+        } catch (IOException e) {
+            log.error("生成导出包失败", e);
+            throw new BizException(50001, "生成导出包失败");
+        }
+    }
+
+    private byte[] readAll(InputStream inputStream) throws IOException {
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        byte[] buffer = new byte[8192];
+        int len;
+        while ((len = inputStream.read(buffer)) != -1) {
+            outputStream.write(buffer, 0, len);
+        }
+        return outputStream.toByteArray();
+    }
+
+    private static class ImportBundle {
+        private final ImportExportData data;
+        private final Map<String, ImportExportService.FileBundleEntry> files;
+
+        ImportBundle(ImportExportData data, Map<String, ImportExportService.FileBundleEntry> files) {
+            this.data = data;
+            this.files = files;
+        }
+
+        ImportExportData getData() {
+            return data;
+        }
+
+        Map<String, ImportExportService.FileBundleEntry> getFiles() {
+            return files;
+        }
     }
 }

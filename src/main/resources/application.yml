@@ -40,3 +40,10 @@ log:
 mock:
   cors:
     enabled: true
+  file:
+    # 文件类型 Mock 响应的单文件上传大小上限
+    max-size-bytes: 10485760
+    # 自动清理超过保留时间且未被任何返回体引用的孤儿文件
+    orphan-auto-cleanup-enabled: true
+    orphan-retention-hours: 24
+    orphan-cleanup-interval-ms: 3600000

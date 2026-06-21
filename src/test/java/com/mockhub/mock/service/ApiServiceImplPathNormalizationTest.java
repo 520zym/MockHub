@@ -44,7 +44,8 @@ class ApiServiceImplPathNormalizationTest {
                 permissionChecker,
                 new ObjectMapper(),
                 mock(com.mockhub.log.service.LogService.class),
-                mock(com.mockhub.system.repository.UserRepository.class)
+                mock(com.mockhub.system.repository.UserRepository.class),
+                mock(MockFileStorageService.class)
         );
         Map<String, Object> details = new HashMap<String, Object>();
         details.put("userId", "user-1");

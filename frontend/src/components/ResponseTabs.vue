@@ -103,7 +103,16 @@
 
         <!-- 编辑器工具栏 -->
         <div class="editor-toolbar">
-          <el-button size="small" @click="formatBody">
+          <el-radio-group
+            v-if="!operationName"
+            :model-value="currentResponse.bodyType || 'TEXT'"
+            size="small"
+            @change="handleBodyTypeChange"
+          >
+            <el-radio-button value="TEXT">文本</el-radio-button>
+            <el-radio-button value="FILE">文件</el-radio-button>
+          </el-radio-group>
+          <el-button v-if="!isCurrentFileResponse" size="small" @click="formatBody">
             <el-icon><MagicStick /></el-icon>
             格式化
           </el-button>
@@ -114,11 +123,12 @@
           >
             <el-button size="small">
               <el-icon><Upload /></el-icon>
-              上传文件
+              {{ isCurrentFileResponse ? '上传响应文件' : '上传文本' }}
             </el-button>
           </el-upload>
           <!-- 动态变量插入入口：点击后弹出 popover，选择变量后插入到编辑器光标位置 -->
           <el-popover
+            v-if="!isCurrentFileResponse"
             placement="bottom-start"
             :width="320"
             trigger="click"
@@ -187,14 +197,14 @@
         <!-- v1.4.4 性能：响应体超过 MONACO_INLINE_MAX（500KB）时降级为只读预览 + 全文编辑 Dialog，
              避免大响应体在长页面内嵌 Monaco 时内部重排拖累父页面滚动。 -->
         <MonacoEditor
-          v-if="!isOversize"
+          v-if="!isCurrentFileResponse && !isOversize"
           ref="editorRef"
           v-model="currentResponse.responseBody"
           :language="currentEditorLanguage"
           :dynamic-variables="combinedVariablesForEditor"
           class="response-editor"
         />
-        <div v-else class="oversize-preview">
+        <div v-else-if="!isCurrentFileResponse" class="oversize-preview">
           <div class="oversize-meta">
             <el-icon><WarningFilled /></el-icon>
             响应体较大（{{ formatSize(responseBodySize) }}），已启用降级预览以保证页面流畅。
@@ -207,6 +217,34 @@
               全文编辑
             </el-button>
           </div>
+        </div>
+        <div v-else class="file-response-panel">
+          <div class="file-response-card" :class="{ empty: !currentResponse.filePath }">
+            <el-icon><Upload /></el-icon>
+            <div class="file-response-main">
+              <div class="file-response-name">
+                {{ currentResponse.fileName || '尚未上传文件' }}
+              </div>
+              <div class="file-response-meta">
+                {{ currentResponse.filePath ? formatSize(currentResponse.fileSize || 0) : '上传后将作为 Mock 响应体流式返回' }}
+              </div>
+            </div>
+            <el-button
+              v-if="currentResponse.filePath"
+              size="small"
+              text
+              type="danger"
+              @click="clearResponseFile"
+            >
+              移除
+            </el-button>
+          </div>
+          <el-form-item label="下载文件名">
+            <el-input
+              v-model="currentResponse.downloadName"
+              placeholder="默认使用上传文件名"
+            />
+          </el-form-item>
         </div>
       </el-form>
 
@@ -325,6 +363,7 @@ import MonacoEditor from './MonacoEditor.vue'
 import ConditionPanel from './match/ConditionPanel.vue'
 import { DYNAMIC_VARIABLES } from '@/constants/dynamicVariables'
 import { getTeamVariables } from '@/api/customVariable'
+import { uploadResponseFile } from '@/api/apis'
 
 const props = defineProps({
   /** 返回体数组 (v-model) */
@@ -521,9 +560,14 @@ const currentResponse = computed(() => {
   return null
 })
 
+const isCurrentFileResponse = computed(() => {
+  return !!currentResponse.value && currentResponse.value.bodyType === 'FILE'
+})
+
 /** 自动识别内容类型 */
 const detectedContentType = computed(() => {
   if (!currentResponse.value) return '未知'
+  if (isCurrentFileResponse.value) return '文件'
   const body = (currentResponse.value.responseBody || '').trim()
   if (!body) return '未知'
   if ((body.startsWith('{') && body.endsWith('}')) || (body.startsWith('[') && body.endsWith(']'))) {
@@ -631,6 +675,7 @@ function formatDraftBody() {
 // 用户仍可手动点击格式标签进行覆盖（后续的 manualContentType watch 会处理）
 watch(detectedContentType, (val) => {
   if (props.operationName) return
+  if (isCurrentFileResponse.value) return
   if (val === '未知') return
   const next = val.toLowerCase() // 'json' | 'xml' | 'text'
   if (manualContentType.value !== next) {
@@ -641,6 +686,7 @@ watch(detectedContentType, (val) => {
 // 同步 manualContentType → currentResponse.contentType
 watch(manualContentType, (val) => {
   if (!currentResponse.value || props.operationName) return
+  if (isCurrentFileResponse.value) return
   const typeMap = { json: 'application/json', xml: 'application/xml', text: 'text/plain' }
   currentResponse.value.contentType = typeMap[val] || 'application/json'
 })
@@ -648,6 +694,7 @@ watch(manualContentType, (val) => {
 // 切换 Tab 时同步 manualContentType
 watch(activeIndex, () => {
   if (!currentResponse.value || props.operationName) return
+  if (isCurrentFileResponse.value) return
   const ct = currentResponse.value.contentType || 'application/json'
   if (ct.includes('json')) manualContentType.value = 'json'
   else if (ct.includes('xml')) manualContentType.value = 'xml'
@@ -668,6 +715,11 @@ function addResponse() {
     responseCode: 200,
     contentType: props.defaultContentType,
     responseBody: '',
+    bodyType: 'TEXT',
+    fileName: '',
+    filePath: '',
+    downloadName: '',
+    fileSize: null,
     delayMs: 0,
     // 新 Tab 默认未启用，用户显式启用才参与匹配
     isActive: false,
@@ -808,6 +860,7 @@ function formatXml(xml) {
  */
 function formatBody() {
   if (!currentResponse.value) return
+  if (isCurrentFileResponse.value) return
   const body = (currentResponse.value.responseBody || '').trim()
   if (!body) return
 
@@ -835,9 +888,56 @@ function formatBody() {
   }
 }
 
-/** 从文件上传响应体内容 */
-function handleUploadFile(uploadFile) {
+function handleBodyTypeChange(type) {
+  if (!currentResponse.value) return
+  currentResponse.value.bodyType = type
+  if (type === 'FILE') {
+    currentResponse.value.responseBody = ''
+    currentResponse.value.contentType = currentResponse.value.contentType || 'application/octet-stream'
+  } else {
+    clearResponseFile(false)
+    currentResponse.value.contentType = 'application/json'
+    manualContentType.value = 'json'
+  }
+  emit('update:modelValue', [...responses.value])
+}
+
+function clearResponseFile(emitUpdate = true) {
+  if (!currentResponse.value) return
+  currentResponse.value.fileName = ''
+  currentResponse.value.filePath = ''
+  currentResponse.value.downloadName = ''
+  currentResponse.value.fileSize = null
+  if (emitUpdate) {
+    emit('update:modelValue', [...responses.value])
+  }
+}
+
+/** 从文件上传响应体内容；文本模式读为文本，文件模式上传到后端文件仓库。 */
+async function handleUploadFile(uploadFile) {
   if (!uploadFile || !uploadFile.raw) return
+  if (isCurrentFileResponse.value) {
+    if (!props.teamId) {
+      ElMessage.warning('请先选择团队')
+      return
+    }
+    try {
+      const meta = await uploadResponseFile(props.teamId, uploadFile.raw)
+      if (!currentResponse.value) return
+      currentResponse.value.bodyType = 'FILE'
+      currentResponse.value.fileName = meta.fileName || uploadFile.name
+      currentResponse.value.filePath = meta.filePath || ''
+      currentResponse.value.downloadName = meta.downloadName || meta.fileName || uploadFile.name
+      currentResponse.value.fileSize = meta.fileSize || uploadFile.size || null
+      currentResponse.value.contentType = meta.contentType || uploadFile.raw.type || 'application/octet-stream'
+      currentResponse.value.responseBody = ''
+      emit('update:modelValue', [...responses.value])
+      ElMessage.success('响应文件已上传')
+    } catch (e) {
+      // request 拦截器已提示错误
+    }
+    return
+  }
   const reader = new FileReader()
   reader.onload = (e) => {
     if (currentResponse.value) {
@@ -983,13 +1083,56 @@ function handleUploadFile(uploadFile) {
 /* 编辑器工具栏 */
 .editor-toolbar {
   display: flex;
+  align-items: center;
   gap: 8px;
   margin-bottom: 8px;
+  flex-wrap: wrap;
 }
 
 /* Monaco 编辑器 */
 .response-editor {
   height: 350px;
+}
+
+.file-response-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.file-response-card {
+  min-height: 76px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid #D1D5DB;
+  border-radius: 6px;
+  background: #F8FAFC;
+}
+
+.file-response-card.empty {
+  border-style: dashed;
+  color: #64748B;
+}
+
+.file-response-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.file-response-name {
+  color: #111827;
+  font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-response-meta {
+  margin-top: 4px;
+  color: #64748B;
+  font-size: 12px;
 }
 
 /* v1.4.4：超大响应体降级预览卡 */

@@ -78,6 +78,79 @@
           </div>
         </div>
 
+        <!-- 分割线 -->
+        <div class="section-divider"></div>
+
+        <!-- 文件存储维护 -->
+        <div class="settings-section">
+          <h3 class="section-title">文件存储维护</h3>
+          <p class="section-desc">扫描并清理未被任何文件类型返回体引用的存储文件</p>
+
+          <div class="file-maintenance-actions">
+            <el-button :loading="orphanScanning" @click="handleScanOrphans">
+              扫描孤儿文件
+            </el-button>
+            <el-button
+              type="danger"
+              plain
+              :disabled="!orphanResult || orphanResult.orphanCount === 0"
+              :loading="orphanCleaning"
+              @click="handleCleanOrphans"
+            >
+              清理孤儿文件
+            </el-button>
+          </div>
+
+          <div v-if="storageStats" class="storage-stats">
+            <div class="storage-stat">
+              <span class="storage-stat__label">存储目录</span>
+              <span class="storage-stat__value path-value">{{ storageStats.rootDir }}</span>
+            </div>
+            <div class="storage-stat">
+              <span class="storage-stat__label">上传上限</span>
+              <span class="storage-stat__value">{{ formatSize(storageStats.maxSizeBytes) }}</span>
+            </div>
+            <div class="storage-stat">
+              <span class="storage-stat__label">文件总数</span>
+              <span class="storage-stat__value">{{ storageStats.totalFileCount }} 个 / {{ formatSize(storageStats.totalFileSize) }}</span>
+            </div>
+            <div class="storage-stat">
+              <span class="storage-stat__label">引用文件</span>
+              <span class="storage-stat__value">{{ storageStats.referencedFileCount }} 个</span>
+            </div>
+            <div class="storage-stat">
+              <span class="storage-stat__label">孤儿文件</span>
+              <span class="storage-stat__value">{{ storageStats.orphanCount }} 个 / {{ formatSize(storageStats.orphanSize) }}</span>
+            </div>
+          </div>
+
+          <div v-if="orphanResult" class="orphan-summary">
+            <span>发现 {{ orphanResult.orphanCount }} 个孤儿文件</span>
+            <span>合计 {{ formatSize(orphanResult.orphanSize) }}</span>
+          </div>
+
+          <el-table
+            v-if="orphanResult && orphanResult.files && orphanResult.files.length"
+            :data="orphanResult.files"
+            size="small"
+            class="orphan-table"
+            max-height="260"
+          >
+            <el-table-column prop="fileName" label="文件名" min-width="160" show-overflow-tooltip />
+            <el-table-column prop="filePath" label="存储路径" min-width="240" show-overflow-tooltip />
+            <el-table-column label="大小" width="100">
+              <template #default="{ row }">
+                {{ formatSize(row.fileSize) }}
+              </template>
+            </el-table-column>
+            <el-table-column label="修改时间" width="170">
+              <template #default="{ row }">
+                {{ formatTime(row.lastModifiedAt) }}
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+
         <!-- 保存按钮 -->
         <div class="settings-footer">
           <el-button
@@ -96,12 +169,22 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
-import { getSettings, saveSettings } from '@/api/settings'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import {
+  cleanOrphanFiles,
+  getFileStorageStats,
+  getSettings,
+  saveSettings,
+  scanOrphanFiles
+} from '@/api/settings'
 
 // ========== 状态 ==========
 const loading = ref(false)
 const saving = ref(false)
+const orphanScanning = ref(false)
+const orphanCleaning = ref(false)
+const orphanResult = ref(null)
+const storageStats = ref(null)
 
 const form = reactive({
   logRetainMode: 'count',
@@ -128,6 +211,14 @@ async function loadSettings() {
   }
 }
 
+async function loadStorageStats() {
+  try {
+    storageStats.value = await getFileStorageStats()
+  } catch (err) {
+    // 拦截器已处理错误提示
+  }
+}
+
 // ========== 保存 ==========
 async function handleSave() {
   saving.value = true
@@ -147,9 +238,66 @@ async function handleSave() {
   }
 }
 
+async function handleScanOrphans() {
+  orphanScanning.value = true
+  try {
+    orphanResult.value = await scanOrphanFiles()
+    await loadStorageStats()
+  } catch (err) {
+    // 拦截器已处理错误提示
+  } finally {
+    orphanScanning.value = false
+  }
+}
+
+async function handleCleanOrphans() {
+  if (!orphanResult.value || orphanResult.value.orphanCount === 0) {
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      `确定清理 ${orphanResult.value.orphanCount} 个孤儿文件？该操作不可恢复。`,
+      '确认清理',
+      { type: 'warning' }
+    )
+    orphanCleaning.value = true
+    const result = await cleanOrphanFiles()
+    ElMessage.success(`已清理 ${result.deletedCount} 个孤儿文件`)
+    orphanResult.value = await scanOrphanFiles()
+    await loadStorageStats()
+  } catch (err) {
+    if (err !== 'cancel' && err !== 'close') {
+      // 拦截器已处理错误提示
+    }
+  } finally {
+    orphanCleaning.value = false
+  }
+}
+
+function formatSize(size) {
+  const bytes = Number(size || 0)
+  if (bytes < 1024) {
+    return `${bytes} B`
+  }
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`
+  }
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
+function formatTime(timestamp) {
+  if (!timestamp) {
+    return '-'
+  }
+  const date = new Date(timestamp)
+  const pad = value => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+}
+
 // ========== 初始化 ==========
 onMounted(() => {
   loadSettings()
+  loadStorageStats()
 })
 </script>
 
@@ -214,6 +362,56 @@ onMounted(() => {
 
 .cors-switch-row {
   padding: 4px 0;
+}
+
+.file-maintenance-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.orphan-summary {
+  display: flex;
+  gap: 20px;
+  margin-top: 14px;
+  font-size: 13px;
+  color: #4A5568;
+}
+
+.storage-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 20px;
+  margin-top: 16px;
+  padding: 14px 0 2px;
+  border-top: 1px solid #F1F5F9;
+}
+
+.storage-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.storage-stat__label {
+  font-size: 12px;
+  color: #A3AED0;
+}
+
+.storage-stat__value {
+  font-size: 13px;
+  color: #4A5568;
+  overflow-wrap: anywhere;
+}
+
+.path-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+.orphan-table {
+  margin-top: 14px;
+  width: 100%;
 }
 
 // ========== 保存按钮 ==========

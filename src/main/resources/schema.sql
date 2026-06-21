@@ -182,6 +182,11 @@ CREATE TABLE IF NOT EXISTS api_response (
     response_code       INTEGER NOT NULL DEFAULT 200,
     content_type        TEXT NOT NULL DEFAULT 'application/json',
     response_body       TEXT,            -- 支持动态变量占位符，可能很大
+    body_type           TEXT NOT NULL DEFAULT 'TEXT',  -- TEXT / FILE
+    file_name           TEXT,            -- 文件响应的原始文件名
+    file_path           TEXT,            -- 文件响应在 data/files 下的相对路径
+    download_name       TEXT,            -- Content-Disposition 下载文件名
+    file_size           INTEGER,         -- 文件大小（字节）
     delay_ms            INTEGER NOT NULL DEFAULT 0,
     is_active           INTEGER NOT NULL DEFAULT 0,  -- 0=false, 1=true，同一 api_id + soap_operation_name 下只有一个为 1
     sort_order          INTEGER NOT NULL DEFAULT 0,
