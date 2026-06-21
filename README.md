@@ -177,7 +177,7 @@ GET http://localhost:18080/mock/FE/soap/user-service?wsdl
 示例：
 
 ```bash
-java -jar mockhub-1.4.4.jar \
+java -jar mockhub-1.4.5.jar \
   --server.port=9090 \
   --data.path=D:/mockhub/data \
   --log.retain.mode=days \
@@ -241,7 +241,7 @@ mvn clean package -DskipTests
   <name>MockHub</name>
   <description>MockHub 接口模拟服务</description>
   <executable>java</executable>
-  <arguments>-jar mockhub-1.4.4.jar --server.port=18080 --data.path=./data</arguments>
+  <arguments>-jar mockhub-1.4.5.jar --server.port=18080 --data.path=./data</arguments>
   <workingdirectory>%BASE%</workingdirectory>
   <logpath>%BASE%\logs</logpath>
   <log mode="roll-by-size">
