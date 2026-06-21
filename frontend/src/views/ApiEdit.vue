@@ -426,12 +426,34 @@ const pathChecked = ref(false) // 至少做过一次完整校验，用于决定�
 let pathCheckTimer = null
 let pathCheckSeq = 0 // 顺序号，丢弃过期响应
 
+function normalizeApiPathInput(path) {
+  if (!path) return ''
+  let normalized = path.trim()
+  const queryIndex = normalized.indexOf('?')
+  if (queryIndex >= 0) {
+    normalized = normalized.slice(0, queryIndex)
+  }
+  const fragmentIndex = normalized.indexOf('#')
+  if (fragmentIndex >= 0) {
+    normalized = normalized.slice(0, fragmentIndex)
+  }
+  normalized = normalized.trim()
+  if (!normalized) return ''
+  return normalized.startsWith('/') ? normalized : `/${normalized}`
+}
+
+function hasQueryOrFragment(path) {
+  return typeof path === 'string' && (path.includes('?') || path.includes('#'))
+}
+
 function schedulePathConflictCheck() {
   pathConflictError.value = ''
   if (pathCheckTimer) clearTimeout(pathCheckTimer)
 
+  const normalizedPath = normalizeApiPathInput(form.path)
+
   // 关键字段不全：清空校验状态
-  if (!form.teamId || !form.method || !form.path || !form.path.trim()) {
+  if (!form.teamId || !form.method || !normalizedPath) {
     pathChecking.value = false
     pathChecked.value = false
     return
@@ -444,7 +466,7 @@ function schedulePathConflictCheck() {
       const res = await checkApiPath({
         teamId: form.teamId,
         method: form.type === 'SOAP' ? 'POST' : form.method,
-        path: form.path.trim(),
+        path: normalizedPath,
         excludeId: route.params.id || ''
       })
       // 过期响应丢弃（用户在等待期间又改了 path/method/team）
@@ -528,7 +550,7 @@ const currentTeamIdentifier = computed(() => {
 /** 完整 Mock 地址（优先使用服务器局域网地址） */
 const mockUrl = computed(() => {
   const base = serverAddress.value || window.location.origin
-  return `${base}/mock/${currentTeamIdentifier.value}${form.path || '/'}`
+  return `${base}/mock/${currentTeamIdentifier.value}${normalizeApiPathInput(form.path) || '/'}`
 })
 
 /**
@@ -848,6 +870,17 @@ async function handleSave() {
     ElMessage.warning('请输入接口路径')
     return
   }
+  const normalizedPath = normalizeApiPathInput(form.path)
+  if (!normalizedPath) {
+    ElMessage.warning('请输入有效的接口路径')
+    return
+  }
+  if (form.path !== normalizedPath) {
+    if (hasQueryOrFragment(form.path)) {
+      ElMessage.info('接口路径已自动去除查询参数；如需按参数返回不同内容，请使用返回体条件')
+    }
+    form.path = normalizedPath
+  }
 
   // 路径冲突预检：实时校验已经报警了，再兜一次防止用户绕过 watcher
   if (pathConflictError.value) {
@@ -913,7 +946,7 @@ async function handleSave() {
       teamId: form.teamId,
       groupId: form.groupId || null,
       method: form.type === 'SOAP' ? 'POST' : form.method,
-      path: form.path,
+      path: normalizedPath,
       responseCode: responseCode,
       contentType: contentType,
       responseBody: responseBody,

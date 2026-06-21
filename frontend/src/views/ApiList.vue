@@ -293,7 +293,7 @@
           <template #default="{ row }">
             <el-tooltip
               v-if="row.lastCalledAt"
-              :content="row.lastCalledAt"
+              :content="formatFull(row.lastCalledAt)"
               placement="top"
             >
               <span class="last-called-cell">{{ formatRelativeTime(row.lastCalledAt) }}</span>
