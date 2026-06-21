@@ -36,18 +36,18 @@
 ### 已实现
 
 - [x] **REST Mock** -- 支持 GET / POST / PUT / DELETE / PATCH，自定义状态码、响应头、响应体
-- [x] **SOAP Mock** -- 上传 WSDL 自动解析 Operation，独立配置每个操作的返回 XML
+- [x] **SOAP Mock** -- 上传 WSDL 自动解析 Operation，每个 Operation 可独立配置多个返回体、条件规则和兜底响应
 - [x] **团队隔离** -- 多团队独立管理接口，Mock 路径按团队标识隔离，互不干扰
 - [x] **接口分组** -- 团队下可按业务维度建分组管理接口，支持拖拽排序，列表按分组筛选
 - [x] **路径参数** -- 支持 `/api/user/{id}` 风格路径匹配，响应体中通过 `{{path.id}}` 引用参数值
 - [x] **动态变量** -- 内置 `{{timestamp}}`、`{{uuid}}`、`{{date}}`、`{{datetime}}`、`{{random_int}}`；编辑器提供「插入变量」按钮和 `{{` 智能补全
 - [x] **自定义动态变量** -- 团队级维护命名值集合，支持按分组组织；响应体 `{{pet}}` 从全部值随机挑、`{{pet.mammal}}` 从指定分组随机挑；解析失败 fail-fast 返回统一错误格式
 - [x] **多返回体** -- 单个接口可配置多个响应体，支持切换活跃返回体
-- [x] **多场景响应** -- 多个返回体可配置匹配条件（请求参数 / Body / Header），命中即返回，未命中走兜底
+- [x] **多场景响应** -- 多个返回体可配置匹配条件（Query / JSON Body / SOAP XML Body），命中即返回，未命中走无规则兜底
 - [x] **接口描述** -- 支持富文本描述接口用途和说明
 - [x] **Monaco Editor** -- 内置代码编辑器，JSON / XML / 纯文本语法高亮和格式化
 - [x] **大文本支持** -- 响应体支持 5~6 MB 大文本
-- [x] **WSDL 托管** -- 上传的 WSDL 文件可通过 `/wsdl/{fileName}` 直接访问，`soap:address` 自动替换为实际地址
+- [x] **WSDL 托管** -- 上传的 WSDL 文件可通过 Mock 地址 `?wsdl` 访问，`soap:address` 自动替换为实际地址
 - [x] **全局响应头** -- 团队级别的公共响应头，接口级别可覆盖
 - [x] **导入导出** -- 按团队导出接口定义（含标签），支持合并或覆盖两种导入模式
 - [x] **操作日志 / 请求日志** -- 记录管理操作和 Mock 请求，支持按条数或天数自动清理
@@ -147,6 +147,18 @@ http://{host}:{port}/mock/{teamIdentifier}/your/api/path
 
 ```
 GET http://localhost:18080/mock/FE/api/user/info
+```
+
+SOAP 接口上传 WSDL 后，每个 Operation 可独立配置多个返回体。启用多个返回体时，带规则的返回体会按顺序匹配请求，未命中时返回无规则兜底返回体；SOAP Body 条件支持按 XML 元素路径匹配，例如：
+
+```
+GetUserRequest.userId == u-1001
+```
+
+WSDL 托管地址为：
+
+```
+GET http://localhost:18080/mock/FE/soap/user-service?wsdl
 ```
 
 ---
