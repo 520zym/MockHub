@@ -166,16 +166,16 @@ public class MockDispatchService {
                 log.info("SOAP operation 匹配成功: operationName={}, soapAction={}",
                         matchedOp.getOperationName(), matchedOp.getSoapAction());
 
-                // 优先从 api_response 表查询活跃返回体
-                ApiResponse soapResp = apiResponseRepository.findActiveByApiIdAndOperation(
-                        api.getId(), matchedOp.getOperationName());
+                // 优先从 api_response 表按 operation 维度做条件匹配
+                ApiResponse soapResp = responseMatcher.match(
+                        api.getId(), matchedOp.getOperationName(), request);
                 if (soapResp != null) {
                     matchedResponse = soapResp;
                     responseBody = soapResp.getResponseBody();
                     responseCode = soapResp.getResponseCode();
                     delayMs = soapResp.getDelayMs();
                     respContentTypeFromResponse = soapResp.getContentType();
-                    log.debug("使用 api_response 表的 SOAP 活跃返回体: respId={}, name={}",
+                    log.debug("使用 api_response 表的 SOAP 匹配返回体: respId={}, name={}",
                             soapResp.getId(), soapResp.getName());
                 } else {
                     // 兼容旧数据：从 operation 读取

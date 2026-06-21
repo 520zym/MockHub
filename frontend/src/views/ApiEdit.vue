@@ -619,7 +619,8 @@ async function loadApiDetail() {
             fileSize: r.fileSize || null,
             delayMs: r.delayMs || 0,
             isActive: r.active !== undefined ? r.active : false,
-            sortOrder: r.sortOrder || 0
+            sortOrder: r.sortOrder || 0,
+            conditions: r.conditions || ''
           }))
         // 确保至少有一个
         if (form.responses.length === 0) {
@@ -647,7 +648,8 @@ async function loadApiDetail() {
             fileSize: r.fileSize || null,
             delayMs: r.delayMs || 0,
             isActive: r.active !== undefined ? r.active : false,
-            sortOrder: r.sortOrder || 0
+            sortOrder: r.sortOrder || 0,
+            conditions: r.conditions || ''
           })
         })
 

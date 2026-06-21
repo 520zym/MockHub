@@ -46,10 +46,10 @@
 
     <!-- 当前 Tab 内容 -->
     <div v-if="currentResponse" class="tab-content">
-      <!-- v1.4.3 新增：响应规则面板，仅 REST 启用（SOAP v1 不做条件匹配） -->
+      <!-- 响应规则面板：REST 按接口匹配，SOAP 按当前 operation 独立匹配 -->
       <ConditionPanel
-        v-if="!operationName"
         v-model="currentResponse.conditions"
+        :body-sample-kind="operationName ? 'xml' : 'json'"
       />
       <el-form label-position="top">
         <el-row :gutter="16">

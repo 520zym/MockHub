@@ -44,7 +44,7 @@
           </template>
           <div class="paste-dialog">
             <div class="paste-hint">
-              粘贴一段{{ source === 'BODY' ? 'JSON Body' : 'URL 查询串（?a=1&b=2）' }}，解析后在下方树中点击字段即可快速生成条件。
+              {{ pasteHint }}
             </div>
             <el-input
               v-model="pastedText"
@@ -107,7 +107,9 @@ import ConditionTable from './ConditionTable.vue'
 
 const props = defineProps({
   /** conditions JSON 字符串，对应 api_response.conditions 字段；空字符串 / null 表示无规则 */
-  modelValue: { type: String, default: '' }
+  modelValue: { type: String, default: '' },
+  /** BODY 示例类型：REST 使用 json 生成字段树；SOAP 使用 xml，仅提示手动填写路径 */
+  bodySampleKind: { type: String, default: 'json' }
 })
 
 const emit = defineEmits(['update:modelValue'])
@@ -137,6 +139,16 @@ const usedPaths = computed(() => conditions.value.map((c) => c.path).filter(Bool
 const ruleSummary = computed(() => {
   const n = conditions.value.length
   return n === 0 ? '无规则（兜底）' : `${n} 条规则`
+})
+
+const pasteHint = computed(() => {
+  if (source.value === 'QUERY') {
+    return '粘贴一段 URL 查询串（?a=1&b=2），解析后在下方树中点击字段即可快速生成条件。'
+  }
+  if (props.bodySampleKind === 'xml') {
+    return 'SOAP/XML Body 暂不生成字段树；可粘贴确认格式后，手动添加路径，如 Envelope.Body.GetUserRequest.userId。'
+  }
+  return '粘贴一段 JSON Body，解析后在下方树中点击字段即可快速生成条件。'
 })
 
 function parseConditions(json) {
@@ -183,6 +195,16 @@ function applyPasted() {
     return
   }
   if (source.value === 'BODY') {
+    if (props.bodySampleKind === 'xml') {
+      if (!text.startsWith('<')) {
+        ElMessage.error('SOAP/XML Body 应以 XML 标签开头')
+        return
+      }
+      sampleText.value = ''
+      showPasteDialog.value = false
+      ElMessage.info('XML 字段树暂未生成，请在右侧手动添加 Body 路径')
+      return
+    }
     // 尝试解析 JSON；失败给提示
     try {
       JSON.parse(text)

@@ -1,12 +1,16 @@
 package com.mockhub.mock.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mockhub.common.model.PageResult;
 import com.mockhub.common.util.PermissionChecker;
 import com.mockhub.mock.model.dto.ApiDefinitionDTO;
+import com.mockhub.mock.model.dto.ApiDefinitionVO;
 import com.mockhub.mock.model.entity.ApiDefinition;
+import com.mockhub.mock.model.entity.ApiGroup;
 import com.mockhub.mock.repository.ApiRepository;
 import com.mockhub.mock.repository.ApiResponseRepository;
 import com.mockhub.mock.repository.ApiTagRepository;
+import com.mockhub.mock.repository.GroupRepository;
 import com.mockhub.mock.repository.TagRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.AfterEach;
@@ -28,17 +32,20 @@ import static org.mockito.Mockito.when;
 class ApiServiceImplPathNormalizationTest {
 
     private ApiRepository apiRepository;
+    private GroupRepository groupRepository;
     private PermissionChecker permissionChecker;
     private ApiServiceImpl service;
 
     @BeforeEach
     void setUp() {
         apiRepository = mock(ApiRepository.class);
+        groupRepository = mock(GroupRepository.class);
         permissionChecker = mock(PermissionChecker.class);
         service = new ApiServiceImpl(
                 apiRepository,
                 mock(ApiResponseRepository.class),
                 mock(ApiTagRepository.class),
+                groupRepository,
                 mock(TagRepository.class),
                 mock(com.mockhub.system.service.TeamService.class),
                 permissionChecker,
@@ -55,6 +62,41 @@ class ApiServiceImplPathNormalizationTest {
                 new UsernamePasswordAuthenticationToken("admin", null, Collections.emptyList());
         auth.setDetails(details);
         SecurityContextHolder.getContext().setAuthentication(auth);
+    }
+
+    @Test
+    void listFillsGroupNameFromRepository() {
+        ApiDefinition api = new ApiDefinition();
+        api.setId("api-1");
+        api.setTeamId("team-1");
+        api.setGroupId("group-1");
+        api.setType("REST");
+        api.setName("用户信息");
+        api.setMethod("GET");
+        api.setPath("/user/info");
+        api.setResponseCode(200);
+        api.setContentType("application/json");
+        api.setCreatedAt("2026-06-21T20:00:00");
+        api.setUpdatedAt("2026-06-21T20:00:00");
+
+        ApiGroup group = new ApiGroup();
+        group.setId("group-1");
+        group.setTeamId("team-1");
+        group.setName("用户模块");
+
+        when(apiRepository.findAll(null, null, null, null, null, null,
+                Collections.<String>emptyList(), null, null, null, 0, 20))
+                .thenReturn(Collections.singletonList(api));
+        when(apiRepository.count(null, null, null, null, null, null,
+                Collections.<String>emptyList(), null))
+                .thenReturn(1L);
+        when(groupRepository.findById("group-1")).thenReturn(group);
+
+        PageResult<ApiDefinitionVO> result = service.list(null, null, null, null,
+                null, Collections.<String>emptyList(), null, null, null, 1, 20);
+
+        assertEquals(1, result.getItems().size());
+        assertEquals("用户模块", result.getItems().get(0).getGroupName());
     }
 
     @AfterEach

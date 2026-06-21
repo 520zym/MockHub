@@ -134,6 +134,19 @@ class ResponseMatcherTest {
             // 坏 JSON 应被视为"无规则" → 兜底第一条
             assertEquals(bad, matcher.match("api1", newRequest()));
         }
+
+        @Test
+        void soapOperationMatchUsesOnlyThatOperationResponses() throws Exception {
+            ApiResponse ruleA = response("rA", ruleJson("QUERY", "tier", "EQ", "vip", "STRING"), 1);
+            ApiResponse fallback = response("rF", null, 2);
+            when(repo.findEnabledByApiIdAndOperation("api1", "GetUser"))
+                    .thenReturn(Arrays.asList(ruleA, fallback));
+
+            MockHttpServletRequest req = newRequest();
+            req.setParameter("tier", "vip");
+
+            assertEquals(ruleA, matcher.match("api1", "GetUser", req));
+        }
     }
 
     // ========== extract() 取值 ==========
@@ -179,6 +192,20 @@ class ResponseMatcherTest {
             MockHttpServletRequest req = newRequest();
             req.setContent("{not json".getBytes("UTF-8"));
             assertNull(matcher.extract("BODY", "a", req));
+        }
+
+        @Test
+        void soapXmlBodyPathUsesLocalElementNames() throws Exception {
+            MockHttpServletRequest req = new MockHttpServletRequest();
+            req.setMethod("POST");
+            req.setContentType("text/xml; charset=UTF-8");
+            req.setContent(("<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" " +
+                    "xmlns:usr=\"http://example.com/mockhub/user\">" +
+                    "<soapenv:Body><usr:GetUserRequest><usr:userId>u-1001</usr:userId>" +
+                    "</usr:GetUserRequest></soapenv:Body></soapenv:Envelope>").getBytes("UTF-8"));
+
+            assertEquals("u-1001", matcher.extract("BODY", "Envelope.Body.GetUserRequest.userId", req));
+            assertEquals("u-1001", matcher.extract("BODY", "GetUserRequest.userId", req));
         }
 
         @Test

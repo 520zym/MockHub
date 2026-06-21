@@ -140,6 +140,19 @@ public class ApiResponseRepository {
     }
 
     /**
+     * 查询指定 SOAP operation 的所有启用返回体，按 sort_order 升序排列。
+     *
+     * @param apiId             接口 ID
+     * @param soapOperationName SOAP operation 名称
+     * @return 启用返回体列表，按 sort_order 升序
+     */
+    public List<ApiResponse> findEnabledByApiIdAndOperation(String apiId, String soapOperationName) {
+        return jdbcTemplate.query(
+                "SELECT * FROM api_response WHERE api_id = ? AND soap_operation_name = ? AND is_active = 1 ORDER BY sort_order ASC",
+                ROW_MAPPER, apiId, soapOperationName);
+    }
+
+    /**
      * 查询指定 SOAP operation 的活跃返回体
      *
      * @param apiId             接口 ID
