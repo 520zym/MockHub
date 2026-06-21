@@ -19,7 +19,7 @@ import java.util.Map;
  * <p>
  * 适用于 ApiServiceImpl 保存接口（DTO 形式）和 ImportExportService 导入（Entity 形式）两个路径。
  *
- * <p>校验规则（仅针对 REST 返回体，即 {@code soapOperationName == null} 的项）：
+ * <p>校验规则（按 REST 接口或 SOAP operation 独立分组）：
  * <ol>
  *   <li>启用项数 == 0 → 抛 BizException(40410)</li>
  *   <li>启用项数 &gt;= 2 且无"无规则"项 → 抛 BizException(40411)</li>
@@ -35,7 +35,7 @@ import java.util.Map;
  * </ol>
  *
  * <p>SOAP 返回体（{@code soapOperationName != null}）按 operation 分组独立校验启用与兜底规则；
- * v1 对 SOAP 不启用条件匹配逻辑，但启用项数约束仍然适用以避免数据异常。
+ * 运行时也按 operation 复用同一套条件匹配逻辑。
  */
 public class ResponseValidator {
 

@@ -190,7 +190,7 @@ CREATE TABLE IF NOT EXISTS api_response (
     delay_ms            INTEGER NOT NULL DEFAULT 0,
     is_active           INTEGER NOT NULL DEFAULT 0,  -- 0=false, 1=true，同一 api_id + soap_operation_name 下只有一个为 1
     sort_order          INTEGER NOT NULL DEFAULT 0,
-    conditions          TEXT,            -- v2 预留：JSON 条件匹配规则，当前为 null
+    conditions          TEXT,            -- JSON 条件匹配规则；为空表示无规则兜底返回体
     created_at          TEXT NOT NULL,
     updated_at          TEXT NOT NULL,
     FOREIGN KEY (api_id) REFERENCES api_definition(id) ON DELETE CASCADE

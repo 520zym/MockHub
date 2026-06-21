@@ -11,13 +11,18 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import javax.servlet.http.HttpServletRequest;
+import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
 import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.regex.Pattern;
+import org.w3c.dom.Document;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
 
 /**
  * 条件响应匹配引擎。
@@ -42,6 +47,8 @@ public class ResponseMatcher {
     public static final String ATTR_RAW_BODY = "__mockhub_raw_body__";
     /** Request attribute key：缓存解析后的 JsonNode（本类内写入，供同请求多次条件复用） */
     public static final String ATTR_PARSED_BODY = "__mockhub_parsed_body__";
+    /** Request attribute key：缓存解析后的 XML Document（SOAP/XML 请求体条件复用） */
+    public static final String ATTR_PARSED_XML_BODY = "__mockhub_parsed_xml_body__";
 
     private final ApiResponseRepository apiResponseRepository;
     private final ObjectMapper objectMapper;
@@ -60,10 +67,27 @@ public class ResponseMatcher {
      * @return 命中的返回体；启用数为 0 时返回 null，由调用方决定如何兜底
      */
     public ApiResponse match(String apiId, HttpServletRequest req) {
-        List<ApiResponse> enabled = apiResponseRepository.findEnabledByApiId(apiId);
+        return matchEnabled(apiId, null, apiResponseRepository.findEnabledByApiId(apiId), req);
+    }
 
+    /**
+     * 为指定 SOAP operation 挑选命中的 ApiResponse。
+     *
+     * @param apiId             接口 ID
+     * @param soapOperationName SOAP operation 名称
+     * @param req               原始请求
+     * @return 命中的返回体；启用数为 0 时返回 null，由调用方决定如何兜底
+     */
+    public ApiResponse match(String apiId, String soapOperationName, HttpServletRequest req) {
+        return matchEnabled(apiId, soapOperationName,
+                apiResponseRepository.findEnabledByApiIdAndOperation(apiId, soapOperationName), req);
+    }
+
+    private ApiResponse matchEnabled(String apiId, String soapOperationName,
+                                     List<ApiResponse> enabled, HttpServletRequest req) {
+        String scope = soapOperationName == null ? apiId : apiId + "#" + soapOperationName;
         if (enabled.isEmpty()) {
-            log.warn("接口 {} 无启用返回体", apiId);
+            log.warn("接口 {} 无启用返回体", scope);
             return null;
         }
 
@@ -84,18 +108,18 @@ public class ResponseMatcher {
                 continue;
             }
             if (matchRule(rule, req)) {
-                log.debug("接口 {} 命中返回体 {}（{}）", apiId, resp.getId(), resp.getName());
+                log.debug("接口 {} 命中返回体 {}（{}）", scope, resp.getId(), resp.getName());
                 return resp;
             }
         }
 
         if (fallback != null) {
-            log.debug("接口 {} 所有规则均未命中，走兜底返回体 {}", apiId, fallback.getId());
+            log.debug("接口 {} 所有规则均未命中，走兜底返回体 {}", scope, fallback.getId());
             return fallback;
         }
 
         // 理论上保存校验已拦截（启用 ≥ 2 必有一个兜底）；运行时兜底保护
-        log.warn("接口 {} 启用 {} 条返回体但无兜底（数据异常）", apiId, enabled.size());
+        log.warn("接口 {} 启用 {} 条返回体但无兜底（数据异常）", scope, enabled.size());
         return null;
     }
 
@@ -139,11 +163,11 @@ public class ResponseMatcher {
         }
         if ("BODY".equalsIgnoreCase(source)) {
             JsonNode root = getParsedBody(req);
-            if (root == null) {
-                return null;
+            if (root != null) {
+                JsonNode leaf = navigate(root, path);
+                return leaf == null || leaf.isNull() || leaf.isMissingNode() ? null : leaf.asText();
             }
-            JsonNode leaf = navigate(root, path);
-            return leaf == null || leaf.isNull() || leaf.isMissingNode() ? null : leaf.asText();
+            return extractXmlBody(path, req);
         }
         return null;
     }
@@ -160,11 +184,11 @@ public class ResponseMatcher {
             return (JsonNode) cached;
         }
 
-        String rawBody = (String) req.getAttribute(ATTR_RAW_BODY);
-        if (rawBody == null) {
-            rawBody = readBody(req);
-        }
+        String rawBody = getRawBody(req);
         if (rawBody == null || rawBody.isEmpty()) {
+            return null;
+        }
+        if (rawBody.trim().startsWith("<")) {
             return null;
         }
 
@@ -176,6 +200,102 @@ public class ResponseMatcher {
             log.warn("请求体 JSON 解析失败，BODY 条件统一判不满足: {}", e.getMessage());
             return null;
         }
+    }
+
+    private String extractXmlBody(String path, HttpServletRequest req) {
+        Document document = getParsedXmlBody(req);
+        if (document == null) {
+            return null;
+        }
+        Node matched = navigateXml(document.getDocumentElement(), path);
+        return matched == null ? null : matched.getTextContent();
+    }
+
+    private Document getParsedXmlBody(HttpServletRequest req) {
+        Object cached = req.getAttribute(ATTR_PARSED_XML_BODY);
+        if (cached instanceof Document) {
+            return (Document) cached;
+        }
+
+        String rawBody = getRawBody(req);
+        if (rawBody == null || rawBody.trim().isEmpty()) {
+            return null;
+        }
+        if (!rawBody.trim().startsWith("<")) {
+            return null;
+        }
+
+        try {
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            factory.setNamespaceAware(true);
+            factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+            factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+            factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+            Document document = factory.newDocumentBuilder()
+                    .parse(new ByteArrayInputStream(rawBody.getBytes("UTF-8")));
+            req.setAttribute(ATTR_PARSED_XML_BODY, document);
+            return document;
+        } catch (Exception e) {
+            log.warn("请求体 XML 解析失败，BODY 条件统一判不满足: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    private Node navigateXml(Node root, String path) {
+        if (root == null || path == null || path.trim().isEmpty()) {
+            return null;
+        }
+        String[] segments = path.split("\\.");
+        Node current = root;
+        int index = localNameEquals(current, segments[0]) ? 1 : 0;
+        for (int i = index; i < segments.length; i++) {
+            current = firstChildByLocalName(current, segments[i]);
+            if (current == null) {
+                return null;
+            }
+        }
+        return current;
+    }
+
+    private String getRawBody(HttpServletRequest req) {
+        String rawBody = (String) req.getAttribute(ATTR_RAW_BODY);
+        if (rawBody == null) {
+            rawBody = readBody(req);
+            if (rawBody != null) {
+                req.setAttribute(ATTR_RAW_BODY, rawBody);
+            }
+        }
+        return rawBody;
+    }
+
+    private Node firstChildByLocalName(Node node, String localName) {
+        NodeList children = node.getChildNodes();
+        for (int i = 0; i < children.getLength(); i++) {
+            Node child = children.item(i);
+            if (child.getNodeType() == Node.ELEMENT_NODE && localNameEquals(child, localName)) {
+                return child;
+            }
+            if (child.getNodeType() == Node.ELEMENT_NODE) {
+                Node nested = firstChildByLocalName(child, localName);
+                if (nested != null) {
+                    return nested;
+                }
+            }
+        }
+        return null;
+    }
+
+    private boolean localNameEquals(Node node, String expected) {
+        if (node == null || expected == null) {
+            return false;
+        }
+        String localName = node.getLocalName();
+        String nodeName = localName != null ? localName : node.getNodeName();
+        int colon = nodeName.indexOf(':');
+        if (colon >= 0) {
+            nodeName = nodeName.substring(colon + 1);
+        }
+        return expected.equals(nodeName);
     }
 
     /**

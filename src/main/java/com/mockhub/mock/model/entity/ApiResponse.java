@@ -54,7 +54,7 @@ public class ApiResponse {
     /** 排序序号 */
     private int sortOrder;
 
-    /** 条件匹配规则 JSON，v2 预留，当前为 null */
+    /** 条件匹配规则 JSON；为空表示无规则兜底返回体 */
     private String conditions;
 
     /** 创建时间（ISO 格式） */

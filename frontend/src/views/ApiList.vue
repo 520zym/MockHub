@@ -235,8 +235,8 @@
         <!-- 分组列：未分组 / 跨团队找不到分组 / 分组已删除——一律显示 "-" -->
         <el-table-column label="分组" min-width="100" show-overflow-tooltip>
           <template #default="{ row }">
-            <span v-if="groupNameMap[row.groupId]" class="group-name">
-              {{ groupNameMap[row.groupId] }}
+            <span v-if="displayGroupName(row)" class="group-name">
+              {{ displayGroupName(row) }}
             </span>
             <span v-else class="no-group">-</span>
           </template>
@@ -601,7 +601,7 @@ const httpMethods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
 // 当前可选标签（基于当前团队筛选加载）
 const availableTags = ref([])
 
-// 当前可选分组（基于当前团队加载，用于筛选下拉和表格分组列名映射）
+// 当前可选分组（基于当前团队加载，用于筛选下拉；表格列优先使用后端 groupName）
 const availableGroups = ref([])
 
 // 分组 ID → 分组名 映射，给表格列展示用
@@ -610,6 +610,10 @@ const groupNameMap = computed(() => {
   availableGroups.value.forEach(g => { map[g.id] = g.name })
   return map
 })
+
+function displayGroupName(row) {
+  return row.groupName || groupNameMap.value[row.groupId] || ''
+}
 
 // 分组管理弹窗显示状态
 const groupManagerVisible = ref(false)

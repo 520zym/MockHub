@@ -19,6 +19,7 @@ import com.mockhub.mock.model.entity.Tag;
 import com.mockhub.mock.repository.ApiRepository;
 import com.mockhub.mock.repository.ApiResponseRepository;
 import com.mockhub.mock.repository.ApiTagRepository;
+import com.mockhub.mock.repository.GroupRepository;
 import com.mockhub.mock.repository.TagRepository;
 import com.mockhub.mock.service.match.ResponseValidator;
 import com.mockhub.log.service.LogService;
@@ -62,6 +63,7 @@ public class ApiServiceImpl implements ApiService {
     private final ApiRepository apiRepository;
     private final ApiResponseRepository apiResponseRepository;
     private final ApiTagRepository apiTagRepository;
+    private final GroupRepository groupRepository;
     private final TagRepository tagRepository;
     private final TeamService teamService;
     private final PermissionChecker permissionChecker;
@@ -73,6 +75,7 @@ public class ApiServiceImpl implements ApiService {
     public ApiServiceImpl(ApiRepository apiRepository,
                           ApiResponseRepository apiResponseRepository,
                           ApiTagRepository apiTagRepository,
+                          GroupRepository groupRepository,
                           TagRepository tagRepository,
                           TeamService teamService,
                           PermissionChecker permissionChecker,
@@ -83,6 +86,7 @@ public class ApiServiceImpl implements ApiService {
         this.apiRepository = apiRepository;
         this.apiResponseRepository = apiResponseRepository;
         this.apiTagRepository = apiTagRepository;
+        this.groupRepository = groupRepository;
         this.tagRepository = tagRepository;
         this.teamService = teamService;
         this.permissionChecker = permissionChecker;
@@ -695,9 +699,17 @@ public class ApiServiceImpl implements ApiService {
             log.warn("查询团队信息失败: teamId={}", api.getTeamId(), e);
         }
 
-        // 填充分组名称（需要通过 GroupService 获取，但为避免循环依赖直接查）
-        // 这里在 Controller 层或通过额外参数处理，VO 中 groupName 由 Controller 层填充
-        // 暂不在此处填充 groupName，由 Controller 调用时补充
+        // 填充分组名称：列表页可能处于“所有接口”视图，前端无法只靠当前团队分组列表映射。
+        if (api.getGroupId() != null && !api.getGroupId().isEmpty()) {
+            try {
+                com.mockhub.mock.model.entity.ApiGroup group = groupRepository.findById(api.getGroupId());
+                if (group != null) {
+                    vo.setGroupName(group.getName());
+                }
+            } catch (Exception e) {
+                log.warn("查询分组信息失败: groupId={}", api.getGroupId(), e);
+            }
+        }
 
         // 填充标签列表
         List<String> tagIds = apiTagRepository.findTagIdsByApiId(api.getId());
