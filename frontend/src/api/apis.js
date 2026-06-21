@@ -16,7 +16,25 @@ export const toggleApi = (id) => request.put(`/apis/${id}/toggle`)
 
 export const importApis = (formData) => request.post('/apis/import', formData)
 
-export const exportApis = (teamId) => request.get('/apis/export', { params: { teamId }, responseType: 'blob' })
+export const exportApis = (teamId, ids = []) => request.get('/apis/export', {
+  params: { teamId, ids },
+  paramsSerializer: params => {
+    const searchParams = new URLSearchParams()
+    searchParams.append('teamId', params.teamId)
+    ;(params.ids || []).forEach(id => searchParams.append('ids', id))
+    return searchParams.toString()
+  },
+  responseType: 'blob'
+})
+
+export const uploadResponseFile = (teamId, file) => {
+  const formData = new FormData()
+  formData.append('teamId', teamId)
+  formData.append('file', file)
+  return request.post('/apis/files/upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
 
 /**
  * 批量操作接口

@@ -22,11 +22,13 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 
 import javax.servlet.http.HttpServletRequest;
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.net.URLEncoder;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Enumeration;
@@ -70,6 +72,7 @@ public class MockDispatchService {
     private final DynamicVariableResolver dynamicVariableResolver;
     private final ResponseMatcher responseMatcher;
     private final SoapService soapService;
+    private final MockFileStorageService fileStorageService;
 
     public MockDispatchService(TeamService teamService,
                                ApiService apiService,
@@ -79,7 +82,8 @@ public class MockDispatchService {
                                ObjectMapper objectMapper,
                                DynamicVariableResolver dynamicVariableResolver,
                                ResponseMatcher responseMatcher,
-                               SoapService soapService) {
+                               SoapService soapService,
+                               MockFileStorageService fileStorageService) {
         this.teamService = teamService;
         this.apiService = apiService;
         this.apiResponseRepository = apiResponseRepository;
@@ -89,6 +93,7 @@ public class MockDispatchService {
         this.dynamicVariableResolver = dynamicVariableResolver;
         this.responseMatcher = responseMatcher;
         this.soapService = soapService;
+        this.fileStorageService = fileStorageService;
     }
 
     /**
@@ -103,7 +108,7 @@ public class MockDispatchService {
      * @param request        原始 HttpServletRequest，用于读取请求头、请求体等信息
      * @return ResponseEntity 包含响应码、响应头和响应体
      */
-    public ResponseEntity<String> dispatch(String teamIdentifier, String method,
+    public ResponseEntity<?> dispatch(String teamIdentifier, String method,
                                            String path, HttpServletRequest request) {
         long startTime = System.currentTimeMillis();
         log.info("收到 Mock 请求: {} /mock/{}/{}", method, teamIdentifier, path);
@@ -143,6 +148,7 @@ public class MockDispatchService {
         int responseCode;
         int delayMs;
         String respContentTypeFromResponse = null;
+        ApiResponse matchedResponse = null;
 
         if (isSoap && api.getSoapConfig() != null && !api.getSoapConfig().isEmpty()) {
             // SOAP 请求处理
@@ -164,6 +170,7 @@ public class MockDispatchService {
                 ApiResponse soapResp = apiResponseRepository.findActiveByApiIdAndOperation(
                         api.getId(), matchedOp.getOperationName());
                 if (soapResp != null) {
+                    matchedResponse = soapResp;
                     responseBody = soapResp.getResponseBody();
                     responseCode = soapResp.getResponseCode();
                     delayMs = soapResp.getDelayMs();
@@ -188,6 +195,7 @@ public class MockDispatchService {
             // REST 请求处理：v1.4.3 起走条件匹配引擎（启用数 == 1 时会短路等同旧单返回体行为）
             ApiResponse activeResponse = responseMatcher.match(api.getId(), request);
             if (activeResponse != null) {
+                matchedResponse = activeResponse;
                 responseBody = activeResponse.getResponseBody();
                 responseCode = activeResponse.getResponseCode();
                 delayMs = activeResponse.getDelayMs();
@@ -241,6 +249,10 @@ public class MockDispatchService {
         for (Map.Entry<String, String> entry : finalHeaders.entrySet()) {
             httpHeaders.add(entry.getKey(), entry.getValue());
         }
+        if (isFileResponse(matchedResponse)) {
+            return buildFileResponse(matchedResponse, httpHeaders, team, api, method, path, request,
+                    responseCode, startTime);
+        }
         // 设置 Content-Type
         // SOAP 请求且未配置 respContentType 时按请求 SOAP 版本兜底（1.1 → text/xml, 1.2 → application/soap+xml）
         // 其他情况：respContentType 优先，默认 application/json
@@ -268,6 +280,67 @@ public class MockDispatchService {
                 responseBody != null ? responseBody : "",
                 httpHeaders,
                 HttpStatus.valueOf(responseCode));
+    }
+
+    private boolean isFileResponse(ApiResponse response) {
+        return response != null && "FILE".equalsIgnoreCase(response.getBodyType());
+    }
+
+    private ResponseEntity<Resource> buildFileResponse(ApiResponse response,
+                                                       HttpHeaders httpHeaders,
+                                                       Team team,
+                                                       ApiDefinition api,
+                                                       String method,
+                                                       String path,
+                                                       HttpServletRequest request,
+                                                       int responseCode,
+                                                       long startTime) {
+        Resource resource = fileStorageService.loadAsResource(response.getFilePath());
+        String contentType = response.getContentType();
+        if (contentType == null || contentType.trim().isEmpty()) {
+            contentType = MediaType.APPLICATION_OCTET_STREAM_VALUE;
+        }
+        httpHeaders.set(HttpHeaders.CONTENT_TYPE, contentType);
+        Long fileSize = response.getFileSize();
+        if (fileSize == null) {
+            try {
+                fileSize = resource.contentLength();
+            } catch (IOException ignored) {
+                fileSize = null;
+            }
+        }
+        if (fileSize != null && fileSize >= 0) {
+            httpHeaders.setContentLength(fileSize);
+        }
+        String downloadName = response.getDownloadName();
+        if (downloadName == null || downloadName.trim().isEmpty()) {
+            downloadName = response.getFileName();
+        }
+        if (downloadName != null && !downloadName.trim().isEmpty()) {
+            httpHeaders.set(HttpHeaders.CONTENT_DISPOSITION,
+                    "attachment; filename=\"" + fallbackAsciiFileName(downloadName) + "\"; filename*=UTF-8''" +
+                            encodeFileName(downloadName));
+        }
+
+        long durationMs = System.currentTimeMillis() - startTime;
+        log.info("Mock 文件响应: apiId={}, statusCode={}, duration={}ms, file={}",
+                api.getId(), responseCode, durationMs, response.getFilePath());
+        asyncWriteRequestLog(team, api, method, path, request, responseCode, durationMs);
+        apiService.asyncIncrementHitCount(api.getId());
+
+        return new ResponseEntity<Resource>(resource, httpHeaders, HttpStatus.valueOf(responseCode));
+    }
+
+    private String fallbackAsciiFileName(String fileName) {
+        return fileName.replaceAll("[^A-Za-z0-9._-]", "_");
+    }
+
+    private String encodeFileName(String fileName) {
+        try {
+            return URLEncoder.encode(fileName, "UTF-8").replace("+", "%20");
+        } catch (Exception e) {
+            return fallbackAsciiFileName(fileName);
+        }
     }
 
     /**

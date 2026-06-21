@@ -37,6 +37,8 @@ import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -66,6 +68,7 @@ public class ApiServiceImpl implements ApiService {
     private final ObjectMapper objectMapper;
     private final LogService logService;
     private final com.mockhub.system.repository.UserRepository userRepository;
+    private final MockFileStorageService fileStorageService;
 
     public ApiServiceImpl(ApiRepository apiRepository,
                           ApiResponseRepository apiResponseRepository,
@@ -75,7 +78,8 @@ public class ApiServiceImpl implements ApiService {
                           PermissionChecker permissionChecker,
                           ObjectMapper objectMapper,
                           LogService logService,
-                          com.mockhub.system.repository.UserRepository userRepository) {
+                          com.mockhub.system.repository.UserRepository userRepository,
+                          MockFileStorageService fileStorageService) {
         this.apiRepository = apiRepository;
         this.apiResponseRepository = apiResponseRepository;
         this.apiTagRepository = apiTagRepository;
@@ -85,6 +89,7 @@ public class ApiServiceImpl implements ApiService {
         this.objectMapper = objectMapper;
         this.logService = logService;
         this.userRepository = userRepository;
+        this.fileStorageService = fileStorageService;
     }
 
     /**
@@ -411,8 +416,11 @@ public class ApiServiceImpl implements ApiService {
 
         // 删除标签关联
         apiTagRepository.deleteByApiId(id);
+        Set<String> oldFilePaths = collectFilePaths(apiResponseRepository.findByApiId(id));
+        apiResponseRepository.deleteByApiId(id);
         // 删除接口
         apiRepository.deleteById(id);
+        cleanupUnreferencedFiles(oldFilePaths);
         log.info("删除接口: id={}, name={}, path={}", id, api.getName(), api.getPath());
         recordOperation("DELETE", "API", id, api.getName(),
                 "删除接口 " + api.getMethod() + " " + api.getPath(), api.getTeamId());
@@ -466,6 +474,11 @@ public class ApiServiceImpl implements ApiService {
             copyResp.setResponseCode(srcResp.getResponseCode());
             copyResp.setContentType(srcResp.getContentType());
             copyResp.setResponseBody(srcResp.getResponseBody());
+            copyResp.setBodyType(srcResp.getBodyType());
+            copyResp.setFileName(srcResp.getFileName());
+            copyResp.setFilePath(srcResp.getFilePath());
+            copyResp.setDownloadName(srcResp.getDownloadName());
+            copyResp.setFileSize(srcResp.getFileSize());
             copyResp.setDelayMs(srcResp.getDelayMs());
             copyResp.setActive(srcResp.isActive());
             copyResp.setSortOrder(srcResp.getSortOrder());
@@ -544,9 +557,14 @@ public class ApiServiceImpl implements ApiService {
             log.info("批量禁用接口: count={}", affected);
         } else if ("delete".equals(action)) {
             // 先清理标签关联和返回体，再删主表
+            Set<String> oldFilePaths = new HashSet<String>();
+            for (String apiId : validIds) {
+                oldFilePaths.addAll(collectFilePaths(apiResponseRepository.findByApiId(apiId)));
+            }
             apiTagRepository.batchDeleteByApiIds(validIds);
             apiResponseRepository.batchDeleteByApiIds(validIds);
             affected = apiRepository.batchDeleteByIds(validIds);
+            cleanupUnreferencedFiles(oldFilePaths);
             log.info("批量删除接口: count={}", affected);
         } else if ("move-group".equals(action)) {
             affected = apiRepository.batchUpdateGroup(validIds, targetGroupId, now);
@@ -735,6 +753,11 @@ public class ApiServiceImpl implements ApiService {
             entity.setResponseCode(dto.getResponseCode());
             entity.setContentType(dto.getContentType() != null ? dto.getContentType() : "application/json");
             entity.setResponseBody(dto.getResponseBody());
+            entity.setBodyType(dto.getBodyType() != null ? dto.getBodyType() : "TEXT");
+            entity.setFileName(dto.getFileName());
+            entity.setFilePath(dto.getFilePath());
+            entity.setDownloadName(dto.getDownloadName());
+            entity.setFileSize(dto.getFileSize());
             entity.setDelayMs(dto.getDelayMs());
             entity.setActive(dto.isActive());
             entity.setSortOrder(dto.getSortOrder());
@@ -744,8 +767,37 @@ public class ApiServiceImpl implements ApiService {
             entities.add(entity);
         }
 
+        Set<String> oldFilePaths = collectFilePaths(apiResponseRepository.findByApiId(apiId));
         apiResponseRepository.replaceAll(apiId, entities);
+        cleanupUnreferencedFiles(oldFilePaths);
         log.debug("保存接口 {} 的返回体，共 {} 个", apiId, entities.size());
+    }
+
+    private Set<String> collectFilePaths(List<ApiResponse> responses) {
+        Set<String> paths = new HashSet<String>();
+        if (responses == null) {
+            return paths;
+        }
+        for (ApiResponse response : responses) {
+            if (response != null
+                    && "FILE".equalsIgnoreCase(response.getBodyType())
+                    && response.getFilePath() != null
+                    && !response.getFilePath().trim().isEmpty()) {
+                paths.add(response.getFilePath());
+            }
+        }
+        return paths;
+    }
+
+    private void cleanupUnreferencedFiles(Set<String> filePaths) {
+        if (filePaths == null || filePaths.isEmpty()) {
+            return;
+        }
+        for (String filePath : filePaths) {
+            if (apiResponseRepository.countByFilePath(filePath) == 0) {
+                fileStorageService.deleteQuietly(filePath);
+            }
+        }
     }
 
     /**

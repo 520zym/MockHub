@@ -30,6 +30,21 @@ public class ApiResponse {
     /** 响应体内容，支持动态变量占位符 */
     private String responseBody;
 
+    /** 响应体类型：TEXT / FILE */
+    private String bodyType;
+
+    /** 文件原始名称（bodyType=FILE 时使用） */
+    private String fileName;
+
+    /** 文件相对存储路径（bodyType=FILE 时使用） */
+    private String filePath;
+
+    /** 下载时展示的文件名（可选） */
+    private String downloadName;
+
+    /** 文件大小（字节，bodyType=FILE 时使用） */
+    private Long fileSize;
+
     /** 延迟毫秒数 */
     private int delayMs;
 
@@ -105,6 +120,46 @@ public class ApiResponse {
 
     public void setResponseBody(String responseBody) {
         this.responseBody = responseBody;
+    }
+
+    public String getBodyType() {
+        return bodyType;
+    }
+
+    public void setBodyType(String bodyType) {
+        this.bodyType = bodyType;
+    }
+
+    public String getFileName() {
+        return fileName;
+    }
+
+    public void setFileName(String fileName) {
+        this.fileName = fileName;
+    }
+
+    public String getFilePath() {
+        return filePath;
+    }
+
+    public void setFilePath(String filePath) {
+        this.filePath = filePath;
+    }
+
+    public String getDownloadName() {
+        return downloadName;
+    }
+
+    public void setDownloadName(String downloadName) {
+        this.downloadName = downloadName;
+    }
+
+    public Long getFileSize() {
+        return fileSize;
+    }
+
+    public void setFileSize(Long fileSize) {
+        this.fileSize = fileSize;
     }
 
     public int getDelayMs() {

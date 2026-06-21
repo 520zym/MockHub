@@ -52,7 +52,7 @@ public class MockDispatchController {
      * @return Mock 响应（直接返回配置的 responseBody）
      */
     @RequestMapping("/mock/{teamIdentifier}/**")
-    public ResponseEntity<String> handleMockRequest(
+    public ResponseEntity<?> handleMockRequest(
             @PathVariable String teamIdentifier,
             HttpServletRequest request) {
 

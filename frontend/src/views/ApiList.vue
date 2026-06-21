@@ -499,10 +499,10 @@
             ref="importUploadRef"
             :auto-upload="false"
             :limit="1"
-            accept=".json"
+            accept=".json,.zip"
             :on-change="handleImportFileChange"
           >
-            <el-button>选择 JSON 文件</el-button>
+            <el-button>选择 JSON/ZIP 文件</el-button>
           </el-upload>
         </el-form-item>
       </el-form>
@@ -1194,40 +1194,21 @@ async function handleImport() {
 }
 
 async function handleExport() {
-  // 有选中行时导出选中的接口，否则导出整个团队
-  if (selectedRows.value.length > 0) {
-    // 导出选中的接口：构造 JSON 并下载
-    const exportData = {
-      version: '1.0',
-      exportedAt: new Date().toISOString(),
-      teamName: selectedRows.value[0].teamName || '',
-      apis: selectedRows.value
-    }
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
-    const fileName = `mockhub-export-selected-${selectedRows.value.length}-${new Date().toISOString().slice(0, 10)}.json`
-    const url = window.URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.setAttribute('download', fileName)
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    window.URL.revokeObjectURL(url)
-    ElMessage.success(`已导出 ${selectedRows.value.length} 个接口`)
-    return
-  }
-
-  // 没选中时按团队导出全部
-  const teamId = appStore.currentTeamId
+  const selectedIds = selectedRows.value.map(row => row.id)
+  const teamId = selectedRows.value.length > 0
+    ? (selectedRows.value[0].teamId || appStore.currentTeamId)
+    : appStore.currentTeamId
   if (!teamId) {
     ElMessage.warning('请先选择接口或在左侧选择一个团队再导出')
     return
   }
 
   try {
-    const blob = await exportApis(teamId)
+    const blob = await exportApis(teamId, selectedIds)
     const team = appStore.teams.find(t => t.id === teamId)
-    const fileName = `mockhub-export-${team ? team.identifier : 'all'}-${new Date().toISOString().slice(0, 10)}.json`
+    const extension = blob.type && blob.type.includes('zip') ? 'zip' : 'json'
+    const scope = selectedIds.length > 0 ? `selected-${selectedIds.length}` : (team ? team.identifier : 'all')
+    const fileName = `mockhub-export-${scope}-${new Date().toISOString().slice(0, 10)}.${extension}`
     const url = window.URL.createObjectURL(new Blob([blob]))
     const link = document.createElement('a')
     link.href = url
@@ -1236,6 +1217,7 @@ async function handleExport() {
     link.click()
     document.body.removeChild(link)
     window.URL.revokeObjectURL(url)
+    ElMessage.success(selectedIds.length > 0 ? `已导出 ${selectedIds.length} 个接口` : '导出完成')
   } catch (e) {
     // 错误已由拦截器处理
   }

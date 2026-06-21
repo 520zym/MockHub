@@ -5,10 +5,15 @@ import com.mockhub.common.model.Result;
 import com.mockhub.common.config.LogRetainProperties;
 import com.mockhub.common.config.MockCorsProperties;
 import com.mockhub.common.util.SecurityContextUtil;
+import com.mockhub.log.model.OperationLog;
+import com.mockhub.log.service.LogService;
+import com.mockhub.mock.service.MockFileMaintenanceService;
+import com.mockhub.mock.service.MockFileStorageService;
 import com.mockhub.system.model.dto.SettingsDTO;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -36,6 +41,12 @@ public class SettingsController {
 
     @Autowired
     private HealthController healthController;
+
+    @Autowired
+    private MockFileMaintenanceService mockFileMaintenanceService;
+
+    @Autowired
+    private LogService logService;
 
     /**
      * GET /api/settings — 获取全局配置
@@ -81,11 +92,64 @@ public class SettingsController {
     }
 
     /**
+     * GET /api/settings/file-storage/orphans — 扫描文件响应存储中的孤儿文件
+     */
+    @GetMapping("/file-storage/orphans")
+    public Result<MockFileMaintenanceService.OrphanScanResult> scanOrphanFiles() {
+        checkSuperAdmin();
+        MockFileMaintenanceService.OrphanScanResult result = mockFileMaintenanceService.scanOrphanFiles();
+        recordSystemOperation("SCAN", "扫描文件存储孤儿文件：发现 " + result.getOrphanCount()
+                + " 个，合计 " + result.getOrphanSize() + " 字节");
+        return Result.ok(result);
+    }
+
+    /**
+     * DELETE /api/settings/file-storage/orphans — 清理未被任何返回体引用的文件
+     */
+    @DeleteMapping("/file-storage/orphans")
+    public Result<MockFileStorageService.OrphanCleanupResult> cleanOrphanFiles() {
+        checkSuperAdmin();
+        MockFileStorageService.OrphanCleanupResult result = mockFileMaintenanceService.cleanOrphanFiles();
+        recordSystemOperation("CLEAN", "清理文件存储孤儿文件：删除 " + result.getDeletedCount()
+                + " 个，合计 " + result.getDeletedSize() + " 字节");
+        return Result.ok(result);
+    }
+
+    /**
+     * GET /api/settings/file-storage/stats — 获取文件存储诊断信息
+     */
+    @GetMapping("/file-storage/stats")
+    public Result<MockFileStorageService.StorageStats> getFileStorageStats() {
+        checkSuperAdmin();
+        return Result.ok(mockFileMaintenanceService.getStorageStats());
+    }
+
+    /**
      * 校验当前用户是否为超级管理员
      */
     private void checkSuperAdmin() {
         if (!SecurityContextUtil.isSuperAdmin()) {
             throw new BizException(40101, "无操作权限");
+        }
+    }
+
+    private void recordSystemOperation(String action, String detail) {
+        try {
+            OperationLog opLog = new OperationLog();
+            opLog.setId(java.util.UUID.randomUUID().toString());
+            opLog.setTeamId(null);
+            opLog.setUserId(SecurityContextUtil.getCurrentUserId());
+            opLog.setUsername(SecurityContextUtil.getCurrentUsername());
+            opLog.setAction(action);
+            opLog.setTargetType("FILE_STORAGE");
+            opLog.setTargetId("mock-files");
+            opLog.setTargetName("Mock 文件存储");
+            opLog.setDetail(detail);
+            opLog.setCreatedAt(new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss")
+                    .format(new java.util.Date()));
+            logService.logOperation(opLog);
+        } catch (Exception e) {
+            log.warn("记录文件存储维护操作日志失败: {}", e.getMessage());
         }
     }
 }

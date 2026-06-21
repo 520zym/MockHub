@@ -85,6 +85,12 @@ public class DataSourceConfig {
             boolean created = wsdlDir.mkdirs();
             log.info("创建 WSDL 目录 {}：{}", wsdlDir.getAbsolutePath(), created ? "成功" : "失败");
         }
+
+        File filesDir = new File(dataDir, "files");
+        if (!filesDir.exists()) {
+            boolean created = filesDir.mkdirs();
+            log.info("创建 Mock 文件目录 {}：{}", filesDir.getAbsolutePath(), created ? "成功" : "失败");
+        }
     }
 
     /**
@@ -165,8 +171,13 @@ public class DataSourceConfig {
                     recordSchemaVersion(conn, 3,
                             "接口调用统计：api_definition 增加 hit_count 与 last_called_at 列");
                 }
+                if (current < 4) {
+                    migrateV4(conn);
+                    recordSchemaVersion(conn, 4,
+                            "文件响应模拟：api_response 增加 body_type 与文件元数据列");
+                }
                 // 后续版本追加：
-                // if (current < 4) { migrateV4(conn); recordSchemaVersion(conn, 4, "..."); }
+                // if (current < 5) { migrateV5(conn); recordSchemaVersion(conn, 5, "..."); }
 
                 conn.commit();
                 log.info("DB 迁移完成");
@@ -276,6 +287,19 @@ public class DataSourceConfig {
             st.execute("CREATE INDEX IF NOT EXISTS idx_api_definition_last_called_at " +
                     "ON api_definition(last_called_at)");
         }
+    }
+
+    /**
+     * v4 迁移（文件响应模拟）：幂等添加 api_response 的响应体类型与文件元数据列。
+     * <p>
+     * 老数据默认 body_type=TEXT，继续按原 response_body 文本响应工作。
+     */
+    private void migrateV4(Connection conn) throws SQLException {
+        addColumnIfNotExists(conn, "api_response", "body_type", "TEXT NOT NULL DEFAULT 'TEXT'");
+        addColumnIfNotExists(conn, "api_response", "file_name", "TEXT");
+        addColumnIfNotExists(conn, "api_response", "file_path", "TEXT");
+        addColumnIfNotExists(conn, "api_response", "download_name", "TEXT");
+        addColumnIfNotExists(conn, "api_response", "file_size", "INTEGER");
     }
 
     /**

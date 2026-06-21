@@ -33,7 +33,8 @@ class MockDispatchServiceSoapMatchTest {
                 mapper,
                 mock(DynamicVariableResolver.class),
                 mock(com.mockhub.mock.service.match.ResponseMatcher.class),
-                mock(SoapService.class)
+                mock(SoapService.class),
+                mock(MockFileStorageService.class)
         );
     }
 

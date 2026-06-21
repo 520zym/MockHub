@@ -20,14 +20,20 @@ import com.mockhub.system.model.entity.Team;
 import com.mockhub.system.service.TeamService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -53,6 +59,7 @@ public class ImportExportService {
     private final GlobalHeaderRepository globalHeaderRepository;
     private final TeamService teamService;
     private final PermissionChecker permissionChecker;
+    private final MockFileStorageService mockFileStorageService;
 
     public ImportExportService(ApiRepository apiRepository,
                                ApiResponseRepository apiResponseRepository,
@@ -61,7 +68,8 @@ public class ImportExportService {
                                ApiTagRepository apiTagRepository,
                                GlobalHeaderRepository globalHeaderRepository,
                                TeamService teamService,
-                               PermissionChecker permissionChecker) {
+                               PermissionChecker permissionChecker,
+                               MockFileStorageService mockFileStorageService) {
         this.apiRepository = apiRepository;
         this.apiResponseRepository = apiResponseRepository;
         this.groupRepository = groupRepository;
@@ -70,6 +78,7 @@ public class ImportExportService {
         this.globalHeaderRepository = globalHeaderRepository;
         this.teamService = teamService;
         this.permissionChecker = permissionChecker;
+        this.mockFileStorageService = mockFileStorageService;
     }
 
     /**
@@ -113,6 +122,66 @@ public class ImportExportService {
         return data;
     }
 
+    public ExportPackage exportTeamPackage(String teamId) {
+        return buildExportPackage(exportTeam(teamId));
+    }
+
+    public ExportPackage exportApisPackage(String teamId, List<String> apiIds) {
+        permissionChecker.checkTeamAccess(teamId);
+        if (apiIds == null || apiIds.isEmpty()) {
+            return exportTeamPackage(teamId);
+        }
+
+        Team team = teamService.getById(teamId);
+        List<ApiDefinition> apis = new ArrayList<ApiDefinition>();
+        for (String apiId : apiIds) {
+            ApiDefinition api = apiRepository.findById(apiId);
+            if (api != null && teamId.equals(api.getTeamId())) {
+                apis.add(api);
+            }
+        }
+
+        ImportExportData data = new ImportExportData();
+        data.setVersion("2.1");
+        data.setExportedAt(new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss").format(new Date()));
+        data.setTeamName(team != null ? team.getName() : "");
+        data.setGroups(groupRepository.findByTeamId(teamId));
+        data.setTags(tagRepository.findByTeamId(teamId));
+        data.setApis(apis);
+
+        List<ApiResponse> allResponses = new ArrayList<ApiResponse>();
+        for (ApiDefinition api : apis) {
+            allResponses.addAll(apiResponseRepository.findByApiId(api.getId()));
+        }
+        data.setApiResponses(allResponses);
+        data.setGlobalHeaders(globalHeaderRepository.findByTeamId(teamId));
+        return buildExportPackage(data);
+    }
+
+    private ExportPackage buildExportPackage(ImportExportData data) {
+        Map<String, Resource> files = new HashMap<String, Resource>();
+        if (data.getApiResponses() != null) {
+            Set<String> exported = new HashSet<String>();
+            for (ApiResponse response : data.getApiResponses()) {
+                if (response == null
+                        || !"FILE".equalsIgnoreCase(response.getBodyType())
+                        || response.getFilePath() == null
+                        || response.getFilePath().trim().isEmpty()
+                        || exported.contains(response.getFilePath())) {
+                    continue;
+                }
+                try {
+                    files.put(response.getFilePath(), mockFileStorageService.loadAsResource(response.getFilePath()));
+                    exported.add(response.getFilePath());
+                } catch (Exception e) {
+                    log.warn("导出文件响应实体失败，跳过文件实体: filePath={}, reason={}",
+                            response.getFilePath(), e.getMessage());
+                }
+            }
+        }
+        return new ExportPackage(data, files);
+    }
+
     /**
      * 导入接口数据到目标团队
      *
@@ -122,6 +191,11 @@ public class ImportExportService {
      * @return 导入结果统计
      */
     public ImportResult importApis(String teamId, ImportExportData data, String mode) {
+        return importApis(teamId, data, mode, Collections.<String, FileBundleEntry>emptyMap());
+    }
+
+    public ImportResult importApis(String teamId, ImportExportData data, String mode,
+                                   Map<String, FileBundleEntry> bundledFiles) {
         permissionChecker.checkTeamAccess(teamId);
 
         String now = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss").format(new Date());
@@ -234,6 +308,21 @@ public class ImportExportService {
                 }
                 resp.setId(UUID.randomUUID().toString());
                 resp.setApiId(newApiId);
+                if ("FILE".equalsIgnoreCase(resp.getBodyType())
+                        && resp.getFilePath() != null
+                        && bundledFiles != null
+                        && bundledFiles.containsKey(resp.getFilePath())) {
+                    FileBundleEntry entry = bundledFiles.get(resp.getFilePath());
+                    MockFileStorageService.StoredMockFile stored = mockFileStorageService.store(
+                            teamId,
+                            resp.getFileName() != null ? resp.getFileName() : entry.getFileName(),
+                            resp.getContentType(),
+                            entry.getData().length,
+                            new ByteArrayInputStream(entry.getData()));
+                    resp.setFilePath(stored.getFilePath());
+                    resp.setFileName(stored.getFileName());
+                    resp.setFileSize(stored.getFileSize());
+                }
                 resp.setCreatedAt(now);
                 resp.setUpdatedAt(now);
                 List<ApiResponse> list = grouped.get(newApiId);
@@ -284,5 +373,45 @@ public class ImportExportService {
                 teamId, mode, imported, skipped, overridden);
 
         return new ImportResult(imported, skipped, overridden);
+    }
+
+    public static class ExportPackage {
+        private final ImportExportData data;
+        private final Map<String, Resource> files;
+
+        public ExportPackage(ImportExportData data, Map<String, Resource> files) {
+            this.data = data;
+            this.files = files;
+        }
+
+        public ImportExportData getData() {
+            return data;
+        }
+
+        public Map<String, Resource> getFiles() {
+            return files;
+        }
+
+        public boolean hasFiles() {
+            return files != null && !files.isEmpty();
+        }
+    }
+
+    public static class FileBundleEntry {
+        private final String fileName;
+        private final byte[] data;
+
+        public FileBundleEntry(String fileName, byte[] data) {
+            this.fileName = fileName;
+            this.data = data;
+        }
+
+        public String getFileName() {
+            return fileName;
+        }
+
+        public byte[] getData() {
+            return data;
+        }
     }
 }

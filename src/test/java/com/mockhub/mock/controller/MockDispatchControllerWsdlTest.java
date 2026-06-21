@@ -13,6 +13,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.when;
 
 /**
@@ -38,7 +39,7 @@ class MockDispatchControllerWsdlTest {
         MockDispatchController controller = new MockDispatchController(svc);
 
         MockHttpServletRequest req = buildRequest("GET", "/mock/FOC/ck/release", "wsdl");
-        ResponseEntity<String> resp = controller.handleMockRequest("FOC", req);
+        ResponseEntity<?> resp = controller.handleMockRequest("FOC", req);
 
         assertEquals(HttpStatus.OK, resp.getStatusCode());
         verify(svc).serveWsdl(eq("FOC"), eq("/ck/release"), any());
@@ -48,8 +49,8 @@ class MockDispatchControllerWsdlTest {
     @Test
     void getWithoutWsdlParamRoutesToDispatch() {
         MockDispatchService svc = mock(MockDispatchService.class);
-        when(svc.dispatch(anyString(), anyString(), anyString(), any()))
-                .thenReturn(new ResponseEntity<String>("", HttpStatus.NOT_FOUND));
+        doReturn(new ResponseEntity<String>("", HttpStatus.NOT_FOUND))
+                .when(svc).dispatch(anyString(), anyString(), anyString(), any());
         MockDispatchController controller = new MockDispatchController(svc);
 
         MockHttpServletRequest req = buildRequest("GET", "/mock/FOC/ck/release", "foo=bar");
@@ -62,8 +63,8 @@ class MockDispatchControllerWsdlTest {
     @Test
     void postWithWsdlParamRoutesToDispatch() {
         MockDispatchService svc = mock(MockDispatchService.class);
-        when(svc.dispatch(anyString(), anyString(), anyString(), any()))
-                .thenReturn(new ResponseEntity<String>("", HttpStatus.OK));
+        doReturn(new ResponseEntity<String>("", HttpStatus.OK))
+                .when(svc).dispatch(anyString(), anyString(), anyString(), any());
         MockDispatchController controller = new MockDispatchController(svc);
 
         MockHttpServletRequest req = buildRequest("POST", "/mock/FOC/ck/release", "wsdl");
@@ -76,8 +77,8 @@ class MockDispatchControllerWsdlTest {
     @Test
     void queryParamNamedMywsdlvalueDoesNotTrigger() {
         MockDispatchService svc = mock(MockDispatchService.class);
-        when(svc.dispatch(anyString(), anyString(), anyString(), any()))
-                .thenReturn(new ResponseEntity<String>("", HttpStatus.OK));
+        doReturn(new ResponseEntity<String>("", HttpStatus.OK))
+                .when(svc).dispatch(anyString(), anyString(), anyString(), any());
         MockDispatchController controller = new MockDispatchController(svc);
 
         MockHttpServletRequest req = buildRequest("GET", "/mock/FOC/ck/release", "foo=mywsdlvalue");
