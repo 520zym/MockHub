@@ -294,9 +294,11 @@ public class ApiServiceImpl implements ApiService {
         // 校验团队访问权限
         permissionChecker.checkTeamAccess(dto.getTeamId());
 
+        String normalizedPath = normalizeApiPath(dto.getPath());
+
         // 校验同团队内 path+method 唯一性
         List<ApiDefinition> existing = apiRepository.findByTeamIdAndPathAndMethod(
-                dto.getTeamId(), dto.getPath(), dto.getMethod());
+                dto.getTeamId(), normalizedPath, dto.getMethod());
         if (!existing.isEmpty()) {
             throw new BizException(40401, "同团队内路径+方法已存在");
         }
@@ -312,7 +314,7 @@ public class ApiServiceImpl implements ApiService {
         api.setName(dto.getName());
         api.setDescription(dto.getDescription());
         api.setMethod(dto.getMethod());
-        api.setPath(dto.getPath());
+        api.setPath(normalizedPath);
         api.setResponseCode(dto.getResponseCode());
         api.setContentType(dto.getContentType() != null ? dto.getContentType() : "application/json");
         api.setResponseBody(dto.getResponseBody());
@@ -353,7 +355,7 @@ public class ApiServiceImpl implements ApiService {
         permissionChecker.checkTeamAccess(existing.getTeamId());
 
         // 如果修改了 path 或 method，校验唯一性
-        String newPath = dto.getPath() != null ? dto.getPath() : existing.getPath();
+        String newPath = dto.getPath() != null ? normalizeApiPath(dto.getPath()) : existing.getPath();
         String newMethod = dto.getMethod() != null ? dto.getMethod() : existing.getMethod();
         if (!newPath.equals(existing.getPath()) || !newMethod.equals(existing.getMethod())) {
             List<ApiDefinition> conflict = apiRepository.findByTeamIdAndPathAndMethod(
@@ -574,10 +576,14 @@ public class ApiServiceImpl implements ApiService {
         if (teamId == null || teamId.isEmpty() || method == null || path == null || path.isEmpty()) {
             return null;
         }
+        String normalizedPath = normalizeApiPathForCheck(path);
+        if (normalizedPath == null) {
+            return null;
+        }
         // 校验团队访问权限：避免被人当成枚举接口
         permissionChecker.checkTeamAccess(teamId);
 
-        List<ApiDefinition> matches = apiRepository.findByTeamIdAndPathAndMethod(teamId, path, method);
+        List<ApiDefinition> matches = apiRepository.findByTeamIdAndPathAndMethod(teamId, normalizedPath, method);
         for (ApiDefinition api : matches) {
             if (excludeId != null && excludeId.equals(api.getId())) {
                 continue;
@@ -585,6 +591,41 @@ public class ApiServiceImpl implements ApiService {
             return api.getName();
         }
         return null;
+    }
+
+    /**
+     * 规范化接口维护路径：接口定义只保存 URL path，不保存 query/fragment。
+     * Mock 分发入口收到请求时也是按 path 匹配，query 交给条件返回规则处理。
+     */
+    private String normalizeApiPath(String path) {
+        String normalized = normalizeApiPathForCheck(path);
+        if (normalized == null) {
+            throw new BizException(40400, "接口路径不能为空");
+        }
+        return normalized;
+    }
+
+    private String normalizeApiPathForCheck(String path) {
+        if (path == null) {
+            return null;
+        }
+        String normalized = path.trim();
+        int queryIndex = normalized.indexOf('?');
+        if (queryIndex >= 0) {
+            normalized = normalized.substring(0, queryIndex);
+        }
+        int fragmentIndex = normalized.indexOf('#');
+        if (fragmentIndex >= 0) {
+            normalized = normalized.substring(0, fragmentIndex);
+        }
+        normalized = normalized.trim();
+        if (normalized.isEmpty()) {
+            return null;
+        }
+        if (!normalized.startsWith("/")) {
+            normalized = "/" + normalized;
+        }
+        return normalized;
     }
 
     /**
