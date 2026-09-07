@@ -265,3 +265,25 @@ CREATE TABLE IF NOT EXISTS schema_version (
     applied_at  TEXT NOT NULL DEFAULT (datetime('now')),
     description TEXT
 );
+
+-- ========== 独立文件服务器（与 Mock 响应文件清理隔离） ==========
+CREATE TABLE IF NOT EXISTS file_server_file (
+    file_id TEXT PRIMARY KEY,
+    team_id TEXT NOT NULL,
+    file_name TEXT NOT NULL,
+    alias TEXT NOT NULL DEFAULT '',
+    content_type TEXT NOT NULL,
+    file_size INTEGER NOT NULL,
+    uploaded_at TEXT NOT NULL,
+    download_count INTEGER NOT NULL DEFAULT 0,
+    transferred_bytes INTEGER NOT NULL DEFAULT 0,
+    last_downloaded_at TEXT,
+    deleted INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_file_server_team_time ON file_server_file(team_id, uploaded_at);
+CREATE TABLE IF NOT EXISTS file_server_tag (
+    file_id TEXT NOT NULL,
+    tag TEXT NOT NULL,
+    PRIMARY KEY (file_id, tag)
+);
+CREATE INDEX IF NOT EXISTS idx_file_server_tag_name ON file_server_tag(tag);

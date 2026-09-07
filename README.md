@@ -44,6 +44,7 @@
 - [x] **自定义动态变量** -- 团队级维护命名值集合，支持按分组组织；响应体 `{{pet}}` 从全部值随机挑、`{{pet.mammal}}` 从指定分组随机挑；解析失败 fail-fast 返回统一错误格式
 - [x] **多返回体** -- 单个接口可配置多个响应体，支持切换活跃返回体
 - [x] **多场景响应** -- 多个返回体可配置匹配条件（Query / JSON Body / SOAP XML Body），命中即返回，未命中走无规则兜底
+- [x] **文件服务器模拟** -- 免登录上传、固定 fileId 下载链接、Range 续传，以及按团队管理、检索、标签、统计、预览和批量删除
 - [x] **接口描述** -- 支持富文本描述接口用途和说明
 - [x] **Monaco Editor** -- 内置代码编辑器，JSON / XML / 纯文本语法高亮和格式化
 - [x] **大文本支持** -- 响应体支持 5~6 MB 大文本
@@ -166,6 +167,37 @@ GET http://localhost:18080/mock/FE/soap/user-service?wsdl
 ```
 
 ---
+
+## 文件服务器模拟
+
+登录后进入侧栏“文件服务器”，可上传文件、按 fileId/文件名/别名检索、按标签筛选、修改别名与标签、查看详情或批量删除。文件归属团队：成员可浏览和上传，团队管理员与超级管理员可修改和删除。
+
+测试程序无需登录，按已存在的团队标识上传：
+
+```bash
+curl -F 'file=@./example.pdf' http://localhost:18080/file-server/FE/upload
+```
+
+成功响应仍使用 `{code:0,msg:"success",data:{...}}`，`data` 包含 `fileId`、`downloadUrl`、`fileName`、`size`、`uploadedAt` 等字段。下载路径固定为 `/files/{fileId}`，改别名/标签不会改变链接。默认持链接即可下载；匿名上传仅用于可信内网模拟环境。
+
+```bash
+# 下载或从本地已有长度续传
+curl -C - -o example.pdf http://localhost:18080/files/返回的fileId
+# 指定单段字节范围
+curl -H 'Range: bytes=0-1023' http://localhost:18080/files/返回的fileId
+```
+
+支持 `GET/HEAD`、单段 Range（206/416）、ETag、Last-Modified、If-Range 和条件请求；多段 Range 忽略并返回完整 200。删除后新请求立即返回 404，已经开始的传输可能继续完成。物理文件因占用删除失败时会后台重试。
+
+下载次数按实际开始写出内容的公开 GET 请求累计，续传的每次分段请求分别计数；传输量按应用成功写入响应流的内容字节累计，不等同客户端已收到字节数。HEAD、304、404、416 和文本/Office 管理预览不计数；通过下载流进行的 PDF/音视频/图片预览会计数。
+
+支持 TXT/日志/JSON/XML/HTML、Excel（xls/xlsx）、Word（doc/docx）基础内容预览，PDF/图片/音视频使用浏览器原生能力（具体编码受浏览器支持限制）。HTML 使用 sandbox 与 CSP 禁止脚本和外链资源，SVG 显示源码。Office 预览不是完整排版还原；最多 20MB、Excel 前 10 个工作表/200 行/50 列、总文本 20 万字符，超限提示截断或下载。普通文本超过 2MB 时建议下载。
+
+管理接口均需要登录：`GET /api/files`、`POST /api/files/upload?teamId=...`、`GET/PUT/DELETE /api/files/{fileId}`、`GET /api/files/{fileId}/preview`、`POST /api/files/batch-delete`（请求体 `{"fileIds":["..."]}`）。元数据更新请求体为 `{"alias":"别名","tags":["标签"]}`。
+
+文件存储在 `data.path/file-server`，元数据在同一 SQLite 数据库的新表中，独立于已有 Mock 响应文件及其孤儿清理。备份时应同时保存数据库和文件目录。有文件的团队需先清理文件再删除团队。
+
+默认文件上传上限 100MB。`file-server.max-size-bytes` 与 `spring.servlet.multipart.max-file-size/max-request-size` 应配套调整；既有 Mock 响应文件仍受自身 10MB 服务限制。反向代理部署可设置 `--file-server.public-base-url=https://host/前缀` 生成外部可访问链接，并同步配置代理上传大小与超时。公开文件接口的跨域开关沿用 `mock.cors.enabled`。
 
 ## 启动参数
 

@@ -72,6 +72,12 @@ public class TeamRepository {
         }
     }
 
+    public int countFilesByTeamId(String teamId) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM file_server_file WHERE team_id=? AND deleted=0", Integer.class, teamId);
+        return count == null ? 0 : count;
+    }
+
     /**
      * 根据团队短标识查找团队（不区分大小写）
      *

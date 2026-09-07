@@ -29,6 +29,13 @@ public class CorsConfig {
             config.addAllowedHeader("*");
             config.setAllowCredentials(false);
             source.registerCorsConfiguration("/mock/**", config);
+            CorsConfiguration fileConfig = new CorsConfiguration(config);
+            fileConfig.addExposedHeader("Content-Range");
+            fileConfig.addExposedHeader("Accept-Ranges");
+            fileConfig.addExposedHeader("Content-Disposition");
+            fileConfig.addExposedHeader("ETag");
+            source.registerCorsConfiguration("/files/**", fileConfig);
+            source.registerCorsConfiguration("/file-server/**", fileConfig);
         }
 
         return new CorsFilter(source);
