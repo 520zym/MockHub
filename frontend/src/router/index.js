@@ -47,6 +47,12 @@ const routes = [
         meta: { title: '动态变量' }
       },
       {
+        path: 'files',
+        name: 'FileServer',
+        component: () => import('@/views/FileServer.vue'),
+        meta: { title: '文件服务器' }
+      },
+      {
         path: 'users',
         name: 'UserManage',
         component: () => import('@/views/UserManage.vue'),

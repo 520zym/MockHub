@@ -17,9 +17,9 @@ spring:
       mode: never
   servlet:
     multipart:
-      # 文件上传大小限制（WSDL 文件、导入文件等）
-      max-file-size: 10MB
-      max-request-size: 10MB
+      # Multipart 总入口上限；Mock 响应文件仍受 mock.file.max-size-bytes 的独立 10MB 限制。
+      max-file-size: 100MB
+      max-request-size: 110MB
 
 # ===== 自定义配置 =====
 
@@ -27,6 +27,11 @@ spring:
 # 可通过启动参数覆盖：--data.path=D:/mockhub/data
 data:
   path: ./data
+
+# 独立文件服务器；部署到反向代理后可指定外部可访问的基地址（含 context path）。
+file-server:
+  max-size-bytes: 104857600
+  public-base-url: ""
 
 # 日志保留策略配置
 # mode=count 时按条数保留，mode=days 时按天数保留

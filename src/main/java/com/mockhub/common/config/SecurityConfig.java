@@ -22,6 +22,11 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
     @Override
     protected void configure(HttpSecurity http) throws Exception {
         http
+            // 文件预览允许本管理页同源嵌入（PDF）；其他页面保持禁止嵌入。
+            .headers().frameOptions().disable()
+                .addHeaderWriter((request, response) -> response.setHeader("X-Frame-Options",
+                        request.getServletPath().startsWith("/files/") ? "SAMEORIGIN" : "DENY"))
+            .and()
             // 禁用 CSRF（REST API 不需要）
             .csrf().disable()
             // 无状态 JWT，禁用 session

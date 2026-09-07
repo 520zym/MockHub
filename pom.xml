@@ -72,6 +72,34 @@
             <version>2.3.1</version>
         </dependency>
 
+        <!-- 文件服务器的 Office 内容预览（Java 8 兼容） -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>5.5.1</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-scratchpad</artifactId>
+            <version>5.5.1</version>
+        </dependency>
+        <!-- POI 5.5.1 所需版本高于 Spring Boot 2.7 BOM 的受管版本。 -->
+        <dependency>
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
+            <version>2.20.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-compress</artifactId>
+            <version>1.28.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-api</artifactId>
+            <version>2.24.3</version>
+        </dependency>
+
         <!--
             Lombok：开发环境 JDK 25 不兼容 annotation processing，
             但目标运行环境是 Java 8。保留依赖供 IDE 识别，

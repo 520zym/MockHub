@@ -85,6 +85,7 @@ const userStore = useUserStore()
 // requiresStatsAccess: 超管或任意团队管理员可见（普通成员看不到）
 const navItems = [
   { path: '/apis', label: '接口管理', icon: 'Connection' },
+  { path: '/files', label: '文件服务器', icon: 'Files' },
   { path: '/variables', label: '动态变量', icon: 'MagicStick' },
   { path: '/stats', label: '使用统计', icon: 'DataAnalysis', requiresStatsAccess: true },
   { path: '/teams', label: '团队管理', icon: 'OfficeBuilding', requiresSuperAdmin: true },

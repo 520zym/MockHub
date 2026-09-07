@@ -204,6 +204,10 @@ public class TeamServiceImpl implements TeamService {
             throw new BizException(40303, "团队下有接口，不能删除");
         }
 
+        if (teamRepository.countFilesByTeamId(id) > 0) {
+            throw new BizException(40303, "团队下有文件，请先在文件服务器页面删除文件");
+        }
+
         teamRepository.deleteById(id);
         log.info("删除团队成功：id={}, name={}", id, team.getName());
     }
