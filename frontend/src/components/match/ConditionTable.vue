@@ -14,6 +14,16 @@
         :key="idx"
         class="condition-row"
       >
+        <el-select
+          v-model="c.source"
+          size="small"
+          class="col-source"
+          aria-label="条件参数来源"
+          @change="emitChange"
+        >
+          <el-option label="Body" value="BODY" />
+          <el-option label="Query" value="QUERY" />
+        </el-select>
         <el-input
           v-model="c.path"
           size="small"
@@ -81,7 +91,7 @@
 /**
  * 条件表格组件
  *
- * 展示并编辑一组 MatchCondition（AND 关系）。列：字段路径 / 操作符 / 值 / 类型标签 / 删除。
+ * 展示并编辑一组 MatchCondition（AND 关系）。列：来源 / 字段路径 / 操作符 / 值 / 类型标签 / 删除。
  *
  * 操作符下拉根据每条条件的 valueType 动态筛选：
  * - NUMBER 类型才展示 GT / GTE / LT / LTE
@@ -94,7 +104,9 @@ import { Close, Plus, InfoFilled } from '@element-plus/icons-vue'
 
 const props = defineProps({
   /** MatchCondition 数组 */
-  modelValue: { type: Array, default: () => [] }
+  modelValue: { type: Array, default: () => [] },
+  /** 手动新增沿用面板所选来源；已有条件保持各自来源。 */
+  defaultSource: { type: String, default: 'BODY' }
 })
 
 const emit = defineEmits(['update:modelValue'])
@@ -128,7 +140,7 @@ function valuePlaceholder(c) {
 
 function addEmpty() {
   const next = [...conditions.value, {
-    source: 'BODY',
+    source: props.defaultSource === 'QUERY' ? 'QUERY' : 'BODY',
     path: '',
     operator: 'EQ',
     value: '',
@@ -189,9 +201,10 @@ function onOperatorChange(c) {
   margin-bottom: 8px;
   font-size: 12px;
 }
-.col-path { flex: 1.2; }
-.col-op { flex: 0.9; }
-.col-value { flex: 1; }
+.col-source { flex: 0 0 88px; }
+.col-path { flex: 1.2; min-width: 0; }
+.col-op { flex: 0.9; min-width: 0; }
+.col-value { flex: 1; min-width: 0; }
 .col-type-tag {
   font-size: 10px;
   padding: 1px 5px;

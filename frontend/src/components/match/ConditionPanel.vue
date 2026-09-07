@@ -18,7 +18,7 @@
     <div v-if="expanded" class="panel-body">
       <!-- 工具条 -->
       <div class="toolbar">
-        <span class="label">参数来源</span>
+        <span class="label">新增条件来源</span>
         <el-radio-group v-model="source" size="small">
           <el-radio-button value="BODY">Body</el-radio-button>
           <el-radio-button value="QUERY">Query</el-radio-button>
@@ -80,6 +80,7 @@
         <div class="col-right">
           <ConditionTable
             :model-value="conditions"
+            :default-source="source"
             @update:model-value="onConditionsUpdate"
           />
         </div>
