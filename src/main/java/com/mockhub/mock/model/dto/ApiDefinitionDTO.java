@@ -57,6 +57,9 @@ public class ApiDefinitionDTO {
     /** 多返回体列表 */
     private List<ApiResponseDTO> responses;
 
+    /** REST 多返回体选择模式：CONDITION（默认）或 RANDOM */
+    private String responseMode;
+
     public ApiDefinitionDTO() {
     }
 
@@ -186,5 +189,13 @@ public class ApiDefinitionDTO {
 
     public void setResponses(List<ApiResponseDTO> responses) {
         this.responses = responses;
+    }
+
+    public String getResponseMode() {
+        return responseMode;
+    }
+
+    public void setResponseMode(String responseMode) {
+        this.responseMode = responseMode;
     }
 }

@@ -51,6 +51,7 @@ class ApiRepositoryTest {
                         + "response_body TEXT, delay_ms INTEGER NOT NULL DEFAULT 0, "
                         + "enabled INTEGER NOT NULL DEFAULT 1, "
                         + "global_header_overrides TEXT, soap_config TEXT, scenarios TEXT, "
+                        + "response_mode TEXT NOT NULL DEFAULT 'CONDITION', "
                         + "hit_count INTEGER NOT NULL DEFAULT 0, last_called_at TEXT, "
                         + "created_by TEXT, created_at TEXT NOT NULL, "
                         + "updated_at TEXT NOT NULL, updated_by TEXT)"

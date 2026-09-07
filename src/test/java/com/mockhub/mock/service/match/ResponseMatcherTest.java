@@ -114,6 +114,17 @@ class ResponseMatcherTest {
         }
 
         @Test
+        void randomModeSelectsAnEnabledResponseAndIgnoresConditions() {
+            ApiResponse first = response("first", ruleJson("QUERY", "tier", "EQ", "vip", "STRING"), 1);
+            ApiResponse second = response("second", null, 2);
+            when(repo.findEnabledByApiId("api1")).thenReturn(Arrays.asList(first, second));
+
+            ApiResponse selected = matcher.matchWithMode("api1", "RANDOM", newRequest());
+
+            assertTrue(selected == first || selected == second);
+        }
+
+        @Test
         void conditionsWithEmptyArrayIsTreatedAsFallback() {
             // {"conditions":[]} = 空规则 = 无规则，应作为兜底候选
             ApiResponse fallback = response("rF", "{\"conditions\":[]}", 1);
@@ -146,6 +157,18 @@ class ResponseMatcherTest {
             req.setParameter("tier", "vip");
 
             assertEquals(ruleA, matcher.match("api1", "GetUser", req));
+        }
+
+        @Test
+        void soapRandomModeUsesOnlyThatOperationResponses() {
+            ApiResponse first = response("op-first", ruleJson("QUERY", "tier", "EQ", "vip", "STRING"), 1);
+            ApiResponse second = response("op-second", null, 2);
+            when(repo.findEnabledByApiIdAndOperation("api1", "GetUser"))
+                    .thenReturn(Arrays.asList(first, second));
+
+            ApiResponse selected = matcher.matchWithMode("api1", "GetUser", "RANDOM", newRequest());
+
+            assertTrue(selected == first || selected == second);
         }
 
         @Test

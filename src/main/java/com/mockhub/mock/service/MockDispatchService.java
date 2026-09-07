@@ -167,8 +167,8 @@ public class MockDispatchService {
                         matchedOp.getOperationName(), matchedOp.getSoapAction());
 
                 // 优先从 api_response 表按 operation 维度做条件匹配
-                ApiResponse soapResp = responseMatcher.match(
-                        api.getId(), matchedOp.getOperationName(), request);
+                ApiResponse soapResp = responseMatcher.matchWithMode(
+                        api.getId(), matchedOp.getOperationName(), matchedOp.getResponseMode(), request);
                 if (soapResp != null) {
                     matchedResponse = soapResp;
                     responseBody = soapResp.getResponseBody();
@@ -178,6 +178,10 @@ public class MockDispatchService {
                     log.debug("使用 api_response 表的 SOAP 匹配返回体: respId={}, name={}",
                             soapResp.getId(), soapResp.getName());
                 } else {
+                    if (isRandomResponseMode(matchedOp.getResponseMode())) {
+                        return buildErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR,
+                                "SOAP operation 的随机返回体没有启用项");
+                    }
                     // 兼容旧数据：从 operation 读取
                     responseBody = matchedOp.getResponseBody();
                     responseCode = matchedOp.getResponseCode();
@@ -193,7 +197,7 @@ public class MockDispatchService {
             }
         } else {
             // REST 请求处理：v1.4.3 起走条件匹配引擎（启用数 == 1 时会短路等同旧单返回体行为）
-            ApiResponse activeResponse = responseMatcher.match(api.getId(), request);
+            ApiResponse activeResponse = responseMatcher.matchWithMode(api.getId(), api.getResponseMode(), request);
             if (activeResponse != null) {
                 matchedResponse = activeResponse;
                 responseBody = activeResponse.getResponseBody();
@@ -203,6 +207,10 @@ public class MockDispatchService {
                 log.debug("使用 api_response 表的 REST 匹配返回体: respId={}, name={}",
                         activeResponse.getId(), activeResponse.getName());
             } else {
+                if (isRandomResponseMode(api.getResponseMode())) {
+                    return buildErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR,
+                            "接口的随机返回体没有启用项");
+                }
                 // 兼容旧数据：从 api_definition 读取
                 responseBody = api.getResponseBody();
                 responseCode = api.getResponseCode();
@@ -284,6 +292,10 @@ public class MockDispatchService {
 
     private boolean isFileResponse(ApiResponse response) {
         return response != null && "FILE".equalsIgnoreCase(response.getBodyType());
+    }
+
+    private boolean isRandomResponseMode(String responseMode) {
+        return "RANDOM".equalsIgnoreCase(responseMode);
     }
 
     private ResponseEntity<Resource> buildFileResponse(ApiResponse response,

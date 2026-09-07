@@ -19,6 +19,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.regex.Pattern;
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
@@ -67,7 +68,12 @@ public class ResponseMatcher {
      * @return 命中的返回体；启用数为 0 时返回 null，由调用方决定如何兜底
      */
     public ApiResponse match(String apiId, HttpServletRequest req) {
-        return matchEnabled(apiId, null, apiResponseRepository.findEnabledByApiId(apiId), req);
+        return matchWithMode(apiId, "CONDITION", req);
+    }
+
+    /** 按 REST 接口选择模式挑选返回体。 */
+    public ApiResponse matchWithMode(String apiId, String responseMode, HttpServletRequest req) {
+        return matchEnabled(apiId, null, apiResponseRepository.findEnabledByApiId(apiId), responseMode, req);
     }
 
     /**
@@ -79,12 +85,17 @@ public class ResponseMatcher {
      * @return 命中的返回体；启用数为 0 时返回 null，由调用方决定如何兜底
      */
     public ApiResponse match(String apiId, String soapOperationName, HttpServletRequest req) {
+        return matchWithMode(apiId, soapOperationName, "CONDITION", req);
+    }
+
+    /** 按 SOAP operation 的选择模式挑选返回体。 */
+    public ApiResponse matchWithMode(String apiId, String soapOperationName, String responseMode, HttpServletRequest req) {
         return matchEnabled(apiId, soapOperationName,
-                apiResponseRepository.findEnabledByApiIdAndOperation(apiId, soapOperationName), req);
+                apiResponseRepository.findEnabledByApiIdAndOperation(apiId, soapOperationName), responseMode, req);
     }
 
     private ApiResponse matchEnabled(String apiId, String soapOperationName,
-                                     List<ApiResponse> enabled, HttpServletRequest req) {
+                                     List<ApiResponse> enabled, String responseMode, HttpServletRequest req) {
         String scope = soapOperationName == null ? apiId : apiId + "#" + soapOperationName;
         if (enabled.isEmpty()) {
             log.warn("接口 {} 无启用返回体", scope);
@@ -94,6 +105,12 @@ public class ResponseMatcher {
         // 单启用短路：等同历史单响应体模式
         if (enabled.size() == 1) {
             return enabled.get(0);
+        }
+
+        if ("RANDOM".equalsIgnoreCase(responseMode)) {
+            ApiResponse selected = enabled.get(ThreadLocalRandom.current().nextInt(enabled.size()));
+            log.debug("接口 {} 随机选择返回体 {}（{}）", scope, selected.getId(), selected.getName());
+            return selected;
         }
 
         // 多启用：按 sort_order 遍历"有规则"项

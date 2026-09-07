@@ -87,7 +87,8 @@ class MockDispatchServiceSoapConditionalResponseTest {
         vip.setResponseBody("<vip/>");
         vip.setDelayMs(0);
         vip.setActive(true);
-        when(responseMatcher.match(eq("api-1"), eq("GetUser"), any())).thenReturn(vip);
+        when(responseMatcher.matchWithMode(eq("api-1"), eq("GetUser"), eq("CONDITION"), any()))
+                .thenReturn(vip);
 
         MockHttpServletRequest req = new MockHttpServletRequest();
         req.setContentType("text/xml; charset=UTF-8");
@@ -99,7 +100,7 @@ class MockDispatchServiceSoapConditionalResponseTest {
 
         assertEquals(HttpStatus.ACCEPTED, entity.getStatusCode());
         assertEquals("<vip/>", entity.getBody());
-        verify(responseMatcher).match(eq("api-1"), eq("GetUser"), any());
+        verify(responseMatcher).matchWithMode(eq("api-1"), eq("GetUser"), eq("CONDITION"), any());
     }
 
     private String soapConfig() throws Exception {
@@ -108,6 +109,7 @@ class MockDispatchServiceSoapConditionalResponseTest {
         op.setSoapAction("http://example.com/mockhub/user/GetUser");
         op.setResponseCode(200);
         op.setResponseBody("<default/>");
+        op.setResponseMode("CONDITION");
         SoapConfig config = new SoapConfig();
         config.setOperations(Arrays.asList(op));
         return objectMapper.writeValueAsString(config);

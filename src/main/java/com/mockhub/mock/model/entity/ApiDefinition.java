@@ -57,6 +57,9 @@ public class ApiDefinition {
     /** 多场景响应配置，v1 为 null，v2 预留 */
     private String scenarios;
 
+    /** REST 多返回体选择模式：CONDITION（默认）或 RANDOM */
+    private String responseMode;
+
     /** 累计命中次数，从 0 起算，永久累加（不受请求日志清理影响） */
     private long hitCount;
 
@@ -204,6 +207,14 @@ public class ApiDefinition {
 
     public void setScenarios(String scenarios) {
         this.scenarios = scenarios;
+    }
+
+    public String getResponseMode() {
+        return responseMode;
+    }
+
+    public void setResponseMode(String responseMode) {
+        this.responseMode = responseMode;
     }
 
     public long getHitCount() {

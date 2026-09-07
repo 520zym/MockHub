@@ -71,6 +71,7 @@ class MockDispatchServiceFileResponseTest {
         api.setId("api-1");
         api.setName("下载报表");
         api.setPath("/download");
+        api.setResponseMode("CONDITION");
         ApiMatchResult match = new ApiMatchResult(api, java.util.Collections.<String, String>emptyMap());
         when(apiService.findMatch("team-1", "GET", "/download")).thenReturn(match);
 
@@ -85,8 +86,7 @@ class MockDispatchServiceFileResponseTest {
         response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
         response.setResponseCode(201);
         response.setActive(true);
-        when(responseMatcher.match("api-1", new MockHttpServletRequest())).thenReturn(null);
-        when(responseMatcher.match(eq("api-1"), any())).thenReturn(response);
+        when(responseMatcher.matchWithMode(eq("api-1"), eq("CONDITION"), any())).thenReturn(response);
         byte[] bytes = new byte[] {1, 2, 3, 4};
         when(fileStorageService.loadAsResource("team-1/api-1/resp-1/report.bin"))
                 .thenReturn(new ByteArrayResource(bytes));
@@ -100,5 +100,26 @@ class MockDispatchServiceFileResponseTest {
         assertTrue(entity.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION).contains("report.xlsx"));
         assertArrayEquals(bytes, ((ByteArrayResource) entity.getBody()).getByteArray());
         verify(dynamicVariableResolver, never()).resolve(any(), any(), any(), any());
+    }
+
+    @Test
+    void randomModeWithoutEnabledResponseReturnsConfigurationError() {
+        Team team = new Team();
+        team.setId("team-1");
+        team.setIdentifier("T1");
+        when(teamService.findByIdentifier("T1")).thenReturn(team);
+
+        ApiDefinition api = new ApiDefinition();
+        api.setId("api-random");
+        api.setName("随机下载");
+        api.setPath("/random-download");
+        api.setResponseMode("RANDOM");
+        when(apiService.findMatch("team-1", "GET", "/random-download"))
+                .thenReturn(new ApiMatchResult(api, java.util.Collections.<String, String>emptyMap()));
+
+        ResponseEntity<?> entity = service.dispatch("T1", "GET", "/random-download", new MockHttpServletRequest());
+
+        assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, entity.getStatusCode());
+        assertTrue(String.valueOf(entity.getBody()).contains("随机返回体没有启用项"));
     }
 }

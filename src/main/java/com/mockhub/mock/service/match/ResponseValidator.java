@@ -56,25 +56,27 @@ public class ResponseValidator {
      * @throws BizException 任何校验失败抛此异常；code 范围 40410~40416
      */
     public static void validateDtos(List<ApiResponseDTO> responses) {
-        if (responses == null || responses.isEmpty()) {
-            // 允许不传（saveResponses 会跳过整块），不在这里约束数量下限
-            return;
-        }
+        validateDtos(responses, null);
+    }
 
+    /**
+     * 按返回体归属校验。modeByGroup 的 key 为 __REST__ 或 SOAP operation 名；缺省为 CONDITION，
+     * 从而保持老客户端与导入包的行为。
+     */
+    public static void validateDtos(List<ApiResponseDTO> responses, Map<String, String> modeByGroup) {
         Map<String, List<DtoAdapter>> grouped = new HashMap<String, List<DtoAdapter>>();
-        for (ApiResponseDTO dto : responses) {
-            String key = dto.getSoapOperationName() == null ? "__REST__" : dto.getSoapOperationName();
-            List<DtoAdapter> list = grouped.get(key);
-            if (list == null) {
-                list = new ArrayList<DtoAdapter>();
-                grouped.put(key, list);
+        if (responses != null) {
+            for (ApiResponseDTO dto : responses) {
+                String key = dto.getSoapOperationName() == null ? "__REST__" : dto.getSoapOperationName();
+                List<DtoAdapter> list = grouped.get(key);
+                if (list == null) {
+                    list = new ArrayList<DtoAdapter>();
+                    grouped.put(key, list);
+                }
+                list.add(new DtoAdapter(dto));
             }
-            list.add(new DtoAdapter(dto));
         }
-
-        for (Map.Entry<String, List<DtoAdapter>> e : grouped.entrySet()) {
-            validateGroup(e.getKey(), e.getValue());
-        }
+        validateGroupedResponses(grouped, modeByGroup);
     }
 
     /**
@@ -83,30 +85,46 @@ public class ResponseValidator {
      * @param responses 同一个接口的所有返回体 entity
      */
     public static void validateEntities(List<ApiResponse> responses) {
-        if (responses == null || responses.isEmpty()) {
-            return;
-        }
+        validateEntities(responses, null);
+    }
 
+    /** 导入路径使用的实体校验入口。 */
+    public static void validateEntities(List<ApiResponse> responses, Map<String, String> modeByGroup) {
         Map<String, List<DtoAdapter>> grouped = new HashMap<String, List<DtoAdapter>>();
-        for (ApiResponse e : responses) {
-            String key = e.getSoapOperationName() == null ? "__REST__" : e.getSoapOperationName();
-            List<DtoAdapter> list = grouped.get(key);
-            if (list == null) {
-                list = new ArrayList<DtoAdapter>();
-                grouped.put(key, list);
+        if (responses != null) {
+            for (ApiResponse e : responses) {
+                String key = e.getSoapOperationName() == null ? "__REST__" : e.getSoapOperationName();
+                List<DtoAdapter> list = grouped.get(key);
+                if (list == null) {
+                    list = new ArrayList<DtoAdapter>();
+                    grouped.put(key, list);
+                }
+                list.add(new DtoAdapter(e));
             }
-            list.add(new DtoAdapter(e));
         }
+        validateGroupedResponses(grouped, modeByGroup);
+    }
 
+    private static void validateGroupedResponses(Map<String, List<DtoAdapter>> grouped,
+                                                 Map<String, String> modeByGroup) {
+        if (modeByGroup != null) {
+            for (String group : modeByGroup.keySet()) {
+                String mode = responseModeFor(group, modeByGroup);
+                if ("RANDOM".equals(mode) && !grouped.containsKey(group)) {
+                    throw new BizException(40410,
+                            "随机返回体至少需要一个启用的返回体（分组 " + group + "）");
+                }
+            }
+        }
         for (Map.Entry<String, List<DtoAdapter>> e : grouped.entrySet()) {
-            validateGroup(e.getKey(), e.getValue());
+            validateGroup(e.getKey(), e.getValue(), responseModeFor(e.getKey(), modeByGroup));
         }
     }
 
     /**
      * 校验一组同归属（同 API 同 operation）的返回体。
      */
-    private static void validateGroup(String group, List<DtoAdapter> items) {
+    private static void validateGroup(String group, List<DtoAdapter> items, String responseMode) {
         int enabled = 0;
         int enabledNoRule = 0;
 
@@ -120,6 +138,10 @@ public class ResponseValidator {
                         "文件返回体必须先上传文件（分组 " + group + "）");
             }
             enabled++;
+            if ("RANDOM".equals(responseMode)) {
+                // 随机模式不读取条件；保留原配置，用户切回条件模式时再按原规则校验。
+                continue;
+            }
             MatchRule rule = parseRule(item.conditions);
             boolean noRule = rule == null || rule.isEmpty();
             if (noRule) {
@@ -134,7 +156,7 @@ public class ResponseValidator {
                     "至少需要一个启用的返回体（分组 " + group + "）");
         }
 
-        if (enabled == 1) {
+        if (enabled == 1 || "RANDOM".equals(responseMode)) {
             return; // 单启用不要求兜底
         }
 
@@ -147,6 +169,17 @@ public class ResponseValidator {
                     "只允许一个无规则的启用返回体作为兜底（分组 " + group + "，当前 "
                             + enabledNoRule + " 个）");
         }
+    }
+
+    private static String responseModeFor(String group, Map<String, String> modeByGroup) {
+        String mode = modeByGroup == null ? null : modeByGroup.get(group);
+        if (mode == null || mode.trim().isEmpty()) {
+            return "CONDITION";
+        }
+        if ("CONDITION".equalsIgnoreCase(mode) || "RANDOM".equalsIgnoreCase(mode)) {
+            return mode.toUpperCase();
+        }
+        throw new BizException(40418, "返回体选择模式仅支持 CONDITION 或 RANDOM：" + mode);
     }
 
     /**

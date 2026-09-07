@@ -46,6 +46,7 @@ public class ApiRepository {
             api.setGlobalHeaderOverrides(rs.getString("global_header_overrides"));
             api.setSoapConfig(rs.getString("soap_config"));
             api.setScenarios(rs.getString("scenarios"));
+            api.setResponseMode(rs.getString("response_mode"));
             api.setHitCount(rs.getLong("hit_count"));
             api.setLastCalledAt(rs.getString("last_called_at"));
             api.setCreatedBy(rs.getString("created_by"));
@@ -77,6 +78,7 @@ public class ApiRepository {
             api.setEnabled(rs.getInt("enabled") == 1);
             api.setGlobalHeaderOverrides(rs.getString("global_header_overrides"));
             api.setSoapConfig(rs.getString("soap_config"));
+            api.setResponseMode(rs.getString("response_mode"));
             api.setHitCount(rs.getLong("hit_count"));
             api.setLastCalledAt(rs.getString("last_called_at"));
             api.setCreatedBy(rs.getString("created_by"));
@@ -176,7 +178,7 @@ public class ApiRepository {
         StringBuilder sql = new StringBuilder();
         sql.append("SELECT a.id, a.team_id, a.group_id, a.type, a.name, a.description, a.method, a.path, ");
         sql.append("a.response_code, a.content_type, a.delay_ms, a.enabled, ");
-        sql.append("a.global_header_overrides, a.soap_config, ");
+        sql.append("a.global_header_overrides, a.soap_config, a.response_mode, ");
         sql.append("a.hit_count, a.last_called_at, ");
         sql.append("a.created_by, a.created_at, a.updated_at, a.updated_by ");
         sql.append("FROM api_definition a ");
@@ -330,12 +332,12 @@ public class ApiRepository {
         jdbcTemplate.update(
                 "INSERT INTO api_definition (id, team_id, group_id, type, name, description, method, path, " +
                         "response_code, content_type, response_body, delay_ms, enabled, " +
-                        "global_header_overrides, soap_config, scenarios, created_by, created_at, updated_at, updated_by) " +
-                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        "global_header_overrides, soap_config, scenarios, response_mode, created_by, created_at, updated_at, updated_by) " +
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 api.getId(), api.getTeamId(), api.getGroupId(), api.getType(), api.getName(),
                 api.getDescription(), api.getMethod(), api.getPath(), api.getResponseCode(), api.getContentType(),
                 api.getResponseBody(), api.getDelayMs(), api.isEnabled() ? 1 : 0,
-                api.getGlobalHeaderOverrides(), api.getSoapConfig(), api.getScenarios(),
+                api.getGlobalHeaderOverrides(), api.getSoapConfig(), api.getScenarios(), api.getResponseMode(),
                 api.getCreatedBy(), api.getCreatedAt(), api.getUpdatedAt(), api.getUpdatedBy());
     }
 
@@ -346,12 +348,12 @@ public class ApiRepository {
         jdbcTemplate.update(
                 "UPDATE api_definition SET team_id = ?, group_id = ?, type = ?, name = ?, description = ?, method = ?, path = ?, " +
                         "response_code = ?, content_type = ?, response_body = ?, delay_ms = ?, enabled = ?, " +
-                        "global_header_overrides = ?, soap_config = ?, scenarios = ?, " +
+                        "global_header_overrides = ?, soap_config = ?, scenarios = ?, response_mode = ?, " +
                         "updated_at = ?, updated_by = ? WHERE id = ?",
                 api.getTeamId(), api.getGroupId(), api.getType(), api.getName(), api.getDescription(),
                 api.getMethod(), api.getPath(), api.getResponseCode(), api.getContentType(),
                 api.getResponseBody(), api.getDelayMs(), api.isEnabled() ? 1 : 0,
-                api.getGlobalHeaderOverrides(), api.getSoapConfig(), api.getScenarios(),
+                api.getGlobalHeaderOverrides(), api.getSoapConfig(), api.getScenarios(), api.getResponseMode(),
                 api.getUpdatedAt(), api.getUpdatedBy(), api.getId());
     }
 
