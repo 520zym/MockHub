@@ -36,7 +36,7 @@
 
 <script setup>
 /**
- * JSON 示例树组件
+ * JSON / XML 示例树组件
  *
  * 将用户粘贴的 JSON 字符串解析成可交互树：
  * - 对象/数组可折叠（▶ / ▼）
@@ -51,12 +51,14 @@
 import { ref, computed, reactive, watch } from 'vue'
 import { Search } from '@element-plus/icons-vue'
 import TreeNode from './SampleTreeNode.vue'
+import { parseXmlSampleTree } from '@/utils/xmlSampleTree'
 
 const props = defineProps({
-  /** 粘贴的原始 JSON 字符串 */
+  /** 粘贴的原始 JSON 或 XML 字符串 */
   modelValue: { type: String, default: '' },
   /** 已被加入条件的路径数组，用于灰显 + ✓ 标记 */
-  usedPaths: { type: Array, default: () => [] }
+  usedPaths: { type: Array, default: () => [] },
+  sampleKind: { type: String, default: 'json' }
 })
 
 const emit = defineEmits(['select'])
@@ -69,11 +71,12 @@ const normalizedSearch = computed(() => searchKeyword.value.trim().toLowerCase()
 
 const usedPathsSet = computed(() => new Set(props.usedPaths || []))
 
-// 解析 JSON，解析失败返回 null（组件显示空态）
+// 解析示例，解析失败返回 null（导入时由面板提示错误）
 const rootNode = computed(() => {
   const raw = (props.modelValue || '').trim()
   if (!raw) return null
   try {
+    if (props.sampleKind === 'xml') return parseXmlSampleTree(raw)
     const parsed = JSON.parse(raw)
     return buildNode('', '', parsed)
   } catch {
