@@ -155,6 +155,10 @@ SOAP 接口上传 WSDL 后，每个 Operation 可独立配置多个返回体。�
 GetUserRequest.userId == u-1001
 ```
 
+在 SOAP 返回体的响应规则中选择 Body，点击“粘贴示例”导入 XML，即可搜索字段并点击生成条件。自动生成的路径包含根元素并忽略命名空间前缀，如 `Envelope.Body.GetUserRequest.userId`，沿用现有 `BODY` 条件格式。规则保存后可重新编辑；Query 条件仍可与 Body 条件组合使用。
+
+XML 示例树目前只生成元素文本条件，不生成属性或同名兄弟元素的索引条件；遇到同名兄弟元素、元素名含点号、DOCTYPE 或 XML 格式错误时会提示原因，不导入有歧义的路径。
+
 WSDL 托管地址为：
 
 ```

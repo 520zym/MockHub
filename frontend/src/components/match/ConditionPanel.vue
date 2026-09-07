@@ -73,6 +73,7 @@
           <SampleTree
             :model-value="sampleText"
             :used-paths="usedPaths"
+            :sample-kind="source === 'BODY' ? bodySampleKind : 'json'"
             @select="onTreePick"
           />
         </div>
@@ -104,11 +105,12 @@ import { ArrowDown, ArrowRight, Document, Edit, InfoFilled } from '@element-plus
 import { ElMessage } from 'element-plus'
 import SampleTree from './SampleTree.vue'
 import ConditionTable from './ConditionTable.vue'
+import { parseXmlSampleTree } from '@/utils/xmlSampleTree'
 
 const props = defineProps({
   /** conditions JSON 字符串，对应 api_response.conditions 字段；空字符串 / null 表示无规则 */
   modelValue: { type: String, default: '' },
-  /** BODY 示例类型：REST 使用 json 生成字段树；SOAP 使用 xml，仅提示手动填写路径 */
+  /** BODY 示例类型：REST 使用 json；SOAP 使用 xml 生成点分元素路径 */
   bodySampleKind: { type: String, default: 'json' }
 })
 
@@ -120,6 +122,12 @@ const source = ref('BODY')
 const sampleText = ref('')
 const showPasteDialog = ref(false)
 const pastedText = ref('')
+
+// 来源变化后要求重新导入，避免把 Body 的字段误加为 Query 条件，反之亦然。
+watch([source, () => props.bodySampleKind], () => {
+  sampleText.value = ''
+  pastedText.value = ''
+})
 
 // 从 modelValue 解析出初始条件数组
 const conditions = ref(parseConditions(props.modelValue))
@@ -133,7 +141,8 @@ watch(() => props.modelValue, (v) => {
 })
 
 // 用于 SampleTree 的已用路径列表
-const usedPaths = computed(() => conditions.value.map((c) => c.path).filter(Boolean))
+const usedPaths = computed(() => conditions.value
+  .filter(c => c.source === source.value).map(c => c.path).filter(Boolean))
 
 // 显示在折叠态右侧的规则摘要（如"3 条规则"）
 const ruleSummary = computed(() => {
@@ -146,7 +155,7 @@ const pasteHint = computed(() => {
     return '粘贴一段 URL 查询串（?a=1&b=2），解析后在下方树中点击字段即可快速生成条件。'
   }
   if (props.bodySampleKind === 'xml') {
-    return 'SOAP/XML Body 暂不生成字段树；可粘贴确认格式后，手动添加路径，如 Envelope.Body.GetUserRequest.userId。'
+    return '粘贴 SOAP 请求 XML，解析后点击字段生成条件。路径忽略命名空间前缀，例如 Envelope.Body.GetUserRequest.userId。'
   }
   return '粘贴一段 JSON Body，解析后在下方树中点击字段即可快速生成条件。'
 })
@@ -196,13 +205,13 @@ function applyPasted() {
   }
   if (source.value === 'BODY') {
     if (props.bodySampleKind === 'xml') {
-      if (!text.startsWith('<')) {
-        ElMessage.error('SOAP/XML Body 应以 XML 标签开头')
-        return
+      try {
+        parseXmlSampleTree(text)
+        sampleText.value = text
+        showPasteDialog.value = false
+      } catch (e) {
+        ElMessage.error(e.message || '无法解析为 XML，请检查格式')
       }
-      sampleText.value = ''
-      showPasteDialog.value = false
-      ElMessage.info('XML 字段树暂未生成，请在右侧手动添加 Body 路径')
       return
     }
     // 尝试解析 JSON；失败给提示

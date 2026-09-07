@@ -147,6 +147,32 @@ class ResponseMatcherTest {
 
             assertEquals(ruleA, matcher.match("api1", "GetUser", req));
         }
+
+        @Test
+        void soapXmlTreeConditionMatchesAndFallsBackWithinOperation() throws Exception {
+            ApiResponse rule = response("vip", ruleJson("BODY",
+                    "Envelope.Body.GetUserRequest.userId", "EQ", "00123", "STRING"), 1);
+            ApiResponse fallback = response("default", null, 2);
+            ApiResponse other = response("other-operation", null, 1);
+            when(repo.findEnabledByApiIdAndOperation("api1", "GetUser"))
+                    .thenReturn(Arrays.asList(rule, fallback));
+            when(repo.findEnabledByApiIdAndOperation("api1", "Other"))
+                    .thenReturn(Arrays.asList(other));
+
+            String xml = "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\">"
+                    + "<s:Body><GetUserRequest><userId>00123</userId></GetUserRequest>"
+                    + "</s:Body></s:Envelope>";
+            MockHttpServletRequest hit = newRequest();
+            hit.setContentType("text/xml");
+            hit.setContent(xml.getBytes("UTF-8"));
+            assertEquals(rule, matcher.match("api1", "GetUser", hit));
+            assertEquals(other, matcher.match("api1", "Other", hit));
+
+            MockHttpServletRequest miss = newRequest();
+            miss.setContentType("text/xml");
+            miss.setContent(xml.replace("00123", "123").getBytes("UTF-8"));
+            assertEquals(fallback, matcher.match("api1", "GetUser", miss));
+        }
     }
 
     // ========== extract() 取值 ==========
