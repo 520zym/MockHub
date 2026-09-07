@@ -6,6 +6,7 @@ import com.mockhub.common.util.PermissionChecker;
 import com.mockhub.mock.model.dto.ApiDefinitionDTO;
 import com.mockhub.mock.model.dto.ApiDefinitionDetailVO;
 import com.mockhub.mock.model.dto.ApiDefinitionVO;
+import com.mockhub.mock.model.dto.ApiSaveResultVO;
 import com.mockhub.mock.model.dto.BatchApiRequest;
 import com.mockhub.mock.model.dto.BatchApiResult;
 import com.mockhub.mock.model.entity.ApiDefinition;
@@ -109,12 +110,12 @@ public class ApiController {
      * 创建接口
      *
      * @param dto 创建请求体
-     * @return 创建后的接口定义
+     * @return 创建后的接口基础信息
      */
     @PostMapping
-    public Result<ApiDefinition> create(@RequestBody ApiDefinitionDTO dto) {
+    public Result<ApiSaveResultVO> create(@RequestBody ApiDefinitionDTO dto) {
         ApiDefinition api = apiService.create(dto);
-        return Result.ok(api);
+        return Result.ok(ApiSaveResultVO.from(api));
     }
 
     /**
@@ -122,12 +123,12 @@ public class ApiController {
      *
      * @param id  接口 ID
      * @param dto 更新请求体
-     * @return 更新后的接口定义
+     * @return 更新后的接口基础信息
      */
     @PutMapping("/{id}")
-    public Result<ApiDefinition> update(@PathVariable String id, @RequestBody ApiDefinitionDTO dto) {
+    public Result<ApiSaveResultVO> update(@PathVariable String id, @RequestBody ApiDefinitionDTO dto) {
         ApiDefinition api = apiService.update(id, dto);
-        return Result.ok(api);
+        return Result.ok(ApiSaveResultVO.from(api));
     }
 
     /**

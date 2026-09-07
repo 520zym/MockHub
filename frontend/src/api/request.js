@@ -58,7 +58,14 @@ request.interceptors.response.use(
       return Promise.reject(error)
     }
 
-    ElMessage.error('网络错误，请检查连接')
+    const isTimeout = error.code === 'ECONNABORTED' || (error.message && error.message.includes('timeout'))
+    const isNetworkError = !error.response
+    error.isTimeout = isTimeout
+    error.isNetworkError = isNetworkError
+
+    if (!error.config?.skipGlobalNetworkError) {
+      ElMessage.error('网络错误，请检查连接')
+    }
     return Promise.reject(error)
   }
 )
