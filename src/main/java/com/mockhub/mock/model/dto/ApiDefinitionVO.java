@@ -28,6 +28,7 @@ public class ApiDefinitionVO {
     private String contentType;
     private int delayMs;
     private boolean enabled;
+    private String responseMode;
     private List<Tag> tags;
     private String createdBy;
     private String createdByName;
@@ -175,6 +176,14 @@ public class ApiDefinitionVO {
 
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
+    }
+
+    public String getResponseMode() {
+        return responseMode;
+    }
+
+    public void setResponseMode(String responseMode) {
+        this.responseMode = responseMode;
     }
 
     public List<Tag> getTags() {

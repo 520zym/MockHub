@@ -1,5 +1,17 @@
 <template>
   <div class="response-tabs">
+    <div class="response-mode-bar">
+      <span class="response-mode-label">选择方式</span>
+      <el-radio-group :model-value="normalizedSelectionMode" size="small" @change="changeSelectionMode">
+        <el-radio-button value="CONDITION">按条件匹配</el-radio-button>
+        <el-radio-button value="RANDOM">等概率随机</el-radio-button>
+      </el-radio-group>
+      <span class="response-mode-help">
+        {{ normalizedSelectionMode === 'RANDOM'
+          ? '每次从启用的返回体中等概率选择；已有条件会保留，但不会参与本模式的选择。'
+          : '按条件依次匹配；多个启用返回体时必须保留一个无条件兜底。' }}
+      </span>
+    </div>
     <!-- Tab 栏 -->
     <div class="tabs-header">
       <div
@@ -48,8 +60,17 @@
     <div v-if="currentResponse" class="tab-content">
       <!-- 响应规则面板：REST 按接口匹配，SOAP 按当前 operation 独立匹配 -->
       <ConditionPanel
+        v-if="normalizedSelectionMode === 'CONDITION'"
         v-model="currentResponse.conditions"
         :body-sample-kind="operationName ? 'xml' : 'json'"
+      />
+      <el-alert
+        v-else
+        type="info"
+        :closable="false"
+        show-icon
+        title="随机模式会忽略本返回体已保存的命中条件。切回按条件匹配时，原条件会继续保留。"
+        class="random-mode-alert"
       />
       <el-form label-position="top">
         <el-row :gutter="16">
@@ -390,10 +411,23 @@ const props = defineProps({
   teamId: {
     type: String,
     default: null
+  },
+  /** 返回体选择方式：CONDITION / RANDOM */
+  selectionMode: {
+    type: String,
+    default: 'CONDITION'
   }
 })
 
-const emit = defineEmits(['update:modelValue'])
+const emit = defineEmits(['update:modelValue', 'update:selectionMode'])
+
+const normalizedSelectionMode = computed(() =>
+  props.selectionMode === 'RANDOM' ? 'RANDOM' : 'CONDITION'
+)
+
+function changeSelectionMode(mode) {
+  emit('update:selectionMode', mode === 'RANDOM' ? 'RANDOM' : 'CONDITION')
+}
 
 // 动态变量元数据（用于 popover 列表渲染）
 const dynamicVariables = DYNAMIC_VARIABLES
@@ -737,6 +771,7 @@ function addResponse() {
  * 条件：启用数 >= 2 && 此 Tab 启用 && 此 Tab 无规则
  */
 function isFallbackTab(idx) {
+  if (normalizedSelectionMode.value !== 'CONDITION') return false
   const r = responses.value[idx]
   if (!r || !r.isActive) return false
   const enabled = responses.value.filter((x) => x.isActive)
@@ -951,6 +986,28 @@ async function handleUploadFile(uploadFile) {
 <style scoped>
 .response-tabs {
   width: 100%;
+}
+
+.response-mode-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.response-mode-label {
+  font-size: 13px;
+  color: #334155;
+  white-space: nowrap;
+}
+
+.response-mode-help {
+  font-size: 12px;
+  color: #64748B;
+}
+
+.random-mode-alert {
+  margin-bottom: 16px;
 }
 
 /* Tab 栏 */

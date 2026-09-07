@@ -27,6 +27,9 @@ public class SoapOperation {
      */
     private String description;
 
+    /** 当前 operation 的多返回体选择模式：CONDITION（默认）或 RANDOM */
+    private String responseMode;
+
     public SoapOperation() {
     }
 
@@ -76,6 +79,14 @@ public class SoapOperation {
 
     public void setDescription(String description) {
         this.description = description;
+    }
+
+    public String getResponseMode() {
+        return responseMode;
+    }
+
+    public void setResponseMode(String responseMode) {
+        this.responseMode = responseMode;
     }
 
     @Override

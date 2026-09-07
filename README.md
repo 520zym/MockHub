@@ -44,6 +44,7 @@
 - [x] **自定义动态变量** -- 团队级维护命名值集合，支持按分组组织；响应体 `{{pet}}` 从全部值随机挑、`{{pet.mammal}}` 从指定分组随机挑；解析失败 fail-fast 返回统一错误格式
 - [x] **多返回体** -- 单个接口可配置多个响应体，支持切换活跃返回体
 - [x] **多场景响应** -- 多个返回体可配置匹配条件（Query / JSON Body / SOAP XML Body），命中即返回，未命中走无规则兜底
+- [x] **随机返回** -- REST 接口及每个 SOAP Operation 可独立选择等概率随机模式，仅从启用的返回体中选择，无需配置条件与兜底
 - [x] **文件服务器模拟** -- 免登录上传、固定 fileId 下载链接、Range 续传，以及按团队管理、检索、标签、统计、预览和批量删除
 - [x] **接口描述** -- 支持富文本描述接口用途和说明
 - [x] **Monaco Editor** -- 内置代码编辑器，JSON / XML / 纯文本语法高亮和格式化
@@ -168,7 +169,9 @@ GET http://localhost:18080/mock/FE/soap/user-service?wsdl
 
 ---
 
-## 文件服务器模拟
+## 文件服务器与随机返回
+
+### 文件服务器模拟
 
 登录后进入侧栏“文件服务器”，可上传文件、按 fileId/文件名/别名检索、按标签筛选、修改别名与标签、查看详情或批量删除。文件归属团队：成员可浏览和上传，团队管理员与超级管理员可修改和删除。
 
@@ -198,6 +201,14 @@ curl -H 'Range: bytes=0-1023' http://localhost:18080/files/返回的fileId
 文件存储在 `data.path/file-server`，元数据在同一 SQLite 数据库的新表中，独立于已有 Mock 响应文件及其孤儿清理。备份时应同时保存数据库和文件目录。有文件的团队需先清理文件再删除团队。
 
 默认文件上传上限 100MB。`file-server.max-size-bytes` 与 `spring.servlet.multipart.max-file-size/max-request-size` 应配套调整；既有 Mock 响应文件仍受自身 10MB 服务限制。反向代理部署可设置 `--file-server.public-base-url=https://host/前缀` 生成外部可访问链接，并同步配置代理上传大小与超时。公开文件接口的跨域开关沿用 `mock.cors.enabled`。
+
+### 多返回体的随机模式
+
+在返回体面板选择“等概率随机”：无需条件或默认兜底，每次从当前 REST 接口或 SOAP Operation 的启用响应中随机选择一个；单个启用响应始终返回该项。已配置条件保留但不参与随机选择，切回“条件匹配”后恢复原校验。随机不保证轮流出现或少量请求中次数相同。
+
+随机模式保存时至少需要一个启用的返回体；若运行时配置异常导致没有可选响应，返回明确的 500 错误。
+
+REST 模式使用 `responseMode` 字段，SOAP 使用 `soapConfig.operations[].responseMode`，取值为 `CONDITION` / `RANDOM`。旧数据和未指定模式默认 `CONDITION`；复制、导入导出保留模式。数据库启动时幂等升级到 v5。
 
 ## 启动参数
 

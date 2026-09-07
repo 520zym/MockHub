@@ -74,6 +74,7 @@ export interface ApiDefinitionVO {
   contentType: string
   delayMs: number
   enabled: boolean
+  responseMode: 'CONDITION' | 'RANDOM'
   tags: TagVO[]
   createdBy: string
   createdByName: string
@@ -98,6 +99,7 @@ export interface SoapOperation {
   responseCode: number
   delayMs: number
   responseBody: string
+  responseMode: 'CONDITION' | 'RANDOM'
 }
 
 export interface ApiDefinitionForm {
@@ -112,6 +114,7 @@ export interface ApiDefinitionForm {
   responseBody: string
   delayMs: number
   enabled: boolean
+  responseMode: 'CONDITION' | 'RANDOM'
   tagIds: string[]
   globalHeaderOverrides: Record<string, string>
   soapConfig: SoapConfig | null

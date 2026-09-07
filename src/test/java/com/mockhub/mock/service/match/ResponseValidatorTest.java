@@ -72,6 +72,50 @@ class ResponseValidatorTest {
         assertDoesNotThrow(() -> ResponseValidator.validateDtos(list));
     }
 
+    @Test
+    void randomModeAllowsMultipleUnconditionalEnabledResponses() {
+        List<ApiResponseDTO> list = Arrays.asList(dto(true, null), dto(true, null));
+        java.util.Map<String, String> modes = new java.util.HashMap<String, String>();
+        modes.put("__REST__", "RANDOM");
+        assertDoesNotThrow(() -> ResponseValidator.validateDtos(list, modes));
+    }
+
+    @Test
+    void randomRestWithoutResponsesThrows40410() {
+        java.util.Map<String, String> modes = new java.util.HashMap<String, String>();
+        modes.put("__REST__", "RANDOM");
+        BizException ex = assertThrows(BizException.class,
+                () -> ResponseValidator.validateDtos(Collections.<ApiResponseDTO>emptyList(), modes));
+        assertEquals(40410, ex.getCode());
+    }
+
+    @Test
+    void randomSoapOperationWithoutResponsesThrows40410() {
+        java.util.Map<String, String> modes = new java.util.HashMap<String, String>();
+        modes.put("GetUser", "RANDOM");
+        BizException ex = assertThrows(BizException.class,
+                () -> ResponseValidator.validateDtos(null, modes));
+        assertEquals(40410, ex.getCode());
+    }
+
+    @Test
+    void randomModeIgnoresExistingRuleValidation() {
+        List<ApiResponseDTO> list = Arrays.asList(
+                dto(true, ruleJson("HEADER", "x", "EQ", "1", "STRING")), dto(true, null));
+        java.util.Map<String, String> modes = new java.util.HashMap<String, String>();
+        modes.put("__REST__", "RANDOM");
+        assertDoesNotThrow(() -> ResponseValidator.validateDtos(list, modes));
+    }
+
+    @Test
+    void invalidResponseModeThrows40418() {
+        java.util.Map<String, String> modes = new java.util.HashMap<String, String>();
+        modes.put("__REST__", "ROUND_ROBIN");
+        BizException ex = assertThrows(BizException.class,
+                () -> ResponseValidator.validateDtos(Arrays.asList(dto(true, null)), modes));
+        assertEquals(40418, ex.getCode());
+    }
+
     // ========== 条件合法性 ==========
 
     @Test
@@ -146,6 +190,34 @@ class ResponseValidatorTest {
 
         BizException ex = assertThrows(BizException.class, () -> ResponseValidator.validateDtos(list));
         assertEquals(40411, ex.getCode());
+    }
+
+    @Test
+    void randomRestDoesNotRelaxConditionValidationForSoapOperation() {
+        List<ApiResponseDTO> list = new ArrayList<ApiResponseDTO>();
+        list.add(dtoWithOperation(true, null, null));
+        list.add(dtoWithOperation(true, null, null));
+        list.add(dtoWithOperation(true,
+                ruleJson("BODY", "a", "EQ", "1", "STRING"), "opX"));
+        list.add(dtoWithOperation(true,
+                ruleJson("BODY", "b", "EQ", "2", "STRING"), "opX"));
+
+        java.util.Map<String, String> modes = new java.util.HashMap<String, String>();
+        modes.put("__REST__", "RANDOM");
+        modes.put("opX", "CONDITION");
+
+        BizException ex = assertThrows(BizException.class,
+                () -> ResponseValidator.validateDtos(list, modes));
+        assertEquals(40411, ex.getCode());
+    }
+
+    @Test
+    void randomSoapOperationAllowsMultipleUnconditionalResponses() {
+        List<ApiResponseDTO> list = Arrays.asList(
+                dtoWithOperation(true, null, "opX"), dtoWithOperation(true, null, "opX"));
+        java.util.Map<String, String> modes = new java.util.HashMap<String, String>();
+        modes.put("opX", "RANDOM");
+        assertDoesNotThrow(() -> ResponseValidator.validateDtos(list, modes));
     }
 
     @Test

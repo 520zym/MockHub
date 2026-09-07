@@ -176,8 +176,13 @@ public class DataSourceConfig {
                     recordSchemaVersion(conn, 4,
                             "文件响应模拟：api_response 增加 body_type 与文件元数据列");
                 }
+                if (current < 5) {
+                    migrateV5(conn);
+                    recordSchemaVersion(conn, 5,
+                            "多返回体随机模式：api_definition 增加 response_mode 列");
+                }
                 // 后续版本追加：
-                // if (current < 5) { migrateV5(conn); recordSchemaVersion(conn, 5, "..."); }
+                // if (current < 6) { migrateV6(conn); recordSchemaVersion(conn, 6, "..."); }
 
                 conn.commit();
                 log.info("DB 迁移完成");
@@ -300,6 +305,12 @@ public class DataSourceConfig {
         addColumnIfNotExists(conn, "api_response", "file_path", "TEXT");
         addColumnIfNotExists(conn, "api_response", "download_name", "TEXT");
         addColumnIfNotExists(conn, "api_response", "file_size", "INTEGER");
+    }
+
+    /** v5 迁移：REST 接口增加多返回体选择模式，老数据保持条件匹配。 */
+    private void migrateV5(Connection conn) throws SQLException {
+        addColumnIfNotExists(conn, "api_definition", "response_mode",
+                "TEXT NOT NULL DEFAULT 'CONDITION'");
     }
 
     /**

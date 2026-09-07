@@ -2,6 +2,8 @@ package com.mockhub.mock.service;
 
 import com.mockhub.common.util.PermissionChecker;
 import com.mockhub.common.util.SecurityContextUtil;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mockhub.mock.model.dto.ImportExportData;
 import com.mockhub.mock.model.dto.ImportResult;
 import com.mockhub.mock.model.entity.ApiDefinition;
@@ -50,6 +52,7 @@ import java.util.UUID;
 public class ImportExportService {
 
     private static final Logger log = LoggerFactory.getLogger(ImportExportService.class);
+    private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
 
     private final ApiRepository apiRepository;
     private final ApiResponseRepository apiResponseRepository;
@@ -202,6 +205,9 @@ public class ImportExportService {
         String userId = SecurityContextUtil.getCurrentUserId();
         boolean isOverride = "override".equalsIgnoreCase(mode);
 
+        // 在任何分组、标签、接口或文件写入前完成模式/返回体预校验，避免随机空池导致半导入。
+        validateImportResponseConfigurations(teamId, data, isOverride);
+
         int imported = 0;
         int skipped = 0;
         int overridden = 0;
@@ -254,6 +260,9 @@ public class ImportExportService {
                         existing.setDelayMs(api.getDelayMs());
                         existing.setGlobalHeaderOverrides(api.getGlobalHeaderOverrides());
                         existing.setSoapConfig(api.getSoapConfig());
+                        existing.setResponseMode(normalizeResponseMode(api.getResponseMode()));
+                        // 即使导入包没有 apiResponses，也要校验 SOAP operation 中的模式值。
+                        responseModes(existing);
                         existing.setUpdatedAt(now);
                         existing.setUpdatedBy(userId);
 
@@ -281,6 +290,9 @@ public class ImportExportService {
                     api.setCreatedAt(now);
                     api.setUpdatedAt(now);
                     api.setUpdatedBy(userId);
+                    api.setResponseMode(normalizeResponseMode(api.getResponseMode()));
+                    // 即使导入包没有 apiResponses，也要校验 SOAP operation 中的模式值。
+                    responseModes(api);
 
                     // 映射 groupId
                     if (api.getGroupId() != null && groupIdMap.containsKey(api.getGroupId())) {
@@ -332,8 +344,12 @@ public class ImportExportService {
                 }
                 list.add(resp);
             }
-            for (List<ApiResponse> group : grouped.values()) {
-                ResponseValidator.validateEntities(group);
+            // 每个导入接口都必须校验：不能只校验有返回体的分组，否则 RANDOM 的空池会漏过。
+            for (String newApiId : apiIdMap.values()) {
+                ApiDefinition importedApi = apiRepository.findById(newApiId);
+                List<ApiResponse> responses = grouped.get(newApiId);
+                ResponseValidator.validateEntities(responses,
+                        responseModes(importedApi));
             }
             int respImported = 0;
             for (List<ApiResponse> group : grouped.values()) {
@@ -344,6 +360,12 @@ public class ImportExportService {
             }
             log.info("导入返回体: 数量={}", respImported);
         } else if (!apiIdMap.isEmpty()) {
+            // 老导出包没有 apiResponses 时，CONDITION 沿用默认返回体兼容路径；
+            // RANDOM 无法凭空生成候选项，必须在写入默认返回体前拒绝。
+            for (String newApiId : apiIdMap.values()) {
+                ApiDefinition importedApi = apiRepository.findById(newApiId);
+                ResponseValidator.validateEntities(null, responseModes(importedApi));
+            }
             // 兼容旧版导出文件（无 apiResponses 字段）：为每个导入的 REST 接口创建默认返回体
             for (Map.Entry<String, String> entry : apiIdMap.entrySet()) {
                 String newApiId = entry.getValue();
@@ -373,6 +395,68 @@ public class ImportExportService {
                 teamId, mode, imported, skipped, overridden);
 
         return new ImportResult(imported, skipped, overridden);
+    }
+
+    private String normalizeResponseMode(String mode) {
+        if (mode == null || mode.trim().isEmpty()) {
+            return "CONDITION";
+        }
+        if ("CONDITION".equalsIgnoreCase(mode) || "RANDOM".equalsIgnoreCase(mode)) {
+            return mode.toUpperCase();
+        }
+        throw new com.mockhub.common.model.BizException(40418,
+                "返回体选择模式仅支持 CONDITION 或 RANDOM：" + mode);
+    }
+
+    private Map<String, String> responseModes(ApiDefinition api) {
+        Map<String, String> modes = new HashMap<String, String>();
+        modes.put("__REST__", normalizeResponseMode(api == null ? null : api.getResponseMode()));
+        if (api == null || api.getSoapConfig() == null || api.getSoapConfig().trim().isEmpty()) {
+            return modes;
+        }
+        try {
+            JsonNode operations = JSON_MAPPER.readTree(api.getSoapConfig()).path("operations");
+            if (operations.isArray()) {
+                for (JsonNode operation : operations) {
+                    String name = operation.path("operationName").asText(null);
+                    if (name != null && !name.isEmpty()) {
+                        modes.put(name, normalizeResponseMode(operation.path("responseMode").asText(null)));
+                    }
+                }
+            }
+            return modes;
+        } catch (IOException e) {
+            throw new com.mockhub.common.model.BizException(40418,
+                    "SOAP 配置无法解析，无法校验返回体选择模式");
+        }
+    }
+
+    /**
+     * 仅校验本次实际会导入（新增或 override）的接口。merge 模式下被跳过的既有接口不受导入包影响。
+     */
+    private void validateImportResponseConfigurations(String teamId, ImportExportData data, boolean isOverride) {
+        if (data.getApis() == null || data.getApis().isEmpty()) {
+            return;
+        }
+        Map<String, List<ApiResponse>> responsesByApiId = new HashMap<String, List<ApiResponse>>();
+        if (data.getApiResponses() != null) {
+            for (ApiResponse response : data.getApiResponses()) {
+                List<ApiResponse> responses = responsesByApiId.get(response.getApiId());
+                if (responses == null) {
+                    responses = new ArrayList<ApiResponse>();
+                    responsesByApiId.put(response.getApiId(), responses);
+                }
+                responses.add(response);
+            }
+        }
+        for (ApiDefinition api : data.getApis()) {
+            List<ApiDefinition> existing = apiRepository.findByTeamIdAndPathAndMethod(
+                    teamId, api.getPath(), api.getMethod());
+            if (!existing.isEmpty() && !isOverride) {
+                continue;
+            }
+            ResponseValidator.validateEntities(responsesByApiId.get(api.getId()), responseModes(api));
+        }
     }
 
     public static class ExportPackage {

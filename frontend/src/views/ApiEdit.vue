@@ -226,6 +226,7 @@
             />
             <ResponseTabs
               v-model="op.responses"
+              v-model:selection-mode="op.responseMode"
               :operation-name="op.operationName"
               :team-id="form.teamId"
               default-content-type="text/xml"
@@ -243,7 +244,7 @@
     <!-- 卡片：返回体配置（REST 模式，使用 ResponseTabs 组件） -->
     <div class="soft-card section-card" v-if="form.type === 'REST'">
       <h3 class="section-title">返回体配置</h3>
-      <ResponseTabs v-model="form.responses" :team-id="form.teamId" />
+      <ResponseTabs v-model="form.responses" v-model:selection-mode="form.responseMode" :team-id="form.teamId" />
     </div>
 
     <!-- 卡片：标签 -->
@@ -392,6 +393,7 @@ const form = reactive({
   tagIds: [],
   globalHeaderOverrides: {},
   soapConfig: null,
+  responseMode: 'CONDITION',
   // 多返回体（REST 模式）
   responses: [{
     id: null,
@@ -596,7 +598,8 @@ async function loadApiDetail() {
       enabled: data.enabled !== undefined ? data.enabled : true,
       tagIds: data.tags ? data.tags.map(t => t.id) : [],
       globalHeaderOverrides: data.globalHeaderOverrides || {},
-      soapConfig: null
+      soapConfig: null,
+      responseMode: data.responseMode === 'RANDOM' ? 'RANDOM' : 'CONDITION'
     })
 
     // 填充返回体
@@ -663,6 +666,7 @@ async function loadApiDetail() {
               soapAction: op.soapAction,
               // v1.4.4：operation 级描述，老数据为 undefined/null 时回退空串便于 v-model 绑定
               description: op.description || '',
+              responseMode: op.responseMode === 'RANDOM' ? 'RANDOM' : 'CONDITION',
               responses: responsesByOp[op.operationName] || [createDefaultSoapResponse(op.operationName)]
             }))
           }
@@ -701,6 +705,7 @@ async function loadApiDetail() {
           operationName: op.operationName,
           soapAction: op.soapAction,
           description: op.description || '',
+          responseMode: op.responseMode === 'RANDOM' ? 'RANDOM' : 'CONDITION',
           responses: [createDefaultSoapResponse(op.operationName)]
         }))
       }
@@ -802,6 +807,7 @@ async function handleUploadWsdl() {
             operationName: op.operationName,
             soapAction: op.soapAction,
             description: mergedDescription,
+            responseMode: existing && existing.responseMode === 'RANDOM' ? 'RANDOM' : 'CONDITION',
             responses: existing.responses
           }
         }
@@ -809,6 +815,7 @@ async function handleUploadWsdl() {
           operationName: op.operationName,
           soapAction: op.soapAction,
           description: mergedDescription,
+          responseMode: 'CONDITION',
           responses: [createDefaultSoapResponse(op.operationName, op.suggestedResponseBody)]
         }
       })
@@ -845,12 +852,13 @@ function validateResponsesLocal() {
   // REST：全部 responses 放一组；SOAP：按 operation 分组
   let groups = []
   if (form.type === 'REST') {
-    groups.push({ label: 'REST', list: form.responses || [] })
+    groups.push({ label: 'REST', list: form.responses || [], responseMode: form.responseMode })
   } else if (form.type === 'SOAP' && form.soapConfig && form.soapConfig.operations) {
     form.soapConfig.operations.forEach(op => {
       groups.push({
         label: 'SOAP · ' + op.operationName,
-        list: op.responses || []
+        list: op.responses || [],
+        responseMode: op.responseMode
       })
     })
   }
@@ -860,7 +868,7 @@ function validateResponsesLocal() {
     if (enabled.length === 0) {
       return `[${g.label}] 至少需要一个启用的返回体`
     }
-    if (enabled.length >= 2) {
+    if (enabled.length >= 2 && g.responseMode !== 'RANDOM') {
       const noRule = enabled.filter(r => isConditionsEmptyLocal(r.conditions))
       if (noRule.length === 0) {
         return `[${g.label}] 多启用返回体时必须有一个无规则的作为兜底`
@@ -963,7 +971,8 @@ async function handleSave() {
           operationName: op.operationName,
           soapAction: op.soapAction,
           // v1.4.4：operation 级描述持久化；空字符串转 null 避免落库冗余
-          description: (op.description && op.description.trim()) ? op.description.trim() : null
+          description: (op.description && op.description.trim()) ? op.description.trim() : null,
+          responseMode: op.responseMode === 'RANDOM' ? 'RANDOM' : 'CONDITION'
         }))
       }
     }
@@ -984,6 +993,7 @@ async function handleSave() {
       tagIds: form.tagIds,
       globalHeaderOverrides: overrides,
       soapConfig: soapConfigPayload,
+      responseMode: form.responseMode === 'RANDOM' ? 'RANDOM' : 'CONDITION',
       responses: allResponses
     }
 

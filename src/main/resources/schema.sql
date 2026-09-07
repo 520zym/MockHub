@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS api_definition (
     global_header_overrides TEXT,           -- JSON 字符串，覆盖团队全局响应头
     soap_config            TEXT,            -- JSON 字符串，type=SOAP 时使用，见 SoapConfig
     scenarios              TEXT,            -- JSON 字符串，v1 为 null，v2 预留
+    response_mode          TEXT NOT NULL DEFAULT 'CONDITION', -- REST 多返回体选择：CONDITION / RANDOM
     hit_count              INTEGER NOT NULL DEFAULT 0,  -- 累计命中次数（每次 Mock 命中 +1，永久累加，不受日志清理影响）
     last_called_at         TEXT,            -- 最近一次被命中的时间（ISO 格式），从未命中则为 null
     created_by             TEXT,

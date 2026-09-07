@@ -32,6 +32,7 @@ public class ApiDefinitionDetailVO {
     private boolean enabled;
     private String globalHeaderOverrides;
     private String soapConfig;
+    private String responseMode;
     private String createdBy;
     private String createdAt;
     private String updatedAt;
@@ -164,6 +165,14 @@ public class ApiDefinitionDetailVO {
 
     public void setSoapConfig(String soapConfig) {
         this.soapConfig = soapConfig;
+    }
+
+    public String getResponseMode() {
+        return responseMode;
+    }
+
+    public void setResponseMode(String responseMode) {
+        this.responseMode = responseMode;
     }
 
     public String getCreatedBy() {

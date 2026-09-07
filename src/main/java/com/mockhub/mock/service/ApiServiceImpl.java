@@ -278,6 +278,7 @@ public class ApiServiceImpl implements ApiService {
         detail.setEnabled(api.isEnabled());
         detail.setGlobalHeaderOverrides(api.getGlobalHeaderOverrides());
         detail.setSoapConfig(api.getSoapConfig());
+        detail.setResponseMode(normalizeResponseMode(api.getResponseMode()));
         detail.setCreatedBy(api.getCreatedBy());
         detail.setCreatedAt(api.getCreatedAt());
         detail.setUpdatedAt(api.getUpdatedAt());
@@ -312,6 +313,10 @@ public class ApiServiceImpl implements ApiService {
             throw new BizException(40401, "同团队内路径+方法已存在");
         }
 
+        // 所有模式与返回体约束必须在首次写库前完成，避免非事务路径留下半成品接口。
+        Map<String, String> responseModes = responseModes(dto);
+        validateResponseConfiguration(dto.getResponses(), null, responseModes);
+
         String now = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss").format(new Date());
         String userId = SecurityContextUtil.getCurrentUserId();
 
@@ -331,6 +336,7 @@ public class ApiServiceImpl implements ApiService {
         api.setEnabled(dto.isEnabled());
         api.setGlobalHeaderOverrides(serializeMap(dto.getGlobalHeaderOverrides()));
         api.setSoapConfig(serializeObject(dto.getSoapConfig()));
+        api.setResponseMode(normalizeResponseMode(dto.getResponseMode()));
         api.setCreatedBy(userId);
         api.setCreatedAt(now);
         api.setUpdatedAt(now);
@@ -340,7 +346,7 @@ public class ApiServiceImpl implements ApiService {
         log.info("创建接口: id={}, name={}, method={}, path={}", api.getId(), api.getName(), api.getMethod(), api.getPath());
 
         // 保存返回体
-        saveResponses(api.getId(), dto.getResponses(), now);
+        saveResponses(api.getId(), dto.getResponses(), now, responseModes);
 
         // 保存标签关联
         if (dto.getTagIds() != null && !dto.getTagIds().isEmpty()) {
@@ -374,6 +380,15 @@ public class ApiServiceImpl implements ApiService {
             }
         }
 
+        String targetRestMode = dto.getResponseMode() == null
+                ? normalizeResponseMode(existing.getResponseMode())
+                : normalizeResponseMode(dto.getResponseMode());
+        // 更新时 responses 未传是旧客户端兼容路径；仍必须以现有返回体验证切换后的模式。
+        Map<String, String> responseModes = responseModes(dto, targetRestMode, existing.getSoapConfig());
+        List<ApiResponse> existingResponses = dto.getResponses() == null
+                ? apiResponseRepository.findByApiId(id) : null;
+        validateResponseConfiguration(dto.getResponses(), existingResponses, responseModes);
+
         String now = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss").format(new Date());
         String userId = SecurityContextUtil.getCurrentUserId();
 
@@ -390,6 +405,7 @@ public class ApiServiceImpl implements ApiService {
         existing.setEnabled(dto.isEnabled());
         existing.setGlobalHeaderOverrides(serializeMap(dto.getGlobalHeaderOverrides()));
         existing.setSoapConfig(serializeObject(dto.getSoapConfig()));
+        existing.setResponseMode(targetRestMode);
         existing.setUpdatedAt(now);
         existing.setUpdatedBy(userId);
 
@@ -397,7 +413,7 @@ public class ApiServiceImpl implements ApiService {
         log.info("更新接口: id={}, name={}", id, existing.getName());
 
         // 替换返回体
-        saveResponses(id, dto.getResponses(), now);
+        saveResponses(id, dto.getResponses(), now, responseModes);
 
         recordOperation("UPDATE", "API", id, existing.getName(),
                 "修改接口 " + existing.getMethod() + " " + existing.getPath(), existing.getTeamId());
@@ -459,6 +475,7 @@ public class ApiServiceImpl implements ApiService {
         copy.setEnabled(false); // 副本默认禁用，避免路径冲突
         copy.setGlobalHeaderOverrides(source.getGlobalHeaderOverrides());
         copy.setSoapConfig(source.getSoapConfig());
+        copy.setResponseMode(source.getResponseMode());
         copy.setCreatedBy(userId);
         copy.setCreatedAt(now);
         copy.setUpdatedAt(now);
@@ -681,6 +698,7 @@ public class ApiServiceImpl implements ApiService {
         vo.setContentType(api.getContentType());
         vo.setDelayMs(api.getDelayMs());
         vo.setEnabled(api.isEnabled());
+        vo.setResponseMode(normalizeResponseMode(api.getResponseMode()));
         vo.setCreatedBy(api.getCreatedBy());
         vo.setCreatedAt(api.getCreatedAt());
         vo.setUpdatedAt(api.getUpdatedAt());
@@ -737,6 +755,70 @@ public class ApiServiceImpl implements ApiService {
     }
 
     /**
+     * 规范化 REST 选择模式。空值代表旧客户端/旧数据，保持原有条件匹配行为。
+     */
+    private String normalizeResponseMode(String responseMode) {
+        if (responseMode == null || responseMode.trim().isEmpty()) {
+            return "CONDITION";
+        }
+        if ("CONDITION".equalsIgnoreCase(responseMode) || "RANDOM".equalsIgnoreCase(responseMode)) {
+            return responseMode.toUpperCase();
+        }
+        throw new BizException(40418, "返回体选择模式仅支持 CONDITION 或 RANDOM：" + responseMode);
+    }
+
+    /**
+     * 为 REST 和 SOAP operation 建立校验用模式表；SOAP 模式存放在 soapConfig JSON 中。
+     */
+    private Map<String, String> responseModes(ApiDefinitionDTO dto) {
+        return responseModes(dto, "CONDITION");
+    }
+
+    private Map<String, String> responseModes(ApiDefinitionDTO dto, String defaultRestMode) {
+        return responseModes(dto, defaultRestMode, null);
+    }
+
+    private Map<String, String> responseModes(ApiDefinitionDTO dto, String defaultRestMode,
+                                              String existingSoapConfig) {
+        Map<String, String> modes = new java.util.HashMap<String, String>();
+        modes.put("__REST__", dto.getResponseMode() == null
+                ? normalizeResponseMode(defaultRestMode)
+                : normalizeResponseMode(dto.getResponseMode()));
+        String soapConfigJson = dto.getSoapConfig() == null
+                ? existingSoapConfig : serializeObject(dto.getSoapConfig());
+        if (soapConfigJson == null || soapConfigJson.trim().isEmpty()) {
+            return modes;
+        }
+        try {
+            com.fasterxml.jackson.databind.JsonNode operations = objectMapper.readTree(soapConfigJson).path("operations");
+            if (operations.isArray()) {
+                for (com.fasterxml.jackson.databind.JsonNode operation : operations) {
+                    String name = operation.path("operationName").asText(null);
+                    if (name != null && !name.isEmpty()) {
+                        modes.put(name, normalizeResponseMode(operation.path("responseMode").asText(null)));
+                    }
+                }
+            }
+        } catch (JsonProcessingException e) {
+            throw new BizException(40418, "SOAP 配置无法解析，无法校验返回体选择模式");
+        }
+        return modes;
+    }
+
+    private void validateResponseConfiguration(List<ApiResponseDTO> incoming,
+                                               List<ApiResponse> existing,
+                                               Map<String, String> responseModes) {
+        if (incoming != null) {
+            ResponseValidator.validateDtos(incoming, responseModes);
+        } else if (existing != null) {
+            ResponseValidator.validateEntities(existing, responseModes);
+        } else {
+            // 创建接口未传 responses 时仍需拒绝 RANDOM 空池；CONDITION 保持旧客户端兼容。
+            ResponseValidator.validateDtos(null, responseModes);
+        }
+    }
+
+    /**
      * 保存接口的返回体列表
      * <p>
      * 如果 DTO 中提供了 responses 列表，则替换所有返回体；
@@ -746,13 +828,14 @@ public class ApiServiceImpl implements ApiService {
      * @param responses 返回体 DTO 列表
      * @param now       当前时间
      */
-    private void saveResponses(String apiId, List<ApiResponseDTO> responses, String now) {
+    private void saveResponses(String apiId, List<ApiResponseDTO> responses, String now,
+                               Map<String, String> responseModes) {
         if (responses == null) {
             return;
         }
 
         // v1.4.3 新增：多启用 + 条件匹配前置校验，失败抛 BizException 由全局处理器转为 40410~40416 错误码
-        ResponseValidator.validateDtos(responses);
+        ResponseValidator.validateDtos(responses, responseModes);
 
         List<ApiResponse> entities = new ArrayList<ApiResponse>();
         for (int i = 0; i < responses.size(); i++) {
