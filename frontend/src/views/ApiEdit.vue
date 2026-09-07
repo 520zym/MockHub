@@ -283,7 +283,7 @@
     <!-- 底部操作栏 -->
     <div class="bottom-actions">
       <el-button @click="goBack">取消</el-button>
-      <el-button type="primary" :loading="saving" @click="handleSave">
+      <el-button type="primary" :loading="saving" :disabled="saving" @click="handleSave">
         {{ isEdit ? '保存' : '创建' }}
       </el-button>
     </div>
@@ -884,6 +884,8 @@ function isConditionsEmptyLocal(json) {
 }
 
 async function handleSave() {
+  if (saving.value) return
+
   // 基本校验
   if (!form.name.trim()) {
     ElMessage.warning('请输入接口名称')
@@ -998,7 +1000,11 @@ async function handleSave() {
     appStore.loadTeams()
     router.push('/apis')
   } catch (e) {
-    // 错误已由拦截器处理
+    if (e?.isTimeout || e?.isNetworkError) {
+      ElMessage.warning('保存请求超时或网络异常，服务端可能已经保存成功。请返回接口列表确认后再决定是否重试，避免重复提交。')
+    } else if (e?.response && e.response.status !== 401) {
+      ElMessage.error('保存失败，请稍后重试')
+    }
   } finally {
     saving.value = false
   }
