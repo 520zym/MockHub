@@ -76,6 +76,9 @@ public class AiService {
         String raw = provider.complete(settings, responseSystemPrompt(xml), responseUserPrompt(req, xml));
         String content = extractContent(raw, xml);
         validateContent(content, xml);
+        if (!xml) {
+            content = prettyJson(content);
+        }
 
         AiResponseResult result = new AiResponseResult();
         result.setContent(content);
@@ -271,6 +274,16 @@ public class AiService {
 
     private String stripFence(String text) {
         return text.replaceAll(FENCE_HEAD, "").replaceAll(FENCE_TAIL, "").trim();
+    }
+
+    /** 模型常返回压缩 JSON，统一格式化后再展示与插入。 */
+    private String prettyJson(String content) {
+        try {
+            JsonNode node = objectMapper.readTree(content);
+            return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(node);
+        } catch (Exception e) {
+            return content;
+        }
     }
 
     private void validateContent(String content, boolean xml) {
