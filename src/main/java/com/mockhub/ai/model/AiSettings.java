@@ -29,6 +29,9 @@ public class AiSettings {
     private String updatedAt;
     private String updatedBy;
 
+    /** 仅运行时：Key 解密失败，不落库 */
+    private boolean keyInvalid;
+
     public String getId() {
         return id;
     }
@@ -131,5 +134,13 @@ public class AiSettings {
 
     public void setUpdatedBy(String updatedBy) {
         this.updatedBy = updatedBy;
+    }
+
+    public boolean isKeyInvalid() {
+        return keyInvalid;
+    }
+
+    public void setKeyInvalid(boolean keyInvalid) {
+        this.keyInvalid = keyInvalid;
     }
 }

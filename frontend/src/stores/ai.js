@@ -14,6 +14,7 @@ export const useAiStore = defineStore('ai', {
 
   getters: {
     enabled: (state) => !!state.status?.enabled,
+    visible: (state) => !!state.status?.visible,
     available: (state) => !!state.status?.available,
     reason: (state) => state.status?.reason || '',
     provider: (state) => state.status?.provider || '',

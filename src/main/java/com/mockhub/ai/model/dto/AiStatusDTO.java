@@ -11,6 +11,8 @@ import java.util.Map;
 public class AiStatusDTO {
 
     private boolean enabled;
+    /** 入口是否可见：已启用且当前用户在使用范围内 */
+    private boolean visible;
     private boolean available;
     private String reason;
     private String provider;
@@ -23,6 +25,14 @@ public class AiStatusDTO {
 
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
+    }
+
+    public boolean isVisible() {
+        return visible;
+    }
+
+    public void setVisible(boolean visible) {
+        this.visible = visible;
     }
 
     public boolean isAvailable() {

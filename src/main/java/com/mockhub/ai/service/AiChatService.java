@@ -9,6 +9,7 @@ import com.mockhub.ai.model.dto.AiChatResponse;
 import com.mockhub.ai.model.dto.AiGenerateRequest;
 import com.mockhub.common.model.BizException;
 import com.mockhub.common.model.PageResult;
+import com.mockhub.common.util.SecurityContextUtil;
 import com.mockhub.mock.model.dto.ApiDefinitionDTO;
 import com.mockhub.mock.model.dto.ApiDefinitionVO;
 import com.mockhub.mock.model.dto.ApiResponseDTO;
@@ -78,10 +79,14 @@ public class AiChatService {
         if (request.getMessage().length() > 2000) {
             throw new BizException(40001, "问题过长，请精简到 2000 字以内");
         }
-        if (request.getTeamId() == null || request.getTeamId().trim().isEmpty()) {
+        String teamId = request.getTeamId() == null ? "" : request.getTeamId().trim();
+        if (teamId.isEmpty() && !SecurityContextUtil.isSuperAdmin()) {
             throw new BizException(40001, "请先选择团队");
         }
-        AiSettings settings = settingsService.assertUsable(null, request.getTeamId());
+        AiSettings settings = settingsService.assertUsable(null, teamId.isEmpty() ? null : teamId);
+        if (teamId.isEmpty()) {
+            request.setTeamId(null);
+        }
 
         ChatPlan plan;
         if (AiSettings.PROVIDER_MOCK.equals(settings.getProvider())) {
@@ -169,6 +174,10 @@ public class AiChatService {
 
     private void handleCreate(AiChatRequest request, AiSettings settings,
                               AiChatResponse response, ChatPlan plan) {
+        if (request.getTeamId() == null || request.getTeamId().trim().isEmpty()) {
+            response.setReply("创建接口需要先选择具体团队，请在助手顶部把范围切换到一个团队后再试。");
+            return;
+        }
         if (!settings.isCapDrafts()) {
             response.setReply("管理员已关闭「创建接口草稿」能力，可以改用编辑器里的 AI 生成。");
             return;
