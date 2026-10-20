@@ -64,6 +64,17 @@ class AiServiceTest {
     }
 
     @Test
+    void prettyPrintsCompactJson() {
+        when(provider.complete(any(AiSettings.class), anyString(), anyString()))
+                .thenReturn("{\"name\":\"张三\",\"level\":5}");
+
+        AiResponseResult result = service.generateResponse(request());
+
+        assertTrue(result.getContent().contains("\n"));
+        assertTrue(result.getContent().contains("\"name\" : \"张三\""));
+    }
+
+    @Test
     void rejectsInvalidJson() {
         when(provider.complete(any(AiSettings.class), anyString(), anyString()))
                 .thenReturn("抱歉，我无法生成");
