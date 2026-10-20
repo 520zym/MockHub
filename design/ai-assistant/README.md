@@ -6,6 +6,7 @@
 
 - 起始页：[00-overview.html](00-overview.html)
 - 预览图：[screens/00-overview.png](screens/00-overview.png)
+- 实际实现截图：[implemented/](implemented/)
 
 ## 文件结构
 
