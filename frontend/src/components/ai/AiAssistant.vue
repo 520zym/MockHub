@@ -1,5 +1,5 @@
 <template>
-  <div v-if="aiStore.available" class="ai-assistant">
+  <div v-if="aiStore.visible" class="ai-assistant">
     <transition name="ai-pop">
       <section v-if="open" class="ai-chat">
         <header class="ai-chat__head">
@@ -12,8 +12,8 @@
               <span class="ai-beta">Beta</span>
             </div>
             <div class="ai-chat__sub">
-              <span class="ai-dot"></span>
-              在线 · {{ aiStore.provider === 'MOCK' ? '内置演示模型' : (aiStore.status?.model || 'AI') }}
+              <span class="ai-dot" :class="{ 'ai-dot--muted': !aiStore.available }"></span>
+              {{ aiStore.available ? (aiStore.provider === 'MOCK' ? '在线 · 内置演示模型' : '在线 · ' + (aiStore.status?.model || 'AI')) : (aiStore.reason || '未就绪') }}
             </div>
           </div>
           <div class="ai-chat__actions">
@@ -27,7 +27,17 @@
         </header>
 
         <div class="ai-chat__ctx">
-          <span class="ctx-chip">范围：{{ teamName || '未选择团队' }}</span>
+          <el-select
+            v-if="userStore.isSuperAdmin"
+            v-model="scopeTeamId"
+            size="small"
+            class="ai-scope-select"
+            placeholder="选择团队"
+          >
+            <el-option label="全部团队" value="__ALL__" />
+            <el-option v-for="team in appStore.teams" :key="team.id" :label="team.name" :value="team.id" />
+          </el-select>
+          <span v-else class="ctx-chip">范围：{{ teamName || '未选择团队' }}</span>
           <span class="ctx-chip">
             <el-icon><Lock /></el-icon>
             以你的权限运行
@@ -35,7 +45,19 @@
         </div>
 
         <div ref="bodyRef" class="ai-chat__body">
-          <div v-if="messages.length === 0" class="ai-welcome">
+          <div v-if="!aiStore.available" class="ai-unavailable">
+            <div class="ai-welcome__icon">
+              <el-icon><MagicStick /></el-icon>
+            </div>
+            <div class="ai-welcome__title">AI 助手尚未就绪</div>
+            <div class="ai-welcome__desc">{{ aiStore.reason || '请先在全局设置中配置模型服务' }}</div>
+            <el-button v-if="userStore.isSuperAdmin" type="primary" plain @click="goSettings">
+              去配置
+            </el-button>
+            <div v-else class="ai-unavailable__hint">请联系超级管理员完成配置</div>
+          </div>
+
+          <div v-else-if="messages.length === 0" class="ai-welcome">
             <div class="ai-welcome__icon">
               <el-icon><MagicStick /></el-icon>
             </div>
@@ -56,7 +78,7 @@
             </div>
           </div>
 
-          <div v-for="(msg, idx) in messages" :key="idx" class="ai-msg">
+          <div v-for="(msg, idx) in messages" v-if="aiStore.available" :key="idx" class="ai-msg">
             <template v-if="msg.role === 'user'">
               <div class="ai-msg--user">
                 <div class="ai-bubble-user">{{ msg.text }}</div>
@@ -180,7 +202,7 @@
             </template>
           </div>
 
-          <div v-if="loading" class="ai-msg">
+          <div v-if="aiStore.available && loading" class="ai-msg">
             <div class="ai-msg__avatar">
               <el-icon><MagicStick /></el-icon>
             </div>
@@ -190,7 +212,7 @@
           </div>
         </div>
 
-        <div class="ai-composer">
+        <div v-if="aiStore.available" class="ai-composer">
           <div class="ai-composer__box" :class="{ 'ai-composer__box--focus': composerFocus }">
             <el-input
               v-model="input"
@@ -198,7 +220,7 @@
               :autosize="{ minRows: 1, maxRows: 4 }"
               resize="none"
               placeholder="继续追问，或描述要创建的接口…"
-              :disabled="!teamId || loading"
+              :disabled="(!teamId && !userStore.isSuperAdmin) || loading"
               @focus="composerFocus = true"
               @blur="composerFocus = false"
               @keydown.enter.exact.prevent="send()"
@@ -212,7 +234,7 @@
                 type="primary"
                 circle
                 size="small"
-                :disabled="!teamId || loading || !input.trim()"
+                :disabled="(!teamId && !userStore.isSuperAdmin) || loading || !input.trim()"
                 @click="send()"
               >
                 <el-icon><Promotion /></el-icon>
@@ -245,9 +267,11 @@ import {
 import { aiChat, confirmAiAction, cancelAiAction } from '@/api/ai'
 import { useAiStore } from '@/stores/ai'
 import { useAppStore } from '@/stores/app'
+import { useUserStore } from '@/stores/user'
 
 const aiStore = useAiStore()
 const appStore = useAppStore()
+const userStore = useUserStore()
 const router = useRouter()
 
 const open = ref(false)
@@ -256,6 +280,7 @@ const loading = ref(false)
 const messages = ref([])
 const bodyRef = ref(null)
 const composerFocus = ref(false)
+const scopeTeamId = ref('__ALL__')
 
 const quickPrompts = [
   '最近 7 天哪个接口调用最多？',
@@ -263,9 +288,14 @@ const quickPrompts = [
   '帮我创建 GET /api/user/info 的 Mock，返回姓名、头像、等级'
 ]
 
-const teamId = computed(() => appStore.currentTeamId || appStore.teams[0]?.id || null)
+const teamId = computed(() => {
+  if (userStore.isSuperAdmin) {
+    return scopeTeamId.value && scopeTeamId.value !== '__ALL__' ? scopeTeamId.value : null
+  }
+  return appStore.currentTeamId || appStore.teams[0]?.id || null
+})
 const teamName = computed(() => {
-  if (!teamId.value) return ''
+  if (!teamId.value) return userStore.isSuperAdmin ? '全部团队' : ''
   return appStore.teams.find((team) => team.id === teamId.value)?.name || ''
 })
 
@@ -278,11 +308,19 @@ onMounted(async () => {
       // 团队加载失败时悬浮入口仍可打开，输入区会提示先选择团队
     }
   }
+  if (userStore.isSuperAdmin) {
+    scopeTeamId.value = appStore.currentTeamId || '__ALL__'
+  }
 })
 
 onBeforeUnmount(() => {
   // 组件销毁无需额外清理，消息仅保存在内存
 })
+
+function goSettings() {
+  open.value = false
+  router.push('/settings')
+}
 
 function openChat() {
   open.value = true
@@ -297,7 +335,7 @@ function clearChat() {
 async function send(preset) {
   const content = (preset || input.value).trim()
   if (!content || loading.value) return
-  if (!teamId.value) {
+  if (!teamId.value && !userStore.isSuperAdmin) {
     ElMessage.warning('请先在侧边栏选择团队')
     return
   }
@@ -535,6 +573,34 @@ watch(() => aiStore.available, (available) => {
   height: 6px;
   border-radius: 50%;
   background: #10B981;
+}
+
+.ai-dot--muted {
+  background: #CBD5E1;
+}
+
+.ai-scope-select {
+  width: 150px;
+}
+
+.ai-scope-select :deep(.el-input__wrapper) {
+  background: #fff;
+  border-radius: 7px;
+  box-shadow: 0 0 0 1px #EDF0F5 inset;
+  min-height: 26px;
+}
+
+.ai-unavailable {
+  margin: auto;
+  text-align: center;
+  padding: 24px 16px;
+  max-width: 340px;
+}
+
+.ai-unavailable__hint {
+  font-size: 11.5px;
+  color: #A3AED0;
+  margin-top: 10px;
 }
 
 .ai-chat__actions {

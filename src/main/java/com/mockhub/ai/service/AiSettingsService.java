@@ -8,6 +8,8 @@ import com.mockhub.ai.repository.AiSettingsRepository;
 import com.mockhub.common.model.BizException;
 import com.mockhub.common.util.PermissionChecker;
 import com.mockhub.common.util.SecurityContextUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.text.SimpleDateFormat;
@@ -24,6 +26,8 @@ import java.util.Map;
 @Service
 public class AiSettingsService {
 
+    private static final Logger log = LoggerFactory.getLogger(AiSettingsService.class);
+
     public static final String CAP_RESPONSE = "responseBody";
     public static final String CAP_CONDITIONS = "conditions";
     public static final String CAP_EXPLAIN = "explain";
@@ -32,16 +36,19 @@ public class AiSettingsService {
     private final AiSettingsRepository repository;
     private final OpenAiCompatibleProvider openAiProvider;
     private final PermissionChecker permissionChecker;
+    private final AiKeyCipher keyCipher;
 
     public AiSettingsService(AiSettingsRepository repository,
                              OpenAiCompatibleProvider openAiProvider,
-                             PermissionChecker permissionChecker) {
+                             PermissionChecker permissionChecker,
+                             AiKeyCipher keyCipher) {
         this.repository = repository;
         this.openAiProvider = openAiProvider;
         this.permissionChecker = permissionChecker;
+        this.keyCipher = keyCipher;
     }
 
-    /** 读取原始配置，不存在时返回默认值（不改库）。 */
+    /** 读取原始配置并解密 Key；不存在时返回默认值（不改库）。 */
     public AiSettings load() {
         AiSettings settings = repository.load();
         if (settings == null) {
@@ -52,6 +59,15 @@ public class AiSettingsService {
         }
         if (settings.getAccessScope() == null) {
             settings.setAccessScope(AiSettings.SCOPE_ALL);
+        }
+        if (settings.getApiKey() != null && !settings.getApiKey().trim().isEmpty()) {
+            try {
+                settings.setApiKey(keyCipher.decrypt(settings.getApiKey()));
+            } catch (Exception e) {
+                log.warn("AI API Key 解密失败：{}", e.getMessage());
+                settings.setApiKey(null);
+                settings.setKeyInvalid(true);
+            }
         }
         return settings;
     }
@@ -83,8 +99,12 @@ public class AiSettingsService {
         current.setModel(trimToNull(request.getModel()));
         if (request.getApiKey() != null) {
             String key = request.getApiKey().trim();
-            current.setApiKey(key.isEmpty() ? null : key);
+            current.setApiKey(key.isEmpty() ? null : keyCipher.encrypt(key));
+        } else if (current.getApiKey() != null && !isEncryptedValue(current.getApiKey())) {
+            // 兜底：旧明文数据在保存时一并加密
+            current.setApiKey(keyCipher.encrypt(current.getApiKey()));
         }
+        current.setKeyInvalid(false);
         current.setCapResponseBody(request.isCapResponseBody());
         current.setCapConditions(request.isCapConditions());
         current.setCapExplain(request.isCapExplain());
@@ -92,7 +112,7 @@ public class AiSettingsService {
         current.setUpdatedAt(new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss").format(new Date()));
         current.setUpdatedBy(SecurityContextUtil.getCurrentUsername());
         repository.save(current);
-        return toDto(current);
+        return toDto(load());
     }
 
     /** 设置页连通性测试，仅超管可调用。 */
@@ -134,16 +154,21 @@ public class AiSettingsService {
         dto.setProvider(settings.getProvider());
         dto.setModel(settings.getModel());
 
+        boolean scopeAllowed = !isAdminOnly(settings) || SecurityContextUtil.isSuperAdmin();
+        boolean visible = settings.isEnabled() && scopeAllowed;
         String reason = null;
         if (!settings.isEnabled()) {
             reason = "AI 助手未启用";
-        } else if (isAdminOnly(settings) && !SecurityContextUtil.isSuperAdmin()) {
+        } else if (!scopeAllowed) {
             reason = "仅超级管理员可使用 AI 助手";
+        } else if (settings.isKeyInvalid()) {
+            reason = "API Key 无法解密，请重新配置";
         } else if (!isConfigured(settings)) {
             reason = "模型服务尚未配置";
         }
 
-        boolean available = reason == null;
+        boolean available = visible && reason == null;
+        dto.setVisible(visible);
         dto.setAvailable(available);
         dto.setReason(reason);
         Map<String, Boolean> caps = new LinkedHashMap<String, Boolean>();
@@ -157,9 +182,6 @@ public class AiSettingsService {
 
     /**
      * 业务入口的统一守卫，返回已校验的配置。
-     *
-     * @param capability CAP_* 之一；null 表示只校验启用与配置
-     * @param teamId     需要校验团队隔离时传入；可为 null
      */
     public AiSettings assertUsable(String capability, String teamId) {
         AiSettings settings = load();
@@ -168,6 +190,9 @@ public class AiSettingsService {
         }
         if (isAdminOnly(settings) && !SecurityContextUtil.isSuperAdmin()) {
             throw new BizException(40302, "仅超级管理员可使用 AI 助手");
+        }
+        if (settings.isKeyInvalid()) {
+            throw new BizException(40303, "API Key 无法解密，请重新配置");
         }
         if (!isConfigured(settings)) {
             throw new BizException(40303, "模型服务尚未配置，请联系超级管理员");
@@ -182,6 +207,9 @@ public class AiSettingsService {
     }
 
     public boolean isConfigured(AiSettings settings) {
+        if (settings.isKeyInvalid()) {
+            return false;
+        }
         if (AiSettings.PROVIDER_MOCK.equals(settings.getProvider())) {
             return true;
         }
@@ -200,6 +228,10 @@ public class AiSettingsService {
 
     private boolean isAdminOnly(AiSettings settings) {
         return AiSettings.SCOPE_ADMIN.equalsIgnoreCase(settings.getAccessScope());
+    }
+
+    private boolean isEncryptedValue(String value) {
+        return value != null && value.startsWith(AiKeyCipher.PREFIX);
     }
 
     private AiSettingsDTO toDto(AiSettings settings) {
