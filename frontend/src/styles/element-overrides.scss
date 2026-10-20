@@ -185,6 +185,8 @@
 // ========== 开关 ==========
 .el-switch {
   --el-switch-on-color: var(--el-color-primary);
+  // 全局 --el-border-color 被设为 transparent，Element 关闭态开关会因此透明不可见
+  --el-switch-off-color: #DCDFE6;
 }
 
 // ========== 分页 ==========

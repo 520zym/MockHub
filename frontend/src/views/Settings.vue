@@ -132,12 +132,103 @@
             show-icon
             class="ai-security"
             title="数据安全"
-            description="发送给模型前会移除 Authorization、Cookie、token、password 等敏感字段；API Key 仅保存在服务端。所有 AI 写操作都会记录到操作日志。"
+            description="发送给模型前会移除 Authorization、Cookie、token、password 等敏感字段；API Key 以 AES-GCM 密文保存在服务端。所有 AI 写操作都会记录到操作日志。"
           />
 
           <div class="ai-save-row">
             <el-button type="primary" :loading="aiSaving" @click="handleSaveAi">保存 AI 配置</el-button>
             <span v-if="aiSettingsUpdatedAt" class="input-hint">最近保存：{{ aiSettingsUpdatedAt }}</span>
+          </div>
+        </div>
+
+        <div class="section-divider"></div>
+
+        <!-- MCP Server -->
+        <div class="settings-section">
+          <h3 class="section-title">MCP Server</h3>
+          <p class="section-desc">把 MockHub 的检索、统计与生成能力开放给 Claude、Cursor、Codex 等外部 AI 工具。</p>
+
+          <div class="ai-switch-row">
+            <div>
+              <div class="ai-switch-title">启用 MCP Server</div>
+              <div class="ai-switch-desc">外部客户端通过 Bearer Token 调用，权限与 Token 所属用户一致</div>
+            </div>
+            <div class="ai-switch-actions">
+              <span class="ai-state" :class="{ 'ai-state--on': mcpForm.enabled }">
+                {{ mcpForm.enabled ? '已启用' : '已停用' }}
+              </span>
+              <el-switch v-model="mcpForm.enabled" />
+            </div>
+          </div>
+
+          <el-form-item label="服务地址">
+            <div class="mcp-endpoint">
+              <code>{{ mcpEndpoint }}</code>
+              <el-button text size="small" @click="copyText(mcpEndpoint)">
+                <el-icon><DocumentCopy /></el-icon>
+                复制
+              </el-button>
+            </div>
+            <div class="input-hint">客户端使用 Streamable HTTP（POST /mcp）连接；返回 JSON 响应，不支持 SSE 流。</div>
+          </el-form-item>
+
+          <el-form-item label="写操作策略">
+            <el-radio-group v-model="mcpForm.writeMode" class="ai-scope">
+              <el-radio value="DRAFT_ONLY">草稿 + Web 确认（推荐）</el-radio>
+              <el-radio value="DIRECT">允许直接写入</el-radio>
+            </el-radio-group>
+            <div class="input-hint" style="margin-left: 0">草稿模式会返回确认链接，用户在 MockHub 页面确认后才落库。</div>
+          </el-form-item>
+
+          <el-form-item label="可用工具">
+            <div class="ai-cap-list">
+              <div v-for="tool in mcpToolOptions" :key="tool.key" class="ai-cap-row">
+                <div>
+                  <div class="ai-cap-title"><code>{{ tool.name }}</code></div>
+                  <div class="ai-cap-desc">{{ tool.desc }}</div>
+                </div>
+                <el-switch v-model="mcpForm[tool.key]" />
+              </div>
+            </div>
+          </el-form-item>
+
+          <div class="mcp-token-head">
+            <div>
+              <div class="ai-switch-title">访问 Token</div>
+              <div class="ai-switch-desc">Token 只在创建时显示一次，可随时撤销</div>
+            </div>
+            <el-button type="primary" plain @click="openTokenDialog">
+              + 新建 Token
+            </el-button>
+          </div>
+
+          <el-table :data="mcpTokens" size="small" class="mcp-token-table" empty-text="还没有 Token">
+            <el-table-column prop="name" label="名称" min-width="100" show-overflow-tooltip>
+              <template #default="{ row }">
+                <span>{{ row.name }}</span>
+                <span class="mcp-token-owner">{{ row.ownerName }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="tokenPrefix" label="前缀" width="120" />
+            <el-table-column label="最后使用" width="150">
+              <template #default="{ row }">{{ row.lastUsedAt ? formatTime(row.lastUsedAt) : '从未' }}</template>
+            </el-table-column>
+            <el-table-column label="状态" width="70">
+              <template #default="{ row }">
+                <span :class="tokenStatusClass(row)">{{ tokenStatus(row) }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="72">
+              <template #default="{ row }">
+                <el-button v-if="!row.revoked" text type="danger" size="small" @click="revokeToken(row)">
+                  撤销
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+
+          <div class="ai-save-row">
+            <el-button type="primary" :loading="mcpSaving" @click="handleSaveMcp">保存 MCP 配置</el-button>
           </div>
         </div>
 
@@ -299,13 +390,51 @@
         </div>
       </el-form>
     </div>
+
+    <!-- MCP Token 创建 -->
+    <el-dialog v-model="tokenDialogVisible" title="新建 MCP Token" width="440px">
+      <el-form label-position="top">
+        <el-form-item label="名称">
+          <el-input v-model="tokenForm.name" maxlength="60" placeholder="如：Cursor 本地" />
+        </el-form-item>
+        <el-form-item label="有效期">
+          <el-select v-model="tokenForm.expiresInDays" style="width: 100%">
+            <el-option label="90 天" :value="90" />
+            <el-option label="30 天" :value="30" />
+            <el-option label="7 天" :value="7" />
+            <el-option label="永不过期" :value="0" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="tokenDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="tokenCreating" @click="handleCreateToken">创建</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- Token 明文只展示一次 -->
+    <el-dialog v-model="createdTokenVisible" title="Token 已创建" width="500px" :close-on-click-modal="false">
+      <el-alert
+        type="warning"
+        :closable="false"
+        show-icon
+        title="请立即复制保存，关闭后无法再次查看"
+      />
+      <div class="mcp-token-value">
+        <code>{{ createdToken.token }}</code>
+        <el-button text @click="copyText(createdToken.token)">复制</el-button>
+      </div>
+      <template #footer>
+        <el-button type="primary" @click="createdTokenVisible = false">我已保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Connection, CircleCheck } from '@element-plus/icons-vue'
+import { Connection, CircleCheck, DocumentCopy } from '@element-plus/icons-vue'
 import {
   cleanOrphanFiles,
   getFileStorageStats,
@@ -314,6 +443,13 @@ import {
   scanOrphanFiles
 } from '@/api/settings'
 import { getAiSettings, saveAiSettings, testAiConnection } from '@/api/ai'
+import {
+  getMcpSettings,
+  saveMcpSettings,
+  getMcpTokens,
+  createMcpToken,
+  revokeMcpToken
+} from '@/api/mcp'
 import { useAiStore } from '@/stores/ai'
 
 // ========== 状态 ==========
@@ -346,6 +482,43 @@ const aiKeyMask = ref('')
 const aiClearKey = ref(false)
 const aiTestResult = ref(null)
 const aiSettingsUpdatedAt = ref('')
+
+// MCP 配置
+const mcpForm = reactive({
+  enabled: false,
+  writeMode: 'DRAFT_ONLY',
+  toolSearchApis: true,
+  toolGetApiDetail: true,
+  toolGetApiStats: true,
+  toolCreateApiDraft: true,
+  toolApplyApiDraft: false,
+  toolGenerateResponseBody: true,
+  toolGenerateConditions: true,
+  toolExplainMatchResult: true
+})
+const mcpTokens = ref([])
+const mcpSaving = ref(false)
+const tokenDialogVisible = ref(false)
+const tokenCreating = ref(false)
+const tokenForm = reactive({ name: '', expiresInDays: 90 })
+const createdTokenVisible = ref(false)
+const createdToken = ref({ token: '' })
+
+const mcpToolOptions = [
+  { key: 'toolSearchApis', name: 'mockhub.search_apis', desc: '按关键字搜索接口' },
+  { key: 'toolGetApiDetail', name: 'mockhub.get_api_detail', desc: '读取接口与返回体配置' },
+  { key: 'toolGetApiStats', name: 'mockhub.get_api_stats', desc: '查询调用次数与热门接口' },
+  { key: 'toolCreateApiDraft', name: 'mockhub.create_api_draft', desc: '根据参数创建接口草稿' },
+  { key: 'toolApplyApiDraft', name: 'mockhub.apply_api_draft', desc: '应用草稿（默认需 Web 确认）' },
+  { key: 'toolGenerateResponseBody', name: 'mockhub.generate_response_body', desc: '生成 JSON / XML 响应体' },
+  { key: 'toolGenerateConditions', name: 'mockhub.generate_conditions', desc: '自然语言转条件规则' },
+  { key: 'toolExplainMatchResult', name: 'mockhub.explain_match_result', desc: '解释一次请求的命中链路' }
+]
+
+const mcpEndpoint = computed(() => {
+  const base = (form.serverAddress || window.location.origin || '').replace(/\/$/, '')
+  return base + '/mcp'
+})
 
 const form = reactive({
   logRetainMode: 'count',
@@ -450,6 +623,107 @@ function onProviderChange() {
   aiTestResult.value = null
 }
 
+async function loadMcpSettings() {
+  try {
+    const data = await getMcpSettings()
+    mcpForm.enabled = !!data.enabled
+    mcpForm.writeMode = data.writeMode || 'DRAFT_ONLY'
+    mcpForm.toolSearchApis = !!data.toolSearchApis
+    mcpForm.toolGetApiDetail = !!data.toolGetApiDetail
+    mcpForm.toolGetApiStats = !!data.toolGetApiStats
+    mcpForm.toolCreateApiDraft = !!data.toolCreateApiDraft
+    mcpForm.toolApplyApiDraft = !!data.toolApplyApiDraft
+    mcpForm.toolGenerateResponseBody = !!data.toolGenerateResponseBody
+    mcpForm.toolGenerateConditions = !!data.toolGenerateConditions
+    mcpForm.toolExplainMatchResult = !!data.toolExplainMatchResult
+  } catch (e) {
+    // 拦截器已处理
+  }
+}
+
+async function loadMcpTokens() {
+  try {
+    mcpTokens.value = await getMcpTokens()
+  } catch (e) {
+    mcpTokens.value = []
+  }
+}
+
+async function handleSaveMcp() {
+  mcpSaving.value = true
+  try {
+    await saveMcpSettings({ ...mcpForm })
+    ElMessage.success('MCP 配置已保存')
+  } catch (e) {
+    // 拦截器已处理
+  } finally {
+    mcpSaving.value = false
+  }
+}
+
+function openTokenDialog() {
+  tokenForm.name = ''
+  tokenForm.expiresInDays = 90
+  tokenDialogVisible.value = true
+}
+
+async function handleCreateToken() {
+  if (!tokenForm.name.trim()) {
+    ElMessage.warning('请填写 Token 名称')
+    return
+  }
+  tokenCreating.value = true
+  try {
+    createdToken.value = await createMcpToken({
+      name: tokenForm.name.trim(),
+      expiresInDays: tokenForm.expiresInDays
+    })
+    tokenDialogVisible.value = false
+    createdTokenVisible.value = true
+    await loadMcpTokens()
+  } catch (e) {
+    // 拦截器已处理
+  } finally {
+    tokenCreating.value = false
+  }
+}
+
+async function revokeToken(row) {
+  try {
+    await ElMessageBox.confirm(
+      '撤销后使用该 Token 的客户端会立即失效，是否继续？',
+      '撤销 Token',
+      { type: 'warning', confirmButtonText: '撤销', cancelButtonText: '取消' }
+    )
+    await revokeMcpToken(row.id)
+    ElMessage.success('Token 已撤销')
+    await loadMcpTokens()
+  } catch (e) {
+    // 取消或拦截器已处理
+  }
+}
+
+function tokenStatus(row) {
+  if (row.revoked) return '已撤销'
+  if (row.expiresAt && new Date(row.expiresAt).getTime() < Date.now()) return '已过期'
+  return '生效中'
+}
+
+function tokenStatusClass(row) {
+  const status = tokenStatus(row)
+  if (status === '生效中') return 'mcp-token-status mcp-token-status--on'
+  return 'mcp-token-status mcp-token-status--off'
+}
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text)
+    ElMessage.success('已复制')
+  } catch (e) {
+    ElMessage.warning('复制失败，请手动选择')
+  }
+}
+
 async function loadStorageStats() {
   try {
     storageStats.value = await getFileStorageStats()
@@ -538,6 +812,8 @@ onMounted(() => {
   loadSettings()
   loadStorageStats()
   loadAiSettings()
+  loadMcpSettings()
+  loadMcpTokens()
 })
 </script>
 
@@ -803,6 +1079,73 @@ onMounted(() => {
   align-items: center;
   gap: 12px;
   margin-top: 18px;
+}
+
+.mcp-endpoint {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  background: #F7F8FA;
+  border-radius: 10px;
+}
+
+.mcp-endpoint code {
+  flex: 1;
+  font-family: 'SF Mono', Menlo, Monaco, Consolas, monospace;
+  font-size: 12.5px;
+  color: #4A5568;
+  overflow-wrap: anywhere;
+}
+
+.mcp-token-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 8px 0 10px;
+}
+
+.mcp-token-table {
+  width: 100%;
+}
+
+.mcp-token-owner {
+  display: block;
+  font-size: 11px;
+  color: #A3AED0;
+  margin-top: 1px;
+}
+
+.mcp-token-status {
+  font-size: 12px;
+}
+
+.mcp-token-status--on {
+  color: #10B981;
+}
+
+.mcp-token-status--off {
+  color: #A3AED0;
+}
+
+.mcp-token-value {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 10px 12px;
+  background: #F7F8FA;
+  border-radius: 10px;
+}
+
+.mcp-token-value code {
+  flex: 1;
+  font-family: 'SF Mono', Menlo, Monaco, Consolas, monospace;
+  font-size: 12.5px;
+  color: #1B2559;
+  overflow-wrap: anywhere;
 }
 
 .settings-footer {

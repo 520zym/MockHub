@@ -71,6 +71,12 @@ const routes = [
         meta: { title: '请求日志' }
       },
       {
+        path: 'mcp-confirm/:id',
+        name: 'McpConfirm',
+        component: () => import('@/views/McpConfirm.vue'),
+        meta: { title: 'AI 草稿确认' }
+      },
+      {
         path: 'settings',
         name: 'Settings',
         component: () => import('@/views/Settings.vue'),

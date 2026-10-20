@@ -324,3 +324,37 @@ CREATE TABLE IF NOT EXISTS ai_pending_action (
 );
 CREATE INDEX IF NOT EXISTS idx_ai_pending_action_user ON ai_pending_action(user_id, status);
 CREATE INDEX IF NOT EXISTS idx_ai_pending_action_expires ON ai_pending_action(status, expires_at);
+
+-- ========== MCP Server（issue #6 / 设计稿 06） ==========
+-- 单行配置：id 固定为 default。工具开关按工具名逐一控制。
+CREATE TABLE IF NOT EXISTS mcp_settings (
+    id                          TEXT PRIMARY KEY,
+    enabled                     INTEGER NOT NULL DEFAULT 0,
+    write_mode                  TEXT NOT NULL DEFAULT 'DRAFT_ONLY', -- DRAFT_ONLY / DIRECT
+    tool_search_apis            INTEGER NOT NULL DEFAULT 1,
+    tool_get_api_detail         INTEGER NOT NULL DEFAULT 1,
+    tool_get_api_stats          INTEGER NOT NULL DEFAULT 1,
+    tool_create_api_draft       INTEGER NOT NULL DEFAULT 1,
+    tool_apply_api_draft        INTEGER NOT NULL DEFAULT 0,
+    tool_generate_response_body INTEGER NOT NULL DEFAULT 1,
+    tool_generate_conditions    INTEGER NOT NULL DEFAULT 1,
+    tool_explain_match_result   INTEGER NOT NULL DEFAULT 1,
+    updated_at                  TEXT,
+    updated_by                  TEXT
+);
+INSERT OR IGNORE INTO mcp_settings (id, enabled, write_mode) VALUES ('default', 0, 'DRAFT_ONLY');
+
+-- MCP 访问 Token：只保存 SHA-256 哈希与前缀，明文仅在创建时返回一次
+CREATE TABLE IF NOT EXISTS mcp_token (
+    id            TEXT PRIMARY KEY,
+    name          TEXT NOT NULL,
+    token_hash    TEXT NOT NULL,
+    token_prefix  TEXT NOT NULL,
+    user_id       TEXT NOT NULL,
+    created_at    TEXT NOT NULL,
+    last_used_at  TEXT,
+    expires_at    TEXT,
+    revoked_at    TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_mcp_token_hash ON mcp_token(token_hash);
+CREATE INDEX IF NOT EXISTS idx_mcp_token_user ON mcp_token(user_id, revoked_at);

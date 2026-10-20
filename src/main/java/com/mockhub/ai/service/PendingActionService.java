@@ -157,8 +157,23 @@ public class PendingActionService {
         Map<String, Object> result = new LinkedHashMap<String, Object>();
         result.put("id", action.getId());
         result.put("status", action.getStatus());
+        result.put("actionType", action.getActionType());
+        result.put("teamId", action.getTeamId());
         result.put("expiresAt", action.getExpiresAt());
         result.put("resultApiId", action.getResultApiId());
+        try {
+            ApiDefinitionDTO dto = objectMapper.readValue(action.getPayload(), ApiDefinitionDTO.class);
+            Map<String, Object> summary = new LinkedHashMap<String, Object>();
+            summary.put("method", dto.getMethod());
+            summary.put("path", dto.getPath());
+            summary.put("name", dto.getName());
+            summary.put("teamId", dto.getTeamId());
+            result.put("summary", summary);
+            String preview = dto.getResponseBody() == null ? "" : dto.getResponseBody();
+            result.put("preview", preview.length() > 2000 ? preview.substring(0, 2000) + "…" : preview);
+        } catch (Exception ignored) {
+            // 草稿内容损坏时仍返回状态，确认时会给出明确错误
+        }
         return result;
     }
 
