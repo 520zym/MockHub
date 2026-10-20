@@ -94,9 +94,10 @@
 ### 能力
 
 - **生成响应体**：返回体编辑器工具栏的「AI 生成」，根据接口名称、方法、路径与描述生成 JSON / XML，预览确认后插入。
-- **生成条件规则**：响应规则工具条的「AI 生成规则」，把自然语言转成现有 `conditions` 结构；不存在的字段会标黄并默认不勾选。
+- **生成条件规则**：响应规则工具条的「AI 生成规则」，把自然语言转成现有 `conditions` 结构；支持 Body / Query / Header 三类来源，不存在的字段会标黄并默认不勾选。
 - **匹配诊断**：请求日志详情里的「解释这次匹配」，由服务端重放条件链路，模型只负责组织说明；模型失败时回退到模板。
-- **对话助手**：右下角悬浮入口，支持查询近 7 天调用排行、搜索接口、创建接口草稿。写操作只生成 `PENDING` 草稿，用户点「确认创建」后才落库。
+- **对话助手**：右下角悬浮入口，支持查询近 7 天调用排行、搜索接口、创建接口草稿；超管可选择「全部团队」。写操作只生成 `PENDING` 草稿，用户点「确认创建」后才落库。
+- **MCP Server**：把检索、统计、生成与草稿能力开放给 Claude / Cursor / Codex 等客户端；Token 鉴权、工具开关、写策略与 Web 确认页均可在「全局设置 → MCP Server」配置。
 
 ### 配置
 
@@ -105,7 +106,7 @@
 | Provider | `OPENAI_COMPATIBLE`（OpenAI / DeepSeek / Ollama 等）或 `MOCK`（内置演示模型，离线可用） |
 | Base URL | 填服务根地址即可，例如 `https://api.deepseek.com/v1`，服务端会自动补 `/chat/completions` |
 | Model | 例如 `deepseek-chat` |
-| API Key | 仅保存在服务端，接口只返回掩码；支持替换与清除 |
+| API Key | 仅保存在服务端并以 AES-GCM 密文落库；接口只返回掩码，支持替换与清除 |
 | 能力开关 | 生成响应体 / 生成条件规则 / 解释匹配结果 / 创建接口草稿 |
 | 使用范围 | 所有成员（继承各自权限）或仅超级管理员 |
 
@@ -122,14 +123,20 @@
 | POST | `/api/ai/chat` | 对话助手 |
 | POST | `/api/ai/actions/{id}/confirm` | 确认待确认操作 |
 | POST | `/api/ai/actions/{id}/cancel` | 取消待确认操作 |
+| GET / PUT | `/api/mcp/settings` | MCP 开关、写策略与工具开关（仅超管） |
+| GET / POST | `/api/mcp/tokens` | MCP Token 列表 / 创建（仅超管，明文只返回一次） |
+| DELETE | `/api/mcp/tokens/{id}` | 撤销 MCP Token（仅超管） |
+| POST | `/mcp` | MCP Streamable HTTP JSON-RPC 端点（Bearer Token） |
 
 ### 安全与边界
 
 - AI 访问继承当前登录用户权限，团队数据保持隔离；生成与对话均校验 `teamId`。
 - 写操作采用两阶段流程：模型只产出草稿，服务端确认时重新校验权限与路径冲突，并写入操作日志。
-- API Key 不返回前端、不写入日志；请求日志与诊断只使用结构化的条件评估结果。
-- 当前匹配引擎仅支持 `BODY / QUERY` 条件，Header 条件会在生成时明确提示。
-- **MCP Server（Phase 3）尚未实现**，设计稿见 `design/ai-assistant/`。
+- API Key 不返回前端、不写入日志，并以 AES-GCM 密文存储；加密密钥来自 `MOCKHUB_AI_KEY_SECRET` 或 `data/.ai-key`，备份数据库时请一并备份该文件。
+- 请求日志与诊断只使用服务端重放的条件评估结果，模型不参与命中判定。
+- 条件来源支持 `BODY / QUERY / HEADER`；Header 名称不区分大小写。
+- MCP 写操作默认走「草稿 + Web 确认」；`apply_api_draft` 与直接写入模式默认关闭。
+- MCP 端点仅支持 Streamable HTTP 的 JSON 响应，不提供 stdio 或旧版 HTTP+SSE。
 
 ---
 
@@ -374,3 +381,29 @@ mockhub-service.exe uninstall # 卸载服务
 ## 开源协议
 
 [MIT License](LICENSE)
+
+### MCP 工具
+
+| 工具 | 说明 |
+| --- | --- |
+| `mockhub.search_apis` | 按关键字搜索当前用户可见接口 |
+| `mockhub.get_api_detail` | 读取接口、返回体与条件规则 |
+| `mockhub.get_api_stats` | 查询窗口内调用总览与 Top 接口 |
+| `mockhub.create_api_draft` | 创建接口草稿，返回 `actionId` 与 `confirmUrl` |
+| `mockhub.apply_api_draft` | 应用草稿（仅在 DIRECT 写策略且工具开启时可用） |
+| `mockhub.generate_response_body` | 生成 JSON / XML 响应体 |
+| `mockhub.generate_conditions` | 生成 Body / Query / Header 条件 |
+| `mockhub.explain_match_result` | 解释一次请求的命中链路 |
+
+客户端配置示例（Cursor / Claude Desktop 的 `mcpServers` 片段）：
+
+```json
+{
+  "mcpServers": {
+    "mockhub": {
+      "url": "http://<host>:18080/mcp",
+      "headers": { "Authorization": "Bearer mhk_xxxxxxxx" }
+    }
+  }
+}
+```
