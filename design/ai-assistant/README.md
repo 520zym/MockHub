@@ -2,7 +2,7 @@
 
 对应 GitHub Issue [#6 AI功能支持](https://github.com/520zym/MockHub/issues/6) 的界面方案。
 
-> **实现状态（2026-10-20）**：01 / 02 / 03 / 04 / 05 / 07 / 08 对应功能已落地，代码见 frontend/src/components/ai、frontend/src/views、src/main/java/com/mockhub/ai；06 MCP Server（Phase 3）暂未实现。视觉完全沿用 MockHub 现有 Soft UI 扁平化风格，只额外引入一层紫色渐变作为 AI 的识别色。
+> **实现状态（2026-10-20）**：9 个页面均已落地（含 06 MCP Server）。代码见 frontend/src/components/ai、frontend/src/views、src/main/java/com/mockhub/ai 与 src/main/java/com/mockhub/mcp；条件来源已支持 Body / Query / Header。视觉完全沿用 MockHub 现有 Soft UI 扁平化风格，只额外引入一层紫色渐变作为 AI 的识别色。
 
 - 起始页：[00-overview.html](00-overview.html)
 - 预览图：[screens/00-overview.png](screens/00-overview.png)
