@@ -152,7 +152,7 @@
                           <div class="ai-confirm__v">{{ card.summary.name }} · {{ teamLabel(card.summary.teamId) }}</div>
                         </div>
                       </div>
-                      <pre class="ai-confirm__preview">{{ card.preview }}</pre>
+                      <pre class="ai-confirm__preview">{{ previewText(card) }}</pre>
                       <div class="ai-confirm__note">
                         <el-icon><Lock /></el-icon>
                         确认后服务端会重新校验权限并写入，操作记入日志。
@@ -371,6 +371,12 @@ function openApi(apiId) {
   if (!apiId) return
   open.value = false
   router.push('/apis/' + apiId + '/edit')
+}
+
+function previewText(card) {
+  const lines = String(card.preview || '').split('\n')
+  if (lines.length <= 5) return card.preview
+  return lines.slice(0, 5).join('\n') + '\n…'
 }
 
 function cardExpired(card) {
@@ -968,7 +974,7 @@ watch(() => aiStore.available, (available) => {
   line-height: 1.7;
   color: #4A5568;
   max-height: 124px;
-  overflow: auto;
+  overflow: hidden;
   white-space: pre-wrap;
   word-break: break-all;
 }
