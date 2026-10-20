@@ -61,6 +61,16 @@
           </div>
         </el-popover>
 
+        <el-button
+          v-if="aiStore.capabilities.conditions"
+          size="small"
+          class="ai-rule-btn"
+          @click="aiDrawerVisible = true"
+        >
+          <el-icon><MagicStick /></el-icon>
+          AI 生成规则
+        </el-button>
+
         <span class="hint-right">
           <el-icon><InfoFilled /></el-icon>
           规则空时，该返回体作为兜底
@@ -86,6 +96,17 @@
         </div>
       </div>
     </div>
+
+    <AiConditionsDrawer
+      v-model="aiDrawerVisible"
+      :team-id="teamId"
+      :api-context="apiContext"
+      :response-name="responseName"
+      :conditions="modelValue"
+      :body-sample="sampleText"
+      :sample-kind="bodySampleKind"
+      @apply="applyAiRules"
+    />
   </div>
 </template>
 
@@ -101,21 +122,32 @@
  *
  * 点击左树叶子 → 追加一条条件（字段路径 / 值 / 类型预填）。
  */
-import { ref, computed, watch } from 'vue'
-import { ArrowDown, ArrowRight, Document, Edit, InfoFilled } from '@element-plus/icons-vue'
+import { ref, computed, watch, onMounted } from 'vue'
+import { ArrowDown, ArrowRight, Document, Edit, InfoFilled, MagicStick } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import SampleTree from './SampleTree.vue'
 import ConditionTable from './ConditionTable.vue'
+import AiConditionsDrawer from '@/components/ai/AiConditionsDrawer.vue'
+import { useAiStore } from '@/stores/ai'
 import { parseXmlSampleTree } from '@/utils/xmlSampleTree'
 
 const props = defineProps({
   /** conditions JSON 字符串，对应 api_response.conditions 字段；空字符串 / null 表示无规则 */
   modelValue: { type: String, default: '' },
   /** BODY 示例类型：REST 使用 json；SOAP 使用 xml 生成点分元素路径 */
-  bodySampleKind: { type: String, default: 'json' }
+  bodySampleKind: { type: String, default: 'json' },
+  /** 所属团队，供 AI 生成使用 */
+  teamId: { type: String, default: null },
+  /** 接口上下文 */
+  apiContext: { type: Object, default: () => ({}) },
+  /** 当前返回体名称 */
+  responseName: { type: String, default: '默认返回体' }
 })
 
 const emit = defineEmits(['update:modelValue'])
+
+const aiStore = useAiStore()
+const aiDrawerVisible = ref(false)
 
 // 本地状态
 const expanded = ref(true)
@@ -128,6 +160,10 @@ const pastedText = ref('')
 watch([source, () => props.bodySampleKind], () => {
   sampleText.value = ''
   pastedText.value = ''
+})
+
+onMounted(() => {
+  aiStore.load()
 })
 
 // 从 modelValue 解析出初始条件数组
@@ -179,6 +215,17 @@ function serializeConditions(list) {
 function onConditionsUpdate(next) {
   conditions.value = next
   emit('update:modelValue', serializeConditions(next))
+}
+
+/** 应用 AI 生成的规则（已在前端按追加/替换合并） */
+function applyAiRules(payload) {
+  try {
+    const parsed = JSON.parse(payload.json)
+    const next = Array.isArray(parsed?.conditions) ? parsed.conditions : []
+    onConditionsUpdate(next)
+  } catch (e) {
+    ElMessage.error('规则内容解析失败，请重试')
+  }
 }
 
 function onTreePick(path, value, valueType) {
@@ -333,6 +380,19 @@ function queryStringToObject(s) {
 }
 .col-left { flex: 0 0 44%; }
 .col-right { flex: 1; }
+.ai-rule-btn {
+  background: #fff;
+  border: 1px solid #E7E3FD;
+  color: #4F46E5;
+}
+
+.ai-rule-btn:hover,
+.ai-rule-btn:focus {
+  background: #F5F3FF;
+  border-color: #C7D2FE;
+  color: #4F46E5;
+}
+
 .paste-dialog {
   display: flex;
   flex-direction: column;
