@@ -288,3 +288,39 @@ CREATE TABLE IF NOT EXISTS file_server_tag (
     PRIMARY KEY (file_id, tag)
 );
 CREATE INDEX IF NOT EXISTS idx_file_server_tag_name ON file_server_tag(tag);
+
+-- ========== AI 助手（issue #6） ==========
+-- 单行配置表：id 固定为 'default'。API Key 只在服务端使用，接口永不回显明文。
+CREATE TABLE IF NOT EXISTS ai_settings (
+    id               TEXT PRIMARY KEY,
+    enabled          INTEGER NOT NULL DEFAULT 0,
+    provider         TEXT NOT NULL DEFAULT 'OPENAI_COMPATIBLE',  -- OPENAI_COMPATIBLE / MOCK
+    base_url         TEXT,
+    model            TEXT,
+    api_key          TEXT,
+    cap_response_body INTEGER NOT NULL DEFAULT 1,
+    cap_conditions    INTEGER NOT NULL DEFAULT 1,
+    cap_explain       INTEGER NOT NULL DEFAULT 1,
+    cap_drafts        INTEGER NOT NULL DEFAULT 1,
+    access_scope      TEXT NOT NULL DEFAULT 'ALL_MEMBERS',       -- ALL_MEMBERS / SUPER_ADMIN_ONLY
+    updated_at        TEXT,
+    updated_by        TEXT
+);
+INSERT OR IGNORE INTO ai_settings (id, enabled) VALUES ('default', 0);
+
+-- 待确认操作：AI 只产出草稿，用户确认后由服务端重新校验并写入
+CREATE TABLE IF NOT EXISTS ai_pending_action (
+    id            TEXT PRIMARY KEY,
+    user_id       TEXT NOT NULL,
+    team_id       TEXT,
+    action_type   TEXT NOT NULL,          -- CREATE_API
+    payload       TEXT NOT NULL,          -- ApiDefinitionDTO JSON
+    summary       TEXT,                   -- 卡片摘要文本
+    status        TEXT NOT NULL DEFAULT 'PENDING', -- PENDING / CONFIRMED / CANCELLED / EXPIRED
+    created_at    TEXT NOT NULL,
+    expires_at    TEXT NOT NULL,
+    confirmed_at  TEXT,
+    result_api_id TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_ai_pending_action_user ON ai_pending_action(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_ai_pending_action_expires ON ai_pending_action(status, expires_at);

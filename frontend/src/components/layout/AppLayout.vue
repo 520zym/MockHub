@@ -7,6 +7,7 @@
         <router-view />
       </div>
     </div>
+    <AiAssistant />
   </div>
 </template>
 
@@ -14,6 +15,7 @@
 import { useAppStore } from '@/stores/app'
 import Sidebar from './Sidebar.vue'
 import Topbar from './Topbar.vue'
+import AiAssistant from '@/components/ai/AiAssistant.vue'
 
 const appStore = useAppStore()
 </script>

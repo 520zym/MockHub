@@ -63,6 +63,9 @@
         v-if="normalizedSelectionMode === 'CONDITION'"
         v-model="currentResponse.conditions"
         :body-sample-kind="operationName ? 'xml' : 'json'"
+        :team-id="teamId"
+        :api-context="apiContext"
+        :response-name="currentResponse.name"
       />
       <el-alert
         v-else
@@ -213,6 +216,15 @@
               提示：在编辑器中输入 <code>{{ '{{' }}</code> 也会弹出补全建议
             </div>
           </el-popover>
+          <el-button
+            v-if="aiStore.capabilities.responseBody"
+            size="small"
+            class="ai-gen-btn"
+            @click="aiDrawerVisible = true"
+          >
+            <el-icon><MagicStick /></el-icon>
+            AI 生成
+          </el-button>
         </div>
 
         <!-- v1.4.4 性能：响应体超过 MONACO_INLINE_MAX（500KB）时降级为只读预览 + 全文编辑 Dialog，
@@ -328,6 +340,15 @@
         </div>
       </el-dialog>
 
+      <AiResponseDrawer
+        v-model="aiDrawerVisible"
+        :team-id="teamId"
+        :api-context="apiContext"
+        :response="currentResponse"
+        :operation-name="operationName"
+        @insert="handleAiInsert"
+      />
+
       <!-- 底部操作栏 -->
       <div class="tab-actions">
         <!-- 启用/禁用切换（取代原"设为生效"单选语义；多条可同时启用） -->
@@ -382,6 +403,8 @@ import {
 import { ElMessage, ElMessageBox } from 'element-plus'
 import MonacoEditor from './MonacoEditor.vue'
 import ConditionPanel from './match/ConditionPanel.vue'
+import AiResponseDrawer from '@/components/ai/AiResponseDrawer.vue'
+import { useAiStore } from '@/stores/ai'
 import { DYNAMIC_VARIABLES } from '@/constants/dynamicVariables'
 import { getTeamVariables } from '@/api/customVariable'
 import { uploadResponseFile } from '@/api/apis'
@@ -416,10 +439,18 @@ const props = defineProps({
   selectionMode: {
     type: String,
     default: 'CONDITION'
+  },
+  /** 接口上下文，供 AI 生成使用 */
+  apiContext: {
+    type: Object,
+    default: () => ({})
   }
 })
 
 const emit = defineEmits(['update:modelValue', 'update:selectionMode'])
+
+const aiStore = useAiStore()
+const aiDrawerVisible = ref(false)
 
 const normalizedSelectionMode = computed(() =>
   props.selectionMode === 'RANDOM' ? 'RANDOM' : 'CONDITION'
@@ -564,6 +595,7 @@ async function loadCustomVariables() {
 
 onMounted(() => {
   loadCustomVariables()
+  aiStore.load()
 })
 
 // teamId 变化时重新拉取（接口编辑页切换 team 的场景）
@@ -734,6 +766,20 @@ watch(activeIndex, () => {
   else if (ct.includes('xml')) manualContentType.value = 'xml'
   else manualContentType.value = 'text'
 })
+
+/** AI 生成内容插入当前返回体 */
+function handleAiInsert(content) {
+  if (!currentResponse.value) return
+  currentResponse.value.responseBody = content
+  if (!props.operationName) {
+    const body = String(content || '').trim()
+    if (body.startsWith('{') || body.startsWith('[')) {
+      manualContentType.value = 'json'
+    } else if (body.startsWith('<')) {
+      manualContentType.value = 'xml'
+    }
+  }
+}
 
 /** 双击 Tab 名称开始编辑 */
 function startEditTabName(idx) {
@@ -1247,6 +1293,20 @@ async function handleUploadFile(uploadFile) {
      这里显式指定高度保证 Monaco 正确 layout */
   height: calc(100vh - 180px);
   min-height: 400px;
+}
+
+/* AI 生成按钮：白底 + 淡紫描边，避免与普通工具按钮混淆 */
+.ai-gen-btn {
+  background: #fff;
+  border: 1px solid #E7E3FD;
+  color: #4F46E5;
+}
+
+.ai-gen-btn:hover,
+.ai-gen-btn:focus {
+  background: #F5F3FF;
+  border-color: #C7D2FE;
+  color: #4F46E5;
 }
 
 /* 底部操作栏 */

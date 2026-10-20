@@ -9,6 +9,12 @@
   --el-color-primary-light-9: #E0E7FF;
   --el-color-primary-dark-2: #4F46E5;
 
+  // ========== AI 识别色（仅用于 AI 入口与生成面板） ==========
+  --ai-gradient: linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%);
+  --ai-accent: #8B5CF6;
+  --ai-soft: #F5F3FF;
+  --ai-border: #E7E3FD;
+
   // ========== 语义色 ==========
   --el-color-success: #10B981;
   --el-color-warning: #F59E0B;
