@@ -43,6 +43,13 @@ class AiMatchEvaluatorTest {
     }
 
     @Test
+    void headerMatchesCaseInsensitively() {
+        MatchRule rule = evaluator.parseRule("{\"conditions\":[{\"source\":\"HEADER\",\"path\":\"X-Env\",\"operator\":\"EQ\",\"value\":\"test\",\"valueType\":\"STRING\"}]}");
+        assertNull(evaluator.evaluate(rule, "{}", "{}", "{\"x-env\":\"test\"}"));
+        assertNotNull(evaluator.evaluate(rule, "{}", "{}", "{\"x-env\":\"prod\"}"));
+    }
+
+    @Test
     void isEmptyMatchesMissingField() {
         MatchRule rule = evaluator.parseRule("{\"conditions\":[{\"source\":\"BODY\",\"path\":\"refundNo\",\"operator\":\"IS_EMPTY\",\"value\":\"\",\"valueType\":\"STRING\"}]}");
         assertNull(evaluator.evaluate(rule, "{\"orderNo\":\"1\"}", "{}"));

@@ -8,7 +8,7 @@ package com.mockhub.mock.model.dto.match;
  *
  * <p>字段语义：
  * <ul>
- *   <li>source = BODY / QUERY，决定从请求体还是查询参数取值</li>
+ *   <li>source = BODY / QUERY / HEADER，决定从请求体、查询参数还是请求头取值</li>
  *   <li>path：
  *     <ul>
  *       <li>source=BODY 时为点路径（如 user.addr.city），数组用 items[0].id</li>
