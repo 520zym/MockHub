@@ -124,7 +124,8 @@ public class AiExplainService {
                 chain.add(item);
                 continue;
             }
-            String reason = evaluator.evaluate(rule, requestLog.getRequestBody(), requestLog.getRequestParams());
+            String reason = evaluator.evaluate(rule, requestLog.getRequestBody(),
+                    requestLog.getRequestParams(), requestLog.getRequestHeaders());
             if (reason == null) {
                 item.setStatus("HIT");
                 item.setDetail("所有条件满足");

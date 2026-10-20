@@ -22,6 +22,7 @@
         <el-radio-group v-model="source" size="small">
           <el-radio-button value="BODY">Body</el-radio-button>
           <el-radio-button value="QUERY">Query</el-radio-button>
+          <el-radio-button value="HEADER">Header</el-radio-button>
         </el-radio-group>
 
         <el-button size="small" class="from-log-btn" disabled>
@@ -31,6 +32,7 @@
         </el-button>
 
         <el-popover
+          v-if="source !== 'HEADER'"
           :width="460"
           trigger="click"
           placement="bottom"
@@ -79,13 +81,20 @@
 
       <!-- 左右分栏 -->
       <div class="split">
-        <div class="col-left">
+        <div v-if="source !== 'HEADER'" class="col-left">
           <SampleTree
             :model-value="sampleText"
             :used-paths="usedPaths"
             :sample-kind="source === 'BODY' ? bodySampleKind : 'json'"
             @select="onTreePick"
           />
+        </div>
+        <div v-else class="col-left header-hint">
+          <el-icon><InfoFilled /></el-icon>
+          <div>
+            <div class="header-hint__title">Header 条件</div>
+            <div class="header-hint__desc">在右侧填写请求头名称与预期值，例如 <code>X-Env</code> 等于 <code>test</code>；名称不区分大小写。</div>
+          </div>
         </div>
         <div class="col-right">
           <ConditionTable
@@ -406,5 +415,31 @@ function queryStringToObject(s) {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+.header-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 16px;
+  background: #F8FAFC;
+  border-right: 1px solid #E5E7EB;
+  color: #64748B;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.header-hint__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1B2559;
+  margin-bottom: 4px;
+}
+
+.header-hint__desc code {
+  font-family: 'SF Mono', Menlo, Monaco, Consolas, monospace;
+  background: #fff;
+  border: 1px solid #E5E7EB;
+  border-radius: 4px;
+  padding: 0 4px;
 }
 </style>

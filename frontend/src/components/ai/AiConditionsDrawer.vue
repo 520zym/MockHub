@@ -28,7 +28,7 @@
       <div class="ai-rules__ctx">
         <span class="ctx-chip">{{ responseName }}</span>
         <span class="ctx-chip">{{ bodySample ? 'Body 示例已提供' : '未提供 Body 示例' }}</span>
-        <span class="ctx-chip">仅支持 Body / Query</span>
+        <span class="ctx-chip">支持 Body / Query / Header</span>
       </div>
 
       <div class="ai-rules__body">
@@ -41,7 +41,7 @@
             maxlength="500"
             show-word-limit
             resize="none"
-            placeholder="例如：当 body 的 userType 是 vip，并且 query 的 env 是 test 时命中"
+            placeholder="例如：当 body 的 userType 是 vip，并且 header 的 X-Env 是 test 时命中"
             @keydown.ctrl.enter.prevent="generate"
             @keydown.meta.enter.prevent="generate"
           />
@@ -49,7 +49,7 @@
 
         <div class="ai-rules__hint">
           <el-icon><InfoFilled /></el-icon>
-          当前匹配引擎只支持 BODY / QUERY 两类来源；Header 条件暂不支持。
+          支持 BODY / QUERY / HEADER 三类来源；Header 条件填写请求头名称（不区分大小写）。
         </div>
 
         <div class="ai-preview-head">

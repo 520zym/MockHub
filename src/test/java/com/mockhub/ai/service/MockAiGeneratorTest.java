@@ -74,15 +74,17 @@ class MockAiGeneratorTest {
     }
 
     @Test
-    void flagsUnsupportedHeaderCondition() {
+    void generatesHeaderCondition() {
         AiGenerateRequest req = new AiGenerateRequest();
-        req.setInstruction("当 header 的 env 是 test 时命中");
+        req.setInstruction("当 header 的 X-Env 是 test 时命中");
         req.setBodySample("{\"userType\":\"vip\"}");
 
         AiConditionsResult result = generator.conditions(req);
 
-        assertFalse(result.getWarnings().isEmpty());
-        assertTrue(result.getWarnings().get(0).contains("Header"));
+        assertFalse(result.getRules().isEmpty());
+        assertEquals("HEADER", result.getRules().get(0).getSource());
+        assertEquals("X-Env", result.getRules().get(0).getPath());
+        assertTrue(result.getRules().get(0).isValid());
     }
 
     @Test

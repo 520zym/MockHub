@@ -31,7 +31,7 @@ public class MockAiGenerator {
     private final ObjectMapper objectMapper;
 
     private static final Pattern CONDITION_PATTERN = Pattern.compile(
-            "([a-zA-Z_][a-zA-Z0-9_.\\[\\]]*)\\s*(?:是|等于|为|=)\\s*[\"']?([a-zA-Z0-9_\\-\\u4e00-\\u9fa5]+)[\"']?");
+            "([a-zA-Z_][a-zA-Z0-9_.\\[\\]\\-]*)\\s*(?:是|等于|为|=)\\s*[\"']?([a-zA-Z0-9_\\-\\u4e00-\\u9fa5]+)[\"']?");
 
     public MockAiGenerator(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
@@ -93,10 +93,6 @@ public class MockAiGenerator {
         List<FieldInfo> fields = parseFields(req.getBodySample());
         String instruction = req.getInstruction() == null ? "" : req.getInstruction();
         List<AiConditionSuggestion> rules = new ArrayList<AiConditionSuggestion>();
-
-        if (instruction.toLowerCase().contains("header")) {
-            result.getWarnings().add("当前版本仅支持 Body / Query 条件，Header 条件未生成");
-        }
 
         Matcher matcher = CONDITION_PATTERN.matcher(instruction);
         while (matcher.find() && rules.size() < 4) {
@@ -337,9 +333,15 @@ public class MockAiGenerator {
             rule.setWarning("字段路径为空");
             return;
         }
-        if (!"BODY".equals(rule.getSource()) && !"QUERY".equals(rule.getSource())) {
+        if (!"BODY".equals(rule.getSource()) && !"QUERY".equals(rule.getSource())
+                && !"HEADER".equals(rule.getSource())) {
             rule.setValid(false);
             rule.setWarning("不支持的来源：" + rule.getSource());
+            return;
+        }
+        if ("HEADER".equals(rule.getSource()) && !rule.getPath().matches("[A-Za-z0-9-]+")) {
+            rule.setValid(false);
+            rule.setWarning("Header 名称只能包含字母、数字和短横线");
             return;
         }
         if (("GT".equals(rule.getOperator()) || "GTE".equals(rule.getOperator())
@@ -366,6 +368,9 @@ public class MockAiGenerator {
 
     private String resolveSource(String field, String instruction) {
         String lower = instruction.toLowerCase();
+        if (lower.contains("header") || lower.contains("请求头") || lower.contains("响应头")) {
+            return "HEADER";
+        }
         if (lower.contains("query") || lower.contains("参数") || lower.contains("查询")) {
             return "QUERY";
         }

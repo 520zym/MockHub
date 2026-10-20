@@ -161,7 +161,7 @@ class ResponseValidatorTest {
     @Test
     void invalidSourceThrows40416() {
         List<ApiResponseDTO> list = Arrays.asList(
-                dto(true, ruleJson("HEADER", "a", "EQ", "1", "STRING")),
+                dto(true, ruleJson("COOKIE", "a", "EQ", "1", "STRING")),
                 dto(true, null));
         BizException ex = assertThrows(BizException.class, () -> ResponseValidator.validateDtos(list));
         assertEquals(40416, ex.getCode());

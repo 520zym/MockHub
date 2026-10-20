@@ -39,13 +39,18 @@ public class AiMatchEvaluator {
      * @return 通过返回 null；未通过返回可读原因。
      */
     public String evaluate(MatchRule rule, String bodyJson, String paramsJson) {
+        return evaluate(rule, bodyJson, paramsJson, null);
+    }
+
+    public String evaluate(MatchRule rule, String bodyJson, String paramsJson, String headersJson) {
         if (rule == null || rule.getConditions() == null || rule.getConditions().isEmpty()) {
             return null;
         }
         JsonNode body = parseJson(bodyJson);
         JsonNode params = parseJson(paramsJson);
+        JsonNode headers = parseJson(headersJson);
         for (MatchCondition condition : rule.getConditions()) {
-            String actual = extract(condition.getSource(), condition.getPath(), body, params);
+            String actual = extract(condition.getSource(), condition.getPath(), body, params, headers);
             if (!pass(condition, actual)) {
                 return describe(condition, actual);
             }
@@ -124,8 +129,21 @@ public class AiMatchEvaluator {
         }
     }
 
-    private String extract(String source, String path, JsonNode body, JsonNode params) {
+    private String extract(String source, String path, JsonNode body, JsonNode params, JsonNode headers) {
         if (path == null || path.isEmpty()) {
+            return null;
+        }
+        if ("HEADER".equalsIgnoreCase(source)) {
+            if (headers == null || !headers.isObject()) {
+                return null;
+            }
+            java.util.Iterator<java.util.Map.Entry<String, JsonNode>> it = headers.fields();
+            while (it.hasNext()) {
+                java.util.Map.Entry<String, JsonNode> entry = it.next();
+                if (entry.getKey().equalsIgnoreCase(path)) {
+                    return entry.getValue().isNull() ? null : entry.getValue().asText();
+                }
+            }
             return null;
         }
         if ("QUERY".equalsIgnoreCase(source)) {

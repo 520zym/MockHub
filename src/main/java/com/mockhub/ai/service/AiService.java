@@ -40,7 +40,7 @@ public class AiService {
             "EQ", "NE", "CONTAINS", "IS_EMPTY", "IN", "GT", "GTE", "LT", "LTE", "REGEX"));
     private static final Set<String> NUMERIC_OPERATORS = new HashSet<String>(Arrays.asList(
             "GT", "GTE", "LT", "LTE"));
-    private static final Set<String> SOURCES = new HashSet<String>(Arrays.asList("BODY", "QUERY"));
+    private static final Set<String> SOURCES = new HashSet<String>(Arrays.asList("BODY", "QUERY", "HEADER"));
 
     /** 代码围栏正则使用 \x60 表示反引号，避免源文件出现三个连续反引号。 */
     private static final String FENCE_HEAD = "(?s)^\\s*\\x60{3}[a-zA-Z]*\\s*";
@@ -185,7 +185,7 @@ public class AiService {
         return "你是 MockHub 的响应条件生成助手。只输出 JSON，格式为："
                 + "{\"conditions\":[{\"source\":\"BODY\",\"path\":\"user.type\",\"operator\":\"EQ\","
                 + "\"value\":\"vip\",\"valueType\":\"STRING\"}]}。"
-                + "source 只能是 BODY 或 QUERY；operator 只能是 EQ/NE/CONTAINS/IS_EMPTY/IN/GT/GTE/LT/LTE/REGEX；"
+                + "source 只能是 BODY、QUERY 或 HEADER（HEADER 的 path 写请求头名称，如 X-Env）；operator 只能是 EQ/NE/CONTAINS/IS_EMPTY/IN/GT/GTE/LT/LTE/REGEX；"
                 + "valueType 只能是 STRING/NUMBER/BOOLEAN；value 存放原始值，不要额外加引号；"
                 + "IN 的 value 使用 JSON 数组字符串。不要输出解释或 Markdown。";
     }
@@ -349,6 +349,11 @@ public class AiService {
                 s.setWarning("IN 的值不是合法 JSON 数组");
                 return s;
             }
+        }
+        if ("HEADER".equals(source) && !path.matches("[A-Za-z0-9-]+")) {
+            s.setValid(false);
+            s.setWarning("Header 名称只能包含字母、数字和短横线");
+            return s;
         }
         if ("BODY".equals(source) && !sampled.isEmpty()) {
             boolean found = false;

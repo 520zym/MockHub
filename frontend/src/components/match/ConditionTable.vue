@@ -23,11 +23,12 @@
         >
           <el-option label="Body" value="BODY" />
           <el-option label="Query" value="QUERY" />
+          <el-option label="Header" value="HEADER" />
         </el-select>
         <el-input
           v-model="c.path"
           size="small"
-          placeholder="字段路径"
+          :placeholder="c.source === 'HEADER' ? 'Header 名称' : '字段路径'"
           class="col-path"
           @input="emitChange"
         />
