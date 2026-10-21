@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440, initial-scale=1">
+<title>编辑接口 · MockHub AI 设计稿</title>
+<link rel="stylesheet" href="assets/mock.css">
+<style>.main{padding-top:0}.edit-card{border-radius:0 0 12px 12px}.main{overflow:hidden}</style>
+</head>
+<body>
+<aside class="sidebar">
+  <div class="sidebar__logo"><div class="sidebar__mark">M</div><div class="sidebar__name">MockHub</div></div>
+  <div class="sidebar__nav">
+      <div class="nav-item nav-item--active"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg><span>接口管理</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg><span>文件服务器</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72"/><path d="m14 7 3 3"/><path d="M5 6v4"/><path d="M19 14v4"/><path d="M10 2v2"/><path d="M7 8H3"/><path d="M21 16h-4"/><path d="M11 3H9"/></svg><span>动态变量</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg><span>使用统计</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01M16 6h.01M12 6h.01M12 10h.01M12 14h.01M16 10h.01M16 14h.01M8 10h.01M8 14h.01"/></svg><span>团队管理</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>用户管理</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg><span>日志</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg><span>全局设置</span></div>
+  </div>
+    <div class="sidebar__tree">
+      <div class="sidebar__divider"></div>
+      <div class="sidebar__section">团队筛选</div>
+      <div class="tree-node tree-node--active"><span class="tree-node__label">所有接口</span><span class="tree-node__count">12</span></div>
+      <div class="tree-node"><span class="team-tag team-tag--pay">PAY</span><span class="tree-node__label">支付中心</span><span class="tree-node__count">5</span></div>
+      <div class="tree-node"><span class="team-tag team-tag--user">USER</span><span class="tree-node__label">用户中心</span><span class="tree-node__count">4</span></div>
+      <div class="tree-node"><span class="team-tag team-tag--order">ORDER</span><span class="tree-node__label">订单服务</span><span class="tree-node__count">3</span></div>
+    </div>
+  <div class="sidebar__footer" style="color:#A3AED0"><svg class="icon icon--16" viewBox="0 0 24 24"  aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg></div>
+</aside>
+<header class="topbar">
+  <div class="topbar__left">
+    <div class="topbar__toggle"><svg class="icon icon--18" viewBox="0 0 24 24"  aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg></div>
+    <div class="topbar__title">编辑接口</div>
+  </div>
+  <div class="topbar__user"><div class="avatar">张</div><span class="topbar__username">张一鸣</span></div>
+</header>
+<main class="main"><div class="card edit-card" style="padding-bottom:22px">
+  <h3 class="section-title">返回体配置</h3>
+  <div class="mode-bar"><span>选择方式</span><span class="seg"><span class="seg__item seg__item--on">按条件匹配</span><span class="seg__item">等概率随机</span></span><span>按条件依次匹配；多个启用返回体时必须保留一个无条件兜底。</span></div>
+<div class="tabs-line">
+  <div class="tab-item tab-item--on"><span class="tab-dot"></span><span class="tab-index">①</span>成功响应</div>
+  <div class="tab-item"><span class="tab-dot"></span><span class="tab-index">②</span>空列表</div>
+  <div class="tab-item"><span class="tab-dot tab-dot--off"></span><span class="tab-index">③</span>错误响应<span style="font-size:10px;background:#F3F4F6;color:#9CA3AF;border-radius:8px;padding:0 5px">未启用</span></div>
+  <div class="tab-add"><svg class="icon icon--16" viewBox="0 0 24 24"  aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg></div>
+</div>
+  <div class="cond">
+    <div class="cond__head"><svg class="icon icon--14" viewBox="0 0 24 24"  aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg><b>响应规则</b><span class="muted" style="font-size:11.5px">所有条件都满足才命中（AND）</span><span class="spacer"></span><span class="muted" style="font-size:11.5px">2 条规则</span></div>
+    <div class="cond__toolbar">
+      <span class="label">新增条件来源</span>
+      <span class="seg"><span class="seg__item seg__item--on">Body</span><span class="seg__item">Query</span></span>
+      <button class="btn btn--sm btn--plain"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>粘贴示例</button>
+      <button class="btn btn--sm btn--ai-edge"><svg class="icon " viewBox="0 0 24 24" style="fill:currentColor;stroke:none" aria-hidden="true"><path d="M11 3.2l1.8 5 5 1.8-5 1.8-1.8 5-1.8-5-5-1.8 5-1.8z"/><path d="M18.5 14.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z"/></svg>AI 生成规则</button>
+      <span class="spacer"></span>
+      <span class="hint"><svg class="icon icon--14" viewBox="0 0 24 24"  aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg> 规则空时，该返回体作为兜底</span>
+    </div>
+    <div class="cond__split">
+      <div class="cond__tree"><div class="cond__tree-title">Body 示例（18 个字段）</div><div class="tree-line" style="padding-left:8px"><svg class="icon chev" viewBox="0 0 24 24"  aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg><span class="k">data</span></div>
+<div class="tree-line" style="padding-left:20px"><span style="width:10px"></span><span class="">userType</span><span style="color:#CBD5E0;margin-left:auto">string</span></div>
+<div class="tree-line" style="padding-left:20px"><span style="width:10px"></span><span class="">orderNo</span><span style="color:#CBD5E0;margin-left:auto">string</span></div>
+<div class="tree-line" style="padding-left:20px"><svg class="icon chev" viewBox="0 0 24 24"  aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg><span class="k">items</span></div>
+<div class="tree-line" style="padding-left:32px"><span style="width:10px"></span><span class="">[0].skuId</span><span style="color:#CBD5E0;margin-left:auto">string</span></div>
+<div class="tree-line" style="padding-left:32px"><span style="width:10px"></span><span class="">[0].count</span><span style="color:#CBD5E0;margin-left:auto">string</span></div>
+<div class="tree-line" style="padding-left:8px"><svg class="icon chev" viewBox="0 0 24 24"  aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg><span class="k">header</span></div>
+<div class="tree-line" style="padding-left:20px"><span style="width:10px"></span><span class="">env</span><span style="color:#CBD5E0;margin-left:auto">string</span></div>
+<div class="tree-line" style="padding-left:20px"><span style="width:10px"></span><span class="">tenantId</span><span style="color:#CBD5E0;margin-left:auto">string</span></div></div>
+      <div class="cond__table">
+<div class="cond-row"><span class="src">BODY</span><span class="p">userType</span><span class="op">等于</span><span class="v">"vip"</span><svg class="icon icon--14" viewBox="0 0 24 24"  aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></div>
+<div class="cond-row"><span class="src">BODY</span><span class="p">items[0].count</span><span class="op">大于</span><span class="v">2</span><svg class="icon icon--14" viewBox="0 0 24 24"  aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></div>
+        <div class="cond-empty">点击左侧字段可快速追加条件</div>
+      </div>
+    </div>
+  </div>
+<div class="form-grid">
+  <div class="field"><span class="field__label">返回体名称</span><div class="input">成功响应</div></div>
+  <div class="field field--sm"><span class="field__label">响应状态码</span><div class="input">200</div></div>
+  <div class="field"><span class="field__label">Content-Type</span><div style="display:flex;align-items:center;gap:10px;height:38px"><span class="ct-hint">自动识别：JSON <svg class="icon icon--14 check" viewBox="0 0 24 24"  aria-hidden="true"><path d="m20 6-11 11-5-5"/></svg></span><span class="seg" style="margin-left:auto"><span class="seg__item seg__item--on">JSON</span><span class="seg__item">XML</span><span class="seg__item">Text</span></span></div></div>
+  <div class="field field--sm"><span class="field__label">延迟 (ms)</span><div class="input">0</div></div>
+</div>
+<div class="editor-toolbar">
+  <span class="seg"><span class="seg__item seg__item--on">文本</span><span class="seg__item">文件</span></span>
+  <button class="btn btn--sm"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72"/><path d="m14 7 3 3"/><path d="M5 6v4"/><path d="M19 14v4"/><path d="M10 2v2"/><path d="M7 8H3"/><path d="M21 16h-4"/><path d="M11 3H9"/></svg>格式化</button>
+  <button class="btn btn--sm"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/></svg>上传文本</button>
+  <button class="btn btn--sm"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72"/><path d="m14 7 3 3"/><path d="M5 6v4"/><path d="M19 14v4"/><path d="M10 2v2"/><path d="M7 8H3"/><path d="M21 16h-4"/><path d="M11 3H9"/></svg>插入变量 <svg class="icon icon--14" viewBox="0 0 24 24"  aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+  <button class="btn btn--sm btn--ai-edge"><svg class="icon " viewBox="0 0 24 24" style="fill:currentColor;stroke:none" aria-hidden="true"><path d="M11 3.2l1.8 5 5 1.8-5 1.8-1.8 5-1.8-5-5-1.8 5-1.8z"/><path d="M18.5 14.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z"/></svg>AI 生成</button>
+  <span class="spacer"></span>
+  <span class="hint">1,024 字符</span>
+</div>
+<div class="monaco"><div class="code "><div class="code__row"><span class="ln">1</span><span><span class="tok-p">{</span></span></div><div class="code__row"><span class="ln">2</span><span>  <span class="tok-k">"code"</span><span class="tok-p">:</span> <span class="tok-n">0</span><span class="tok-p">,</span></span></div><div class="code__row"><span class="ln">3</span><span>  <span class="tok-k">"message"</span><span class="tok-p">:</span> <span class="tok-s">"success"</span><span class="tok-p">,</span></span></div><div class="code__row"><span class="ln">4</span><span>  <span class="tok-k">"data"</span><span class="tok-p">:</span> <span class="tok-p">{</span></span></div><div class="code__row"><span class="ln">5</span><span>    <span class="tok-k">"id"</span><span class="tok-p">:</span> <span class="tok-s">"10086"</span><span class="tok-p">,</span></span></div><div class="code__row"><span class="ln">6</span><span>    <span class="tok-k">"nickname"</span><span class="tok-p">:</span> <span class="tok-s">"林晚"</span><span class="tok-p">,</span></span></div><div class="code__row"><span class="ln">7</span><span>    <span class="tok-k">"avatar"</span><span class="tok-p">:</span> <span class="tok-s">"https://cdn.mockhub.dev/a/8f3a.png"</span><span class="tok-p">,</span></span></div><div class="code__row"><span class="ln">8</span><span>    <span class="tok-k">"level"</span><span class="tok-p">:</span> <span class="tok-s">"VIP"</span><span class="tok-p">,</span></span></div><div class="code__row"><span class="ln">9</span><span>    <span class="tok-k">"levelLabel"</span><span class="tok-p">:</span> <span class="tok-s">"黄金会员"</span><span class="tok-p">,</span></span></div><div class="code__row"><span class="ln">10</span><span>    <span class="tok-k">"registeredAt"</span><span class="tok-p">:</span> <span class="tok-s">"2024-03-18T09:24:00+08:00"</span></span></div><div class="code__row"><span class="ln">11</span><span>  <span class="tok-p">}</span></span></div><div class="code__row"><span class="ln">12</span><span><span class="tok-p">}</span></span></div></div></div>
+</div></main>
+<aside class="ai-drawer">
+  <div class="ai-drawer__head">
+    <div class="modal__icon"><svg class="icon " viewBox="0 0 24 24" style="fill:currentColor;stroke:none" aria-hidden="true"><path d="M11 3.2l1.8 5 5 1.8-5 1.8-1.8 5-1.8-5-5-1.8 5-1.8z"/><path d="M18.5 14.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z"/></svg></div>
+    <div style="flex:1">
+      <div class="modal__title">AI 生成响应规则 <span class="ai-badge">Beta</span></div>
+      <div class="modal__desc">把自然语言描述转成现有 conditions 结构，应用前可逐条确认</div>
+    </div>
+    <div class="modal__close"><svg class="icon icon--16" viewBox="0 0 24 24"  aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></div>
+  </div>
+  <div class="ai-drawer__ctx">
+    <span class="chip">① 成功响应</span><span class="chip">Body 示例 18 个字段</span><span class="chip">按条件匹配</span>
+  </div>
+  <div class="ai-drawer__body">
+    <div class="ai-label">用自然语言描述命中条件</div>
+    <div class="textarea textarea--focus" style="min-height:100px">当 header 里的 env 是 test，并且 body 的 userType 是 vip 时命中；如果 orderNo 是 20240601 也命中<span class="caret"></span></div>
+    <div class="preview-head">将生成 3 条规则 <span class="muted" style="font-weight:400">· 已选 2 条</span><span class="right"><span class="link" style="font-size:12px"><svg class="icon icon--14" viewBox="0 0 24 24"  aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg> 重新生成</span></span></div>
+    <div class="rule-table">
+      <div class="rule-table__head"><span></span><span>来源</span><span>字段路径</span><span>运算符</span><span>值</span></div>
+<div class="rule-row">
+  <span class="cb cb--on"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="m20 6-11 11-5-5"/></svg></span>
+  <span class="rule-row__src">Header</span>
+  <span class="rule-row__path">env</span>
+  <span class="rule-row__op">等于</span>
+  <span class="rule-row__val">"test"</span>
+</div>
+<div class="rule-row">
+  <span class="cb cb--on"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="m20 6-11 11-5-5"/></svg></span>
+  <span class="rule-row__src">Body</span>
+  <span class="rule-row__path">userType</span>
+  <span class="rule-row__op">等于</span>
+  <span class="rule-row__val">"vip"</span>
+</div>
+<div class="rule-row">
+  <span class="cb"></span>
+  <span class="rule-row__src">Body</span>
+  <span class="rule-row__path">orderNo</span>
+  <span class="rule-row__op">等于</span>
+  <span class="rule-row__val">"20240601"</span>
+</div>
+      <div class="rule-warn"><svg class="icon icon--14" viewBox="0 0 24 24"  aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg><span>第 3 条未勾选：当前 Body 示例中没有 <b>orderNo</b> 字段，确认字段名后再应用。</span></div>
+    </div>
+    <div class="ai-tip"><svg class="icon icon--14" viewBox="0 0 24 24"  aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg><span>规则会写入现有 conditions 结构，应用前由后端再次校验字段与运算符，不会直接覆盖未勾选的规则。</span></div>
+    <div class="ai-label">应用方式</div>
+    <div class="apply-grid">
+      <div class="apply-opt apply-opt--on"><span class="radio radio--on"></span><div><div class="apply-opt__t">追加到现有规则</div><div class="apply-opt__d">保留原有 2 条，把勾选的 2 条加在后面</div></div></div>
+      <div class="apply-opt"><span class="radio"></span><div><div class="apply-opt__t">替换现有规则</div><div class="apply-opt__d">清空原有 2 条后再写入，需二次确认</div></div></div>
+    </div>
+  </div>
+  <div class="ai-drawer__foot">
+    <span class="foot-note"><svg class="icon icon--14" viewBox="0 0 24 24"  aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg>已选 2 条，追加到现有 2 条之后</span>
+    <button class="btn">取消</button>
+    <button class="btn btn--primary">应用 2 条规则</button>
+  </div>
+</aside>
+</body>
+</html>

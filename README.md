@@ -21,13 +21,21 @@
 |:---:|:---:|
 | ![团队管理](screenshots/team-manage.png) | ![用户管理](screenshots/user-manage.png) |
 
-| 日志 | 全局设置 |
+| 日志 | 全局设置 · AI 供应商 |
 |:---:|:---:|
 | ![日志](screenshots/logs.png) | ![全局设置](screenshots/settings.png) |
 
-| 动态变量 |
-|:---:|
-| ![动态变量](screenshots/dynamic-variables.png) |
+| 动态变量 | AI 模型选择 |
+|:---:|:---:|
+| ![动态变量](screenshots/dynamic-variables.png) | ![模型选择](screenshots/ai-model-picker.png) |
+
+| AI 助手 · 对话 | AI 助手 · 会话历史 |
+|:---:|:---:|
+| ![AI 助手](screenshots/ai-assistant.png) | ![会话历史](screenshots/ai-history.png) |
+
+| MCP Server 配置 | MCP 多返回体确认 |
+|:---:|:---:|
+| ![MCP 配置](screenshots/mcp-settings.png) | ![MCP 确认](screenshots/mcp-confirm.png) |
 
 ---
 
@@ -43,7 +51,7 @@
 - [x] **动态变量** -- 内置 `{{timestamp}}`、`{{uuid}}`、`{{date}}`、`{{datetime}}`、`{{random_int}}`；编辑器提供「插入变量」按钮和 `{{` 智能补全
 - [x] **自定义动态变量** -- 团队级维护命名值集合，支持按分组组织；响应体 `{{pet}}` 从全部值随机挑、`{{pet.mammal}}` 从指定分组随机挑；解析失败 fail-fast 返回统一错误格式
 - [x] **多返回体** -- 单个接口可配置多个响应体，支持切换活跃返回体
-- [x] **多场景响应** -- 多个返回体可配置匹配条件（Query / JSON Body / SOAP XML Body），命中即返回，未命中走无规则兜底
+- [x] **多场景响应** -- 多个返回体可配置匹配条件（Query / JSON Body / Header / SOAP XML Body），命中即返回，未命中走无规则兜底
 - [x] **随机返回** -- REST 接口及每个 SOAP Operation 可独立选择等概率随机模式，仅从启用的返回体中选择，无需配置条件与兜底
 - [x] **文件服务器模拟** -- 免登录上传、固定 fileId 下载链接、Range 续传，以及按团队管理、检索、标签、统计、预览和批量删除
 - [x] **接口描述** -- 支持富文本描述接口用途和说明
@@ -58,6 +66,14 @@
 - [x] **CORS 支持** -- Mock 接口默认允许跨域，可通过参数关闭
 - [x] **SQLite 存储** -- 嵌入式单文件数据库，无需安装，易于备份
 - [x] **接口调用统计** -- 列表展示每个接口的命中次数和最近一次调用时间，识别僵尸 Mock 便于清理
+- [x] **AI 生成响应体** -- 在返回体编辑器里根据接口信息生成 JSON / XML 示例，预览确认后写入
+- [x] **AI 生成条件规则** -- 自然语言转成现有 conditions 结构，逐条勾选、字段校验
+- [x] **AI 匹配诊断** -- 请求日志里重放命中链路，解释为什么命中 / 未命中
+- [x] **对话助手** -- 右下角入口，支持统计问答、搜索接口、创建/修改接口草稿（确认卡片）与会话历史
+- [x] **AI 供应商与模型** -- 8 个供应商预设、默认地址/模型、从 `/models` 实时拉取、手动输入
+- [x] **AI 会话历史** -- 会话持久化，可查看历史、继续对话，并恢复确认卡片状态
+- [x] **MCP Server** -- Streamable HTTP JSON-RPC、Token、工具开关、多返回体草稿与修改接口
+- [x] **旧版本自动升级** -- 1.4.6 起自动建表、补列、补索引，无需手工改数据库
 
 ### 使用体验
 
@@ -73,13 +89,118 @@
 
 - [ ] **Swagger / OpenAPI 导入** -- 从 Swagger JSON/YAML 一键导入接口定义，把"批量创建 Mock"的成本从 N 分钟压到 0 秒
 - [ ] **复制为 curl** -- 列表行一键复制 curl 命令，前后端联调对齐请求零摩擦
-- [ ] **AI 辅助模块（可选）** -- 配置自定义 LLM 接入后启用，不影响离线使用：
-    - cURL 命令一键转换为接口定义
-    - 根据接口 path/method 自动生成响应体示例
-    - WSDL Operation 的智能注释
-    - 自然语言描述自动转换为多场景匹配条件
+- [x] **AI 辅助模块（可选）** -- 已在 1.4.6 落地生成、诊断、对话与修改接口能力，默认关闭；未配置时不影响离线使用
+    - [x] 根据接口 path/method 生成响应体示例（REST JSON / SOAP XML）
+    - [x] 自然语言描述自动转换为多场景匹配条件
+    - [ ] cURL 命令一键转换为接口定义（规划中）
+    - [x] MockHub MCP Server（Streamable HTTP + Token + 多返回体）
 
 > 欢迎提交 [Issue](../../issues) 反馈需求或 Bug！
+
+---
+
+## AI 助手（Beta）
+
+> 对应 Issue #6 的实现。默认关闭，超级管理员可在「全局设置 → AI 供应商」配置并开启。
+
+### 能力
+
+- **生成响应体**：返回体编辑器工具栏的「AI 生成」，根据接口名称、方法、路径与描述生成 JSON / XML，预览确认后插入。
+- **生成条件规则**：响应规则工具条的「AI 生成规则」，把自然语言转成现有 `conditions` 结构；支持 Body / Query / Header 三类来源，不存在的字段会标黄并默认不勾选。
+- **匹配诊断**：请求日志详情里的「解释这次匹配」，由服务端重放条件链路，模型只负责组织说明；模型失败时回退到模板。
+- **对话助手**：右下角悬浮入口，支持查询近 7 天调用排行、搜索接口、创建接口草稿、修改已有接口的返回值，并可查看/继续历史会话；超管可选择「全部团队」。写操作只生成 `PENDING` 草稿，用户点「确认创建 / 确认修改」后才落库。
+- **MCP Server**：把检索、统计、生成与草稿能力开放给 Claude / Cursor / Codex 等客户端；Token 鉴权、工具开关、写策略与 Web 确认页均可在「全局设置 → MCP Server」配置。
+
+### 界面
+
+| AI 供应商 | 模型选择 |
+|:---:|:---:|
+| ![AI 供应商](screenshots/settings.png) | ![模型选择](screenshots/ai-model-picker.png) |
+
+| AI 助手 · 会话历史 | MCP 多返回体确认 |
+|:---:|:---:|
+| ![AI 助手](screenshots/ai-assistant.png) | ![MCP 确认](screenshots/mcp-confirm.png) |
+
+### 配置
+
+| 项 | 说明 |
+| --- | --- |
+| 供应商 | DeepSeek / Kimi / MiniMax / 智谱 GLM / 通义千问 / OpenAI / Ollama / 自定义；统一走 OpenAI 兼容协议 |
+| Base URL | 选择供应商后自动填入默认地址，可修改；例如 `https://api.deepseek.com/v1`，服务端自动补 `/chat/completions` |
+| 默认模型 | 每个供应商有内置推荐列表；也可从服务商 `/models` 实时拉取，或手动输入模型 ID |
+| API Key | 仅保存在服务端并以 AES-GCM 密文落库；接口只返回掩码，支持替换与清除 |
+| 能力开关 | 生成响应体 / 生成条件规则 / 解释匹配结果 / 创建、修改接口草稿 |
+| 使用范围 | 所有成员（继承各自权限）或仅超级管理员 |
+
+### 接口
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/ai/status` | 当前用户可见的 AI 状态与能力 |
+| GET / PUT | `/api/ai/settings` | 读取 / 保存配置（仅超管） |
+| GET | `/api/ai/providers` | 内置供应商预设与推荐模型（仅超管） |
+| GET | `/api/ai/models` | 用已保存的 Key 从服务商拉取模型列表（仅超管） |
+| POST | `/api/ai/settings/test` | 连通性测试（仅超管） |
+| POST | `/api/ai/generate-response` | 生成响应体 |
+| POST | `/api/ai/generate-conditions` | 生成条件规则 |
+| POST | `/api/ai/explain-match` | 解释一次请求的命中链路 |
+| POST | `/api/ai/chat` | 对话助手（可选 `conversationId` 继续会话） |
+| GET | `/api/ai/conversations` | 当前用户的会话历史 |
+| GET / DELETE | `/api/ai/conversations/{id}` | 会话详情 / 删除自己的会话 |
+| POST | `/api/ai/actions/{id}/confirm` | 确认待确认操作 |
+| POST | `/api/ai/actions/{id}/cancel` | 取消待确认操作 |
+| GET / PUT | `/api/mcp/settings` | MCP 开关、写策略与工具开关（仅超管） |
+| GET / POST | `/api/mcp/tokens` | MCP Token 列表 / 创建（仅超管，明文只返回一次） |
+| DELETE | `/api/mcp/tokens/{id}` | 撤销 MCP Token（仅超管） |
+| POST | `/mcp` | MCP Streamable HTTP JSON-RPC 端点（Bearer Token） |
+
+### 安全与边界
+
+- AI 访问继承当前登录用户权限，团队数据保持隔离；生成与对话均校验 `teamId`。
+- 写操作采用两阶段流程：模型只产出草稿，服务端确认时重新校验权限与路径冲突，并写入操作日志；修改已有接口只更新指定返回体，不改路径、方法、条件与文件元数据。
+- API Key 不返回前端、不写入日志，并以 AES-GCM 密文存储；加密密钥来自 `MOCKHUB_AI_KEY_SECRET` 或 `data/.ai-key`，备份数据库时请一并备份该文件。
+- 模型列表只在选择时使用，不落库；`/models` 不可用或返回非对话模型时，用内置推荐或手动输入兜底。
+- 请求日志与诊断只使用服务端重放的条件评估结果，模型不参与命中判定。
+- 条件来源支持 `BODY / QUERY / HEADER`；Header 名称不区分大小写。
+- MCP 写操作默认走「草稿 + Web 确认」；`apply_api_draft` 与直接写入模式默认关闭。
+- MCP 端点仅支持 Streamable HTTP 的 JSON 响应，不提供 stdio 或旧版 HTTP+SSE。
+
+---
+
+### MCP 工具
+
+| 工具 | 说明 |
+| --- | --- |
+| `mockhub.search_apis` | 按关键字搜索当前用户可见接口 |
+| `mockhub.get_api_detail` | 读取接口、返回体与条件规则 |
+| `mockhub.get_api_stats` | 查询窗口内调用总览与 Top 接口 |
+| `mockhub.create_api_draft` | 创建接口草稿，支持 `responses` 多返回体与条件规则；返回 `actionId` 与 `confirmUrl` |
+| `mockhub.update_api_draft` | 修改已有接口，支持整体替换 `responses` 或 `addResponses` 追加返回体 |
+| `mockhub.apply_api_draft` | 应用草稿（仅在 DIRECT 写策略且工具开启时可用） |
+| `mockhub.generate_response_body` | 生成 JSON / XML 响应体 |
+| `mockhub.generate_conditions` | 生成 Body / Query / Header 条件 |
+| `mockhub.explain_match_result` | 解释一次请求的命中链路 |
+
+客户端配置示例（Cursor / Claude Desktop 的 `mcpServers` 片段）：
+
+```json
+{
+  "mcpServers": {
+    "mockhub": {
+      "url": "http://<host>:18080/mcp",
+      "headers": { "Authorization": "Bearer mhk_xxxxxxxx" }
+    }
+  }
+}
+```
+
+---
+
+### 旧版本升级
+
+从任意历史版本升级到 1.4.6 时，**不需要手工修改数据库**：停止服务、备份 `data/`、替换 jar 后启动即可。启动时会自动创建新增表，并逐列补齐旧库可能缺失的字段（如 `vendor`、`conditions`、`scenarios`、`tool_update_api_draft` 等），已有数据保持不变。
+
+> 备份时请同时保留 `data/.ai-key`，否则已保存的 AI API Key 无法解密。
 
 ---
 
@@ -224,7 +345,7 @@ REST 模式使用 `responseMode` 字段，SOAP 使用 `soapConfig.operations[].r
 示例：
 
 ```bash
-java -jar mockhub-1.4.5.jar \
+java -jar mockhub-1.4.6.jar \
   --server.port=9090 \
   --data.path=D:/mockhub/data \
   --log.retain.mode=days \
@@ -288,7 +409,7 @@ mvn clean package -DskipTests
   <name>MockHub</name>
   <description>MockHub 接口模拟服务</description>
   <executable>java</executable>
-  <arguments>-jar mockhub-1.4.5.jar --server.port=18080 --data.path=./data</arguments>
+  <arguments>-jar mockhub-1.4.6.jar --server.port=18080 --data.path=./data</arguments>
   <workingdirectory>%BASE%</workingdirectory>
   <logpath>%BASE%\logs</logpath>
   <log mode="roll-by-size">

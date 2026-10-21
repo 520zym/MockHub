@@ -29,7 +29,7 @@ import java.util.Map;
  *       <li>path 长度 &le; 500 → 否则 40413</li>
  *       <li>operator 在枚举内 → 否则 40414</li>
  *       <li>数字操作符要求 valueType=NUMBER → 否则 40415</li>
- *       <li>source 在 BODY/QUERY 内 → 否则 40416</li>
+ *       <li>source 在 BODY/QUERY/HEADER 内 → 否则 40416</li>
  *     </ul>
  *   </li>
  * </ol>
@@ -199,8 +199,9 @@ public class ResponseValidator {
                         "条件字段路径长度超过 " + PATH_MAX_LENGTH + " 字符：" + path.substring(0, 50) + "...");
             }
             String source = c.getSource();
-            if (!"BODY".equalsIgnoreCase(source) && !"QUERY".equalsIgnoreCase(source)) {
-                throw new BizException(40416, "条件参数来源必须为 BODY 或 QUERY：" + source);
+            if (!"BODY".equalsIgnoreCase(source) && !"QUERY".equalsIgnoreCase(source)
+                    && !"HEADER".equalsIgnoreCase(source)) {
+                throw new BizException(40416, "条件参数来源必须为 BODY、QUERY 或 HEADER：" + source);
             }
             if (!ResponseMatcher.Operators.isValid(c.getOperator())) {
                 throw new BizException(40414, "未知操作符：" + c.getOperator());

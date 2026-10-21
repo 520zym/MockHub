@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440, initial-scale=1">
+<title>全局设置 · MockHub AI 设计稿</title>
+<link rel="stylesheet" href="assets/mock.css">
+<style></style>
+</head>
+<body>
+<aside class="sidebar">
+  <div class="sidebar__logo"><div class="sidebar__mark">M</div><div class="sidebar__name">MockHub</div></div>
+  <div class="sidebar__nav">
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg><span>接口管理</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg><span>文件服务器</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72"/><path d="m14 7 3 3"/><path d="M5 6v4"/><path d="M19 14v4"/><path d="M10 2v2"/><path d="M7 8H3"/><path d="M21 16h-4"/><path d="M11 3H9"/></svg><span>动态变量</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg><span>使用统计</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01M16 6h.01M12 6h.01M12 10h.01M12 14h.01M16 10h.01M16 14h.01M8 10h.01M8 14h.01"/></svg><span>团队管理</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>用户管理</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg><span>日志</span></div>
+      <div class="nav-item nav-item--active"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg><span>全局设置</span></div>
+  </div>
+    <div style="flex:1"></div>
+  <div class="sidebar__footer" style="color:#A3AED0"><svg class="icon icon--16" viewBox="0 0 24 24"  aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg></div>
+</aside>
+<header class="topbar">
+  <div class="topbar__left">
+    <div class="topbar__toggle"><svg class="icon icon--18" viewBox="0 0 24 24"  aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg></div>
+    <div class="topbar__title">全局设置</div>
+  </div>
+  <div class="topbar__user"><div class="avatar">张</div><span class="topbar__username">张一鸣</span></div>
+</header>
+<main class="main"><div class="settings">
+  <div class="settings-card">
+    <div class="settings-section">
+      <h3 class="section-title">AI 助手 <span class="ai-badge">Beta</span></h3>
+      <p class="section-desc">配置 MockHub 内置 AI 助手使用的模型服务与可用能力，仅超级管理员可见。</p>
+
+      <div class="switch-row" style="justify-content:space-between;padding:4px 0 16px">
+        <div><div class="switch-row__label" style="font-size:14px;font-weight:500;color:#1B2559">启用 AI 助手</div><div class="switch-row__desc">关闭后隐藏全部 AI 入口，不影响已有接口与规则</div></div>
+        <div style="display:flex;align-items:center;gap:10px"><span style="font-size:12px;color:#10B981">运行中</span><span class="switch switch--on"></span></div>
+      </div>
+
+      <div class="two-col">
+<div class="form-item">
+  <div class="form-item__label">Provider</div>
+<div class="input select"><span class="select__value">OpenAI 兼容</span><svg class="icon chev" viewBox="0 0 24 24"  aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></div>
+<div class="form-item__hint">支持 OpenAI、DeepSeek、Ollama 等兼容接口</div>
+</div>
+<div class="form-item">
+  <div class="form-item__label">Model</div>
+<div class="input">deepseek-chat</div>
+
+</div>
+      </div>
+
+<div class="form-item">
+  <div class="form-item__label">Base URL</div>
+<div class="input">https://api.deepseek.com/v1</div>
+<div class="form-item__hint">请求将从服务端发出，浏览器不直接访问模型服务</div>
+</div>
+<div class="form-item">
+  <div class="form-item__label">API Key</div>
+<div class="key-field">  <div class="input" style="flex:1"><span class="key-masked">sk-••••••••••••••••3f9a</span><span class="chip" style="height:22px;font-size:11px;color:#10B981;background:#ECFDF5">已配置</span></div>  <button class="btn"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>替换</button>  <button class="btn btn--danger-text">清除</button></div>
+<div class="form-item__hint">仅写入不回显，保存后前端只返回掩码；不会出现在接口响应、日志或 localStorage 中</div>
+</div>
+<div class="test-row" style="margin:-4px 0 20px"><button class="btn btn--plain"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M12 22v-5"/><path d="M9 8V2M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></svg>测试连接</button><span class="test-ok"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg>连接正常 · 820 ms</span><span class="hint">最近检测：今天 17:32</span></div>
+    </div>
+
+    <div class="divider" style="margin:24px 0"></div>
+
+    <div class="settings-section">
+      <h3 class="section-title">能力开关</h3>
+      <p class="section-desc">按场景逐步开放，关闭的能力不会出现在任何入口里。</p>
+      <div class="cap-list">
+<div class="cap-item">
+  <div style="flex:1"><div class="cap-item__title">生成响应体</div><div class="cap-item__desc">在返回体编辑器里根据接口信息生成 JSON / XML 示例</div></div>
+<span class="switch switch--on"></span>
+</div>
+<div class="cap-item">
+  <div style="flex:1"><div class="cap-item__title">生成条件规则</div><div class="cap-item__desc">把自然语言描述转成现有 conditions 结构，可逐条确认</div></div>
+<span class="switch switch--on"></span>
+</div>
+<div class="cap-item">
+  <div style="flex:1"><div class="cap-item__title">解释匹配结果</div><div class="cap-item__desc">在请求日志里解释某次请求为什么命中 / 未命中</div></div>
+<span class="switch switch--on"></span>
+</div>
+<div class="cap-item">
+  <div style="flex:1"><div class="cap-item__title">创建接口草稿 <span class="chip" style="height:18px;font-size:10px;padding:0 6px">Phase 2</span></div><div class="cap-item__desc">在对话中创建接口草稿，需回到确认卡片才会写入</div></div>
+<span class="switch switch--on"></span>
+</div>
+      </div>
+    </div>
+
+    <div class="divider" style="margin:24px 0"></div>
+
+    <div class="settings-section">
+      <h3 class="section-title">使用范围</h3>
+      <p class="section-desc">AI 始终继承当前登录用户的权限，团队数据保持隔离。</p>
+      <div class="radio-line"><span class="radio radio--on"></span><div><div class="cap-item__title">所有成员</div><div class="cap-item__desc">每个成员只能看到和操作自己有权限的团队与接口</div></div></div>
+      <div class="radio-line" style="margin-top:6px"><span class="radio"></span><div><div class="cap-item__title">仅超级管理员</div><div class="cap-item__desc">隐藏普通成员的全部 AI 入口</div></div></div>
+    </div>
+
+    <div class="alert alert--info" style="margin-top:22px"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg><div><div class="alert__title">数据安全</div>发送给模型前会移除 Authorization、Cookie、token、password 等敏感字段；API Key 仅保存在服务端，不写入日志。所有 AI 写操作都会记录到操作日志。</div></div>
+
+    <div class="settings-footer"><button class="btn btn--primary btn--lg">保存设置</button></div>
+  </div>
+</div></main>
+
+</body>
+</html>

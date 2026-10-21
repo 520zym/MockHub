@@ -31,7 +31,7 @@ public class HealthController {
     public Map<String, String> health() {
         Map<String, String> result = new HashMap<String, String>();
         result.put("status", "UP");
-        result.put("version", "1.0.0");
+        result.put("version", "1.4.6");
         return result;
     }
 

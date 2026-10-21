@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440, initial-scale=1">
+<title>全局设置 · MockHub AI 设计稿</title>
+<link rel="stylesheet" href="assets/mock.css">
+<link rel="stylesheet" href="assets/settings-v2.css">
+<style></style>
+</head>
+<body>
+<aside class="sidebar">
+  <div class="sidebar__logo"><div class="sidebar__mark">M</div><div class="sidebar__name">MockHub</div></div>
+  <div class="sidebar__nav">
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg><span>接口管理</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg><span>文件服务器</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72"/><path d="m14 7 3 3"/><path d="M5 6v4"/><path d="M19 14v4"/><path d="M10 2v2"/><path d="M7 8H3"/><path d="M21 16h-4"/><path d="M11 3H9"/></svg><span>动态变量</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg><span>使用统计</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01M16 6h.01M12 6h.01M12 10h.01M12 14h.01M16 10h.01M16 14h.01M8 10h.01M8 14h.01"/></svg><span>团队管理</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>用户管理</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg><span>日志</span></div>
+      <div class="nav-item nav-item--active"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg><span>全局设置</span></div>
+  </div>
+    <div style="flex:1"></div>
+  <div class="sidebar__footer" style="color:#A3AED0"><svg class="icon icon--16" viewBox="0 0 24 24"  aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg></div>
+</aside>
+<header class="topbar">
+  <div class="topbar__left">
+    <div class="topbar__toggle"><svg class="icon icon--18" viewBox="0 0 24 24"  aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg></div>
+    <div class="topbar__title">全局设置</div>
+  </div>
+  <div class="topbar__user"><div class="avatar">张</div><span class="topbar__username">张一鸣</span></div>
+</header>
+<main class="main"><div class="settings2">
+<aside class="settings2__nav">
+  <div class="nav-group">
+    <div class="nav-group__title">AI 能力</div>
+<div class="s2-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M12 22v-5"/><path d="M9 8V2M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></svg><span>AI 供应商</span><span class="s2-item__badge">新</span></div>
+<div class="s2-item"><svg class="icon " viewBox="0 0 24 24" style="fill:currentColor;stroke:none" aria-hidden="true"><path d="M11 3.2l1.8 5 5 1.8-5 1.8-1.8 5-1.8-5-5-1.8 5-1.8z"/><path d="M18.5 14.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z"/></svg><span>助手与能力</span></div>
+<div class="s2-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="m4 17 6-6-6-6"/><path d="M12 19h8"/></svg><span>MCP Server</span></div>
+  </div>
+  <div class="nav-group">
+    <div class="nav-group__title">系统</div>
+<div class="s2-item s2-item--on"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><rect x="2" y="3" width="20" height="8" rx="2"/><rect x="2" y="13" width="20" height="8" rx="2"/><path d="M6 7h.01M6 17h.01"/></svg><span>基础设置</span></div>
+<div class="s2-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg><span>日志与保留</span></div>
+<div class="s2-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg><span>文件存储</span></div>
+  </div>
+  <div class="settings2__hint">仅超级管理员可修改全局设置，保存后对全部团队生效。</div>
+</aside>
+<section class="settings2__panel">
+  <div class="crumb">全局设置 / 基础设置</div>
+  <div class="panel-title">基础设置</div>
+  <div class="panel-desc">服务地址与 Mock 跨域。日志保留、文件存储已经拆到左侧独立分类。</div>
+  <div class="panel-body"><div class="block-title">服务地址</div>
+<div class="block-desc">用于生成 Mock URL、MCP 确认链接与导出文件中的地址。</div>
+<div class="field2 ">  <div class="field2__label">外部访问地址</div>  <div class="input ">https://mockhub.example.com</div>  <div class="field2__hint">留空时使用浏览器当前地址</div></div>
+<div class="section-divider"></div>
+<div class="block-title">Mock 跨域</div>
+<div class="block-desc">只影响 /mock/** 响应，管理接口始终按登录态校验。</div>
+<div class="switch-row" style="justify-content:space-between;padding:2px 0 4px">
+  <div><div class="switch-row__label">允许浏览器跨域调用 Mock 接口</div><div class="switch-row__desc">返回 Access-Control-Allow-Origin: *，并处理 OPTIONS 预检</div></div>
+<span class="switch switch--on"></span>
+</div>
+<div class="alert alert--warn" style="margin-top:20px">
+<svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg>
+<div><div class="alert__title">修改服务地址后</div>已生成的 MCP 确认链接不会自动更新；建议在对外发布前配置固定域名。</div>
+</div></div>
+  <div class="panel-foot"><button class="btn btn--primary btn--lg">保存基础设置</button></div>
+</section>
+</div></main>
+
+</body>
+</html>

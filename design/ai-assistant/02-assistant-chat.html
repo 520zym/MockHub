@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440, initial-scale=1">
+<title>接口管理 · MockHub AI 设计稿</title>
+<link rel="stylesheet" href="assets/mock.css">
+<style>.chat__body{gap:8px;padding:10px 14px 4px}.bubble-ai{font-size:12.5px;padding:8px 11px}.composer{padding:8px 14px 9px}.composer__box{padding:6px 10px 6px 12px}.composer__tip{margin-top:5px;font-size:10px}.stat-row{padding:2px 0}.ai-card__head{padding:8px 12px}.confirm .code{font-size:10.5px;line-height:1.75}.confirm .ln{width:26px;padding-right:8px}.confirm__note{font-size:10.5px;line-height:1.5}</style>
+</head>
+<body>
+<aside class="sidebar">
+  <div class="sidebar__logo"><div class="sidebar__mark">M</div><div class="sidebar__name">MockHub</div></div>
+  <div class="sidebar__nav">
+      <div class="nav-item nav-item--active"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg><span>接口管理</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg><span>文件服务器</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72"/><path d="m14 7 3 3"/><path d="M5 6v4"/><path d="M19 14v4"/><path d="M10 2v2"/><path d="M7 8H3"/><path d="M21 16h-4"/><path d="M11 3H9"/></svg><span>动态变量</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg><span>使用统计</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01M16 6h.01M12 6h.01M12 10h.01M12 14h.01M16 10h.01M16 14h.01M8 10h.01M8 14h.01"/></svg><span>团队管理</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>用户管理</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg><span>日志</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg><span>全局设置</span></div>
+  </div>
+    <div class="sidebar__tree">
+      <div class="sidebar__divider"></div>
+      <div class="sidebar__section">团队筛选</div>
+      <div class="tree-node tree-node--active"><span class="tree-node__label">所有接口</span><span class="tree-node__count">12</span></div>
+      <div class="tree-node"><span class="team-tag team-tag--pay">PAY</span><span class="tree-node__label">支付中心</span><span class="tree-node__count">5</span></div>
+      <div class="tree-node"><span class="team-tag team-tag--user">USER</span><span class="tree-node__label">用户中心</span><span class="tree-node__count">4</span></div>
+      <div class="tree-node"><span class="team-tag team-tag--order">ORDER</span><span class="tree-node__label">订单服务</span><span class="tree-node__count">3</span></div>
+    </div>
+  <div class="sidebar__footer" style="color:#A3AED0"><svg class="icon icon--16" viewBox="0 0 24 24"  aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg></div>
+</aside>
+<header class="topbar">
+  <div class="topbar__left">
+    <div class="topbar__toggle"><svg class="icon icon--18" viewBox="0 0 24 24"  aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg></div>
+    <div class="topbar__title">接口管理</div>
+  </div>
+  <div class="topbar__user"><div class="avatar">张</div><span class="topbar__username">张一鸣</span></div>
+</header>
+<main class="main"><div class="card toolbar" style="padding:14px 16px">
+  <div class="toolbar__filters">
+    <div class="input search-box"><svg class="icon icon--16" viewBox="0 0 24 24"  aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="input__placeholder">搜索接口名称或路径</span></div>
+    <div class="input select" style="width:118px"><span class="input__placeholder">接口类型</span><svg class="icon chev" viewBox="0 0 24 24"  aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></div>
+    <div class="input select" style="width:118px"><span class="input__placeholder">HTTP 方法</span><svg class="icon chev" viewBox="0 0 24 24"  aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></div>
+    <div class="input select" style="width:118px"><span class="input__placeholder">启用状态</span><svg class="icon chev" viewBox="0 0 24 24"  aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></div>
+  </div>
+  <div class="toolbar__actions">
+    <button class="btn"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.2 8.2a2 2 0 0 0 2.8 0l7.2-7.2a2 2 0 0 0 0-2.8Z"/><circle cx="7.5" cy="7.5" r="1.2"/></svg>标签管理</button>
+    <button class="btn"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/></svg>导入</button>
+    <button class="btn"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg>导出</button>
+    <button class="btn btn--primary"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg>新建接口</button>
+  </div>
+</div>
+<div class="table-card">
+  <table class="tbl">
+    <thead><tr>
+      <th style="width:36px"><span class="cb"></span></th>
+      <th style="width:72px">类型</th>
+      <th style="width:76px">方法</th>
+      <th>路径</th>
+      <th style="width:132px">名称</th>
+      <th style="width:132px">标签</th>
+      <th style="width:88px">团队</th>
+      <th style="width:64px">启用</th>
+      <th style="width:104px">最近调用</th>
+      <th style="width:108px" class="t-right">操作</th>
+    </tr></thead>
+    <tbody>
+<tr>
+  <td style="width:36px"><span class="cb"></span></td>
+  <td style="width:72px"><span class="type-tag type-rest">REST</span></td>
+  <td style="width:76px"><span class="m-tag m-get">GET</span></td>
+  <td class="path">/api/order/detail</td>
+  <td class="name">订单详情</td>
+  <td style="width:132px"><div class="tag-list"><span class="mini-tag">订单</span><span class="mini-tag">核心</span></div></td>
+  <td style="width:88px"><span class="team-tag team-tag--order">ORDER</span></td>
+  <td style="width:64px"><span class="switch switch--on"></span></td>
+  <td style="width:104px;color:#4A5568;font-size:12.5px">3 分钟前</td>
+  <td style="width:108px"><div class="row-actions"><span class="link">编辑</span><span class="link">日志</span><span style="color:#CBD5E0">⋯</span></div></td>
+</tr>
+<tr>
+  <td style="width:36px"><span class="cb"></span></td>
+  <td style="width:72px"><span class="type-tag type-rest">REST</span></td>
+  <td style="width:76px"><span class="m-tag m-post">POST</span></td>
+  <td class="path">/api/pay/create</td>
+  <td class="name">创建支付单</td>
+  <td style="width:132px"><div class="tag-list"><span class="mini-tag">支付</span></div></td>
+  <td style="width:88px"><span class="team-tag team-tag--pay">PAY</span></td>
+  <td style="width:64px"><span class="switch switch--on"></span></td>
+  <td style="width:104px;color:#4A5568;font-size:12.5px">12 分钟前</td>
+  <td style="width:108px"><div class="row-actions"><span class="link">编辑</span><span class="link">日志</span><span style="color:#CBD5E0">⋯</span></div></td>
+</tr>
+<tr>
+  <td style="width:36px"><span class="cb"></span></td>
+  <td style="width:72px"><span class="type-tag type-rest">REST</span></td>
+  <td style="width:76px"><span class="m-tag m-get">GET</span></td>
+  <td class="path">/api/user/info</td>
+  <td class="name">用户信息</td>
+  <td style="width:132px"><div class="tag-list"><span class="mini-tag">用户</span></div></td>
+  <td style="width:88px"><span class="team-tag team-tag--user">USER</span></td>
+  <td style="width:64px"><span class="switch switch--on"></span></td>
+  <td style="width:104px;color:#4A5568;font-size:12.5px">1 小时前</td>
+  <td style="width:108px"><div class="row-actions"><span class="link">编辑</span><span class="link">日志</span><span style="color:#CBD5E0">⋯</span></div></td>
+</tr>
+<tr>
+  <td style="width:36px"><span class="cb"></span></td>
+  <td style="width:72px"><span class="type-tag type-rest">REST</span></td>
+  <td style="width:76px"><span class="m-tag m-post">POST</span></td>
+  <td class="path">/api/refund/apply</td>
+  <td class="name">退款申请</td>
+  <td style="width:132px"><div class="tag-list"><span class="mini-tag">支付</span><span class="mini-tag">异步</span></div></td>
+  <td style="width:88px"><span class="team-tag team-tag--pay">PAY</span></td>
+  <td style="width:64px"><span class="switch switch--on"></span></td>
+  <td style="width:104px;color:#4A5568;font-size:12.5px">2 小时前</td>
+  <td style="width:108px"><div class="row-actions"><span class="link">编辑</span><span class="link">日志</span><span style="color:#CBD5E0">⋯</span></div></td>
+</tr>
+<tr>
+  <td style="width:36px"><span class="cb"></span></td>
+  <td style="width:72px"><span class="type-tag type-rest">REST</span></td>
+  <td style="width:76px"><span class="m-tag m-get">GET</span></td>
+  <td class="path">/api/coupon/list</td>
+  <td class="name">优惠券列表</td>
+  <td style="width:132px"><span class="muted" style="color:#CBD5E0">-</span></td>
+  <td style="width:88px"><span class="team-tag team-tag--user">USER</span></td>
+  <td style="width:64px"><span class="switch switch--on"></span></td>
+  <td style="width:104px;color:#4A5568;font-size:12.5px">昨天 18:42</td>
+  <td style="width:108px"><div class="row-actions"><span class="link">编辑</span><span class="link">日志</span><span style="color:#CBD5E0">⋯</span></div></td>
+</tr>
+<tr style="opacity:.55">
+  <td style="width:36px"><span class="cb"></span></td>
+  <td style="width:72px"><span class="type-tag type-soap">SOAP</span></td>
+  <td style="width:76px"><span class="m-tag m-post">POST</span></td>
+  <td class="path">/ws/notice</td>
+  <td class="name">通知服务</td>
+  <td style="width:132px"><div class="tag-list"><span class="mini-tag">SOAP</span></div></td>
+  <td style="width:88px"><span class="team-tag team-tag--order">ORDER</span></td>
+  <td style="width:64px"><span class="switch"></span></td>
+  <td style="width:104px;color:#B0B7C3;font-size:12.5px">从未调用</td>
+  <td style="width:108px"><div class="row-actions"><span class="link">编辑</span><span class="link">日志</span><span style="color:#CBD5E0">⋯</span></div></td>
+</tr>
+    </tbody>
+  </table>
+  <div class="table-foot"><span>共 12 条 · 每页 20 条</span><div class="pager"><span>‹</span><span class="on">1</span><span>2</span><span>›</span></div></div>
+</div>
+<section class="chat">
+  <div class="chat__head">
+    <div class="chat__avatar"><svg class="icon " viewBox="0 0 24 24" style="fill:currentColor;stroke:none" aria-hidden="true"><path d="M11 3.2l1.8 5 5 1.8-5 1.8-1.8 5-1.8-5-5-1.8 5-1.8z"/><path d="M18.5 14.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z"/></svg></div>
+    <div>
+      <div class="chat__title">MockHub 助手 <span class="ai-badge">Beta</span></div>
+      <div class="chat__sub"><span class="dot"></span>在线 · DeepSeek-V3</div>
+    </div>
+    <div class="chat__actions">
+      <div class="chat__action"><svg class="icon icon--16" viewBox="0 0 24 24"  aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9 9 0 0 0-6.36 2.64L3 8"/><path d="M3 3v5h5"/><path d="M12 8v4l3 2"/></svg></div>
+      <div class="chat__action"><svg class="icon icon--16" viewBox="0 0 24 24"  aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg></div>
+      <div class="chat__action"><svg class="icon icon--16" viewBox="0 0 24 24"  aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></div>
+    </div>
+  </div>
+  <div class="chat__context">
+    <span class="chip">范围：全部团队</span>
+    <span class="chip"><svg class="icon icon--14" viewBox="0 0 24 24"  aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg>以你的权限运行</span>
+    <span style="margin-left:auto"><svg class="icon icon--14" viewBox="0 0 24 24"  aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></svg></span>
+  </div>
+  <div class="chat__body">
+<div class="msg msg--user">
+  <div class="bubble-user">最近 7 天哪个接口被调用得最多？</div>
+</div>
+<div class="msg">
+  <div class="msg__avatar"><svg class="icon " viewBox="0 0 24 24" style="fill:currentColor;stroke:none" aria-hidden="true"><path d="M11 3.2l1.8 5 5 1.8-5 1.8-1.8 5-1.8-5-5-1.8 5-1.8z"/><path d="M18.5 14.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z"/></svg></div>
+  <div class="msg__stack">
+    <div class="bubble-ai">近 7 天调用最多的是 <b>GET /api/order/detail</b>，共 <b>1,284</b> 次，占全部调用的 31%。</div>
+    <div class="ai-card">
+  <div class="ai-card__head"><svg class="icon icon--14" viewBox="0 0 24 24"  aria-hidden="true"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>热门接口 · 近 7 天<span class="right">只读</span></div>
+  <div class="ai-card__body" style="padding:8px 12px">
+<div class="stat-row">
+  <span class="stat-row__idx stat-row__idx--1">1</span>
+  <span class="stat-row__path">GET /api/order/detail</span>
+  <span class="stat-row__num">1,284<span class="stat-row__unit">次</span></span>
+</div>
+<div class="stat-row">
+  <span class="stat-row__idx stat-row__idx--2">2</span>
+  <span class="stat-row__path">POST /api/pay/create</span>
+  <span class="stat-row__num">963<span class="stat-row__unit">次</span></span>
+</div>
+<div class="stat-row">
+  <span class="stat-row__idx stat-row__idx--3">3</span>
+  <span class="stat-row__path">GET /api/user/info</span>
+  <span class="stat-row__num">742<span class="stat-row__unit">次</span></span>
+</div>
+  </div>
+</div>
+  </div>
+</div>
+<div class="msg msg--user">
+  <div class="bubble-user">帮我创建一个 GET /api/user/info 的 Mock，返回姓名、头像、等级</div>
+</div>
+<div class="msg">
+  <div class="msg__avatar"><svg class="icon " viewBox="0 0 24 24" style="fill:currentColor;stroke:none" aria-hidden="true"><path d="M11 3.2l1.8 5 5 1.8-5 1.8-1.8 5-1.8-5-5-1.8 5-1.8z"/><path d="M18.5 14.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z"/></svg></div>
+  <div class="msg__stack">
+    <div class="bubble-ai">已按「用户中心」团队生成草稿，确认后才会创建：</div>
+    <div class="ai-card confirm">
+  <div class="ai-card__head"><svg class="icon icon--14" viewBox="0 0 24 24"  aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>待确认操作 · CREATE_API
+    <span class="countdown"><svg class="icon icon--14" viewBox="0 0 24 24"  aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>11:42</span></div>
+  <div class="ai-card__body" style="padding:10px 12px">
+    <div class="confirm__grid">
+      <div><div class="confirm__k">方法 / 路径</div><div class="confirm__v"><code>GET</code> <code>/api/user/info</code></div></div>
+      <div><div class="confirm__k">名称 / 团队</div><div class="confirm__v">用户信息查询 · <code>USER</code></div></div>
+    </div>
+    <div style="margin-top:8px;border:1px solid #F1F5F9;border-radius:8px;overflow:hidden"><div class="code "><div class="code__row"><span class="ln">1</span><span><span class="tok-p">{</span> <span class="tok-k">"code"</span><span class="tok-p">:</span> <span class="tok-n">0</span><span class="tok-p">,</span></span></div><div class="code__row"><span class="ln">2</span><span><span class="tok-k">"data"</span><span class="tok-p">:</span> <span class="tok-p">{</span> <span class="tok-k">"name"</span><span class="tok-p">:</span> <span class="tok-s">"张三"</span><span class="tok-p">,</span> <span class="tok-k">"level"</span><span class="tok-p">:</span> <span class="tok-s">"VIP"</span> <span class="tok-p">}</span></span></div><div class="code__row"><span class="ln">3</span><span><span class="tok-p">}</span></span></div></div></div>
+    <div class="confirm__note"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg>确认后服务端会重新校验权限并写入，操作记入审计日志。</div>
+    <div class="confirm__actions">
+      <button class="btn btn--sm btn--ghost" style="color:#A3AED0">取消</button>
+      <button class="btn btn--sm btn--ghost">预览</button>
+      <button class="btn btn--sm btn--ghost">编辑</button>
+      <button class="btn btn--sm btn--primary">确认创建</button>
+    </div>
+  </div>
+</div>
+  </div>
+</div>
+  </div>
+  <div class="composer">
+    <div class="composer__box">
+      <div class="composer__input">继续追问，或描述要创建的接口…</div>
+      <div class="composer__foot">
+        <div class="composer__tool"><svg class="icon icon--16" viewBox="0 0 24 24"  aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg></div>
+        <div class="composer__tool"><svg class="icon icon--16" viewBox="0 0 24 24"  aria-hidden="true"><path d="m15 4 5 5L9 20H4v-5Z"/><path d="m14 5 5 5"/></svg></div>
+        <div class="composer__send"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg></div>
+      </div>
+    </div>
+    <div class="composer__tip"><svg class="icon icon--14" viewBox="0 0 24 24"  aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg>AI 生成内容需确认后生效，不会自动保存</div>
+  </div>
+</section></main>
+
+</body>
+</html>

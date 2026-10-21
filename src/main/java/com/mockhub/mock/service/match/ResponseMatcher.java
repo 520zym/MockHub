@@ -175,6 +175,9 @@ public class ResponseMatcher {
         if (path == null || path.isEmpty()) {
             return null;
         }
+        if ("HEADER".equalsIgnoreCase(source)) {
+            return req.getHeader(path);
+        }
         if ("QUERY".equalsIgnoreCase(source)) {
             return req.getParameter(path);
         }

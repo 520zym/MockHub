@@ -174,6 +174,70 @@
           <div class="detail-label">请求体</div>
           <pre class="detail-pre">{{ formatBody(detailRow.requestBody) }}</pre>
         </div>
+
+        <!-- AI 匹配诊断 -->
+        <div v-if="aiStore.capabilities.explain" class="detail-section ai-diagnosis">
+          <div class="ai-diagnosis__head">
+            <div class="detail-label" style="margin: 0">AI 匹配诊断</div>
+            <el-button
+              v-if="!aiExplain"
+              size="small"
+              :loading="aiExplainLoading"
+              @click="runAiExplain"
+            >
+              <el-icon><MagicStick /></el-icon>
+              解释这次匹配
+            </el-button>
+            <el-button v-else size="small" text :loading="aiExplainLoading" @click="runAiExplain">
+              <el-icon><Refresh /></el-icon>
+              重新诊断
+            </el-button>
+          </div>
+
+          <el-alert
+            v-if="aiExplainError"
+            type="error"
+            :closable="false"
+            show-icon
+            :title="aiExplainError"
+            style="margin-top: 10px"
+          />
+
+          <div v-if="aiExplain" class="ai-diagnosis__body">
+            <div class="ai-verdict">
+              <div class="ai-verdict__title">{{ aiExplain.conclusion }}</div>
+              <div class="ai-verdict__desc">{{ aiExplain.summary }}</div>
+            </div>
+            <div class="ai-chain">
+              <div v-for="item in aiExplain.chain" :key="item.index" class="ai-chain__item">
+                <span class="ai-chain__dot" :class="'ai-chain__dot--' + String(item.status).toLowerCase()">
+                  {{ item.index }}
+                </span>
+                <div class="ai-chain__content">
+                  <div class="ai-chain__title">
+                    {{ item.name }}
+                    <span class="ai-chain__badge">{{ statusLabel(item.status) }}</span>
+                  </div>
+                  <div class="ai-chain__desc">{{ item.detail }}</div>
+                </div>
+              </div>
+            </div>
+            <div v-if="aiExplain.suggestion" class="ai-suggestion">
+              <div class="ai-suggestion__title">
+                <el-icon><MagicStick /></el-icon>
+                建议
+              </div>
+              <div class="ai-suggestion__text">{{ aiExplain.suggestion }}</div>
+            </div>
+            <div class="ai-diagnosis__note">
+              诊断基于本次请求快照，不会修改任何配置；如需调整请到接口编辑页。
+            </div>
+          </div>
+
+          <div v-else-if="!aiExplainLoading" class="ai-diagnosis__empty">
+            点击「解释这次匹配」，按当前条件重放本次请求并给出原因。
+          </div>
+        </div>
       </div>
     </el-dialog>
   </div>
@@ -184,6 +248,9 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { getOperationLogs, getRequestLogs } from '@/api/logs'
+import { explainAiMatch } from '@/api/ai'
+import { useAiStore } from '@/stores/ai'
+import { MagicStick, Refresh } from '@element-plus/icons-vue'
 import HttpMethodTag from '@/components/HttpMethodTag.vue'
 
 const route = useRoute()
@@ -207,6 +274,12 @@ const logType = computed(() => {
 // ========== 请求详情对话框 ==========
 const detailVisible = ref(false)
 const detailRow = ref(null)
+
+// ========== AI 匹配诊断 ==========
+const aiStore = useAiStore()
+const aiExplain = ref(null)
+const aiExplainLoading = ref(false)
+const aiExplainError = ref('')
 
 // ========== 表格样式 ==========
 const headerCellStyle = {
@@ -274,6 +347,32 @@ function handleSizeChange() {
 function showDetail(row) {
   detailRow.value = row
   detailVisible.value = true
+  aiExplain.value = null
+  aiExplainError.value = ''
+}
+
+async function runAiExplain() {
+  if (!detailRow.value?.id) return
+  aiExplainLoading.value = true
+  aiExplainError.value = ''
+  try {
+    aiExplain.value = await explainAiMatch({ requestLogId: detailRow.value.id })
+  } catch (e) {
+    aiExplainError.value = e?.msg || '诊断失败，请稍后重试'
+  } finally {
+    aiExplainLoading.value = false
+  }
+}
+
+function statusLabel(status) {
+  const map = {
+    HIT: '命中',
+    MISS: '未命中',
+    SKIP: '未参与',
+    FALLBACK: '兜底候选',
+    FALLBACK_HIT: '兜底命中'
+  }
+  return map[status] || status
 }
 
 // ========== 格式化函数 ==========
@@ -489,6 +588,155 @@ onMounted(async () => {
 }
 
 // ========== 详情对话框 ==========
+.ai-diagnosis {
+  border-top: 1px solid #F1F5F9;
+  padding-top: 16px;
+}
+
+.ai-diagnosis__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ai-diagnosis__body {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ai-verdict {
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.07), rgba(99, 102, 241, 0.04));
+  border: 1px solid #D9F2E7;
+}
+
+.ai-verdict__title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #0F9D6E;
+}
+
+.ai-verdict__desc {
+  font-size: 12px;
+  color: #4A5568;
+  line-height: 1.75;
+  margin-top: 4px;
+}
+
+.ai-chain {
+  display: flex;
+  flex-direction: column;
+}
+
+.ai-chain__item {
+  display: flex;
+  gap: 10px;
+  padding-bottom: 12px;
+}
+
+.ai-chain__item:last-child {
+  padding-bottom: 0;
+}
+
+.ai-chain__dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #CBD5E1;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ai-chain__dot--hit,
+.ai-chain__dot--fallback_hit {
+  background: #10B981;
+}
+
+.ai-chain__dot--fallback {
+  background: #F59E0B;
+}
+
+.ai-chain__content {
+  flex: 1;
+  min-width: 0;
+}
+
+.ai-chain__title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #1B2559;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ai-chain__badge {
+  font-size: 10px;
+  font-weight: 600;
+  color: #A3AED0;
+  background: #F7F8FA;
+  border-radius: 5px;
+  padding: 0 6px;
+  line-height: 17px;
+}
+
+.ai-chain__dot--hit + .ai-chain__content .ai-chain__badge,
+.ai-chain__dot--fallback_hit + .ai-chain__content .ai-chain__badge {
+  color: #0F9D6E;
+  background: #ECFDF5;
+}
+
+.ai-chain__desc {
+  font-size: 11.5px;
+  color: #A3AED0;
+  line-height: 1.7;
+  margin-top: 2px;
+  word-break: break-word;
+}
+
+.ai-suggestion {
+  border: 1px solid #E7E3FD;
+  background: #FCFBFF;
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.ai-suggestion__title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #8B5CF6;
+}
+
+.ai-suggestion__text {
+  font-size: 12px;
+  color: #4A5568;
+  line-height: 1.75;
+  margin-top: 4px;
+}
+
+.ai-diagnosis__note {
+  font-size: 10.5px;
+  color: #CBD5E0;
+}
+
+.ai-diagnosis__empty {
+  font-size: 11.5px;
+  color: #A3AED0;
+  padding: 12px 0 2px;
+}
+
 .detail-content {
   display: flex;
   flex-direction: column;

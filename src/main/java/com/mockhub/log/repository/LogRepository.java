@@ -140,6 +140,18 @@ public class LogRepository {
     }
 
     /**
+     * 按主键查询单条请求日志（AI 诊断用）。
+     *
+     * @param id 日志 ID
+     * @return 日志；不存在返回 null
+     */
+    public RequestLog findRequestLogById(String id) {
+        List<RequestLog> list = jdbcTemplate.query(
+                "SELECT * FROM request_log WHERE id = ?", REQUEST_LOG_ROW_MAPPER, id);
+        return list.isEmpty() ? null : list.get(0);
+    }
+
+    /**
      * 查询请求日志总数
      *
      * @param teamId 团队 ID
