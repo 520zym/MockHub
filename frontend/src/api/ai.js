@@ -18,6 +18,16 @@ export function saveAiSettings(data) {
   return request.put('/ai/settings', data)
 }
 
+/** 内置 AI 供应商预设（仅超管） */
+export function getAiProviders() {
+  return request.get('/ai/providers')
+}
+
+/** 从服务商拉取模型列表（仅超管） */
+export function getAiModels() {
+  return request.get('/ai/models', { timeout: 20000, skipGlobalNetworkError: true })
+}
+
 /** 测试模型连通性（仅超管） */
 export function testAiConnection() {
   return request.post('/ai/settings/test', null, AI_CONFIG)
