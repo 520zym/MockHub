@@ -9,6 +9,7 @@ public class AiSettingsUpdateRequest {
 
     private boolean enabled;
     private String provider;
+    private String vendor;
     private String baseUrl;
     private String model;
     private String apiKey;
@@ -34,6 +35,14 @@ public class AiSettingsUpdateRequest {
 
     public void setProvider(String provider) {
         this.provider = provider;
+    }
+
+    public String getVendor() {
+        return vendor;
+    }
+
+    public void setVendor(String vendor) {
+        this.vendor = vendor;
     }
 
     public String getBaseUrl() {

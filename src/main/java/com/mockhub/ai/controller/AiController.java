@@ -13,6 +13,8 @@ import com.mockhub.ai.model.dto.AiStatusDTO;
 import com.mockhub.ai.service.AiChatService;
 import com.mockhub.ai.service.AiExplainService;
 import com.mockhub.ai.service.AiService;
+import com.mockhub.ai.service.AiModelCatalogService;
+import com.mockhub.ai.service.AiProviderPresets;
 import com.mockhub.ai.service.AiSettingsService;
 import com.mockhub.ai.service.PendingActionService;
 import com.mockhub.common.model.BizException;
@@ -43,16 +45,18 @@ import java.util.UUID;
 public class AiController {
 
     private final AiSettingsService settingsService;
+    private final AiModelCatalogService modelCatalogService;
     private final AiService aiService;
     private final AiExplainService explainService;
     private final AiChatService chatService;
     private final PendingActionService pendingActionService;
     private final LogService logService;
 
-    public AiController(AiSettingsService settingsService, AiService aiService,
-                        AiExplainService explainService, AiChatService chatService,
+    public AiController(AiSettingsService settingsService, AiModelCatalogService modelCatalogService,
+                        AiService aiService, AiExplainService explainService, AiChatService chatService,
                         PendingActionService pendingActionService, LogService logService) {
         this.settingsService = settingsService;
+        this.modelCatalogService = modelCatalogService;
         this.aiService = aiService;
         this.explainService = explainService;
         this.chatService = chatService;
@@ -81,6 +85,20 @@ public class AiController {
         record("UPDATE", "更新 AI 助手配置：enabled=" + saved.isEnabled()
                 + ", provider=" + saved.getProvider() + ", model=" + saved.getModel());
         return Result.ok(saved);
+    }
+
+    /** 内置 AI 供应商预设；仅超管。 */
+    @GetMapping("/providers")
+    public Result<java.util.List<com.mockhub.ai.model.AiProviderPreset>> providers() {
+        checkSuperAdmin();
+        return Result.ok(AiProviderPresets.all());
+    }
+
+    /** 从服务商拉取模型列表；仅超管。 */
+    @GetMapping("/models")
+    public Result<java.util.List<Map<String, Object>>> models() {
+        checkSuperAdmin();
+        return Result.ok(modelCatalogService.listModels());
     }
 
     /** 生成响应体（REST JSON / SOAP XML），由返回体编辑器调用。 */

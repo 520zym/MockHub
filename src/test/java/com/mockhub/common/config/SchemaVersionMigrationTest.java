@@ -96,6 +96,16 @@ class SchemaVersionMigrationTest {
         }
     }
 
+    /** 读取 ai_settings.vendor，验证旧配置推断。 */
+    private String readAiVendor() throws Exception {
+        try (Connection conn = dataSource.getConnection();
+             Statement st = conn.createStatement();
+             ResultSet rs = st.executeQuery("SELECT vendor FROM ai_settings WHERE id = 'default'")) {
+            rs.next();
+            return rs.getString(1);
+        }
+    }
+
     /**
      * 读取 api_response 总行数
      */
@@ -138,7 +148,9 @@ class SchemaVersionMigrationTest {
                         "content_type TEXT, response_body TEXT, delay_ms INTEGER, " +
                         "is_active INTEGER, sort_order INTEGER, created_at TEXT, updated_at TEXT)",
                 "CREATE TABLE schema_version (version INTEGER PRIMARY KEY, " +
-                        "applied_at TEXT DEFAULT (datetime('now')), description TEXT)"
+                        "applied_at TEXT DEFAULT (datetime('now')), description TEXT)",
+                "CREATE TABLE ai_settings (id TEXT PRIMARY KEY, enabled INTEGER, provider TEXT, " +
+                        "base_url TEXT, model TEXT, api_key TEXT)"
         );
     }
 
@@ -161,6 +173,8 @@ class SchemaVersionMigrationTest {
                 // schema_version 也由 schema.sql 建出
                 "CREATE TABLE schema_version (version INTEGER PRIMARY KEY, " +
                         "applied_at TEXT DEFAULT (datetime('now')), description TEXT)",
+                "CREATE TABLE ai_settings (id TEXT PRIMARY KEY, enabled INTEGER, provider TEXT, " +
+                        "base_url TEXT, model TEXT, api_key TEXT)",
                 // 1 条 REST 接口
                 "INSERT INTO api_definition(id, type, response_code, content_type, " +
                         "response_body, delay_ms, created_at, updated_at) VALUES (" +
@@ -182,7 +196,7 @@ class SchemaVersionMigrationTest {
 
         runMigration();
 
-        assertEquals(5, readSchemaVersion(), "全新库应记录 schema_version=5（v1 至 v5）");
+        assertEquals(6, readSchemaVersion(), "全新库应记录 schema_version=6（v1 至 v6）");
         assertTrue(columnExists("api_definition", "description"),
                 "description 列应已存在（全新库 schema.sql 已建出）");
         assertTrue(columnExists("api_definition", "group_id"),
@@ -196,6 +210,17 @@ class SchemaVersionMigrationTest {
         assertTrue(columnExists("api_definition", "response_mode"),
                 "response_mode 列应已被 v5 迁移幂等添加");
         assertEquals(0, countApiResponse(), "全新库无数据，api_response 应为空");
+    }
+
+    @Test
+    void case1b_v6InfersVendorFromExistingBaseUrl() throws Exception {
+        setupFullSchema();
+        execSql("INSERT INTO ai_settings(id, enabled, provider, base_url, model, api_key) " +
+                "VALUES('default', 1, 'OPENAI_COMPATIBLE', 'https://api.deepseek.com/v1', 'deepseek-chat', 'enc:v1:x')");
+
+        runMigration();
+
+        assertEquals("deepseek", readAiVendor(), "旧配置应按 Base URL 推断为 DeepSeek");
     }
 
     // ---------- case2：v1.4.3 发版老库 ----------
@@ -217,7 +242,7 @@ class SchemaVersionMigrationTest {
                 "api_response.body_type 列应在 v4 迁移后存在");
         assertTrue(columnExists("api_definition", "response_mode"),
                 "api_definition.response_mode 列应在 v5 迁移后存在");
-        assertEquals(5, readSchemaVersion(), "迁移完成后 schema_version 应记为 5（v1 至 v5）");
+        assertEquals(6, readSchemaVersion(), "迁移完成后 schema_version 应记为 6（v1 至 v6）");
     }
 
     // ---------- case3：已跑过 soap-mock-enhancement 的本地库 ----------
@@ -240,7 +265,7 @@ class SchemaVersionMigrationTest {
         runMigration();
 
         assertEquals(1, countApiResponse(), "已迁移的数据不应被重复插入");
-        assertEquals(5, readSchemaVersion());
+        assertEquals(6, readSchemaVersion());
     }
 
     // ---------- case4：二次启动幂等 ----------
@@ -255,8 +280,8 @@ class SchemaVersionMigrationTest {
 
         assertEquals(firstRunResponseCount, countApiResponse(),
                 "二次迁移不应新增 api_response 数据");
-        assertEquals(5, readSchemaVersion());
-        assertEquals(5, countSchemaVersionRows(),
-                "schema_version 应有五条记录：version=1 至 5，二次执行不重复写入");
+        assertEquals(6, readSchemaVersion());
+        assertEquals(6, countSchemaVersionRows(),
+                "schema_version 应有六条记录：version=1 至 6，二次执行不重复写入");
     }
 }

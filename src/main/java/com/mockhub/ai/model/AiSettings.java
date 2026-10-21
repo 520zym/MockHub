@@ -16,6 +16,7 @@ public class AiSettings {
     private String id = DEFAULT_ID;
     private boolean enabled;
     private String provider = PROVIDER_OPENAI;
+    private String vendor = "custom";
     private String baseUrl;
     private String model;
     private String apiKey;
@@ -54,6 +55,14 @@ public class AiSettings {
 
     public void setProvider(String provider) {
         this.provider = provider;
+    }
+
+    public String getVendor() {
+        return vendor;
+    }
+
+    public void setVendor(String vendor) {
+        this.vendor = vendor;
     }
 
     public String getBaseUrl() {

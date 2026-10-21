@@ -42,7 +42,9 @@ public class OpenAiCompatibleProvider implements AiProvider {
         if (endpoint == null) {
             throw new BizException(40303, "AI 服务尚未配置 Base URL");
         }
-        if (settings.getApiKey() == null || settings.getApiKey().trim().isEmpty()) {
+        boolean local = "ollama".equalsIgnoreCase(settings.getVendor());
+        String apiKey = settings.getApiKey() == null ? null : settings.getApiKey().trim();
+        if (!local && (apiKey == null || apiKey.isEmpty())) {
             throw new BizException(40303, "AI 服务尚未配置 API Key");
         }
 
@@ -56,7 +58,9 @@ public class OpenAiCompatibleProvider implements AiProvider {
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.set("Authorization", "Bearer " + settings.getApiKey().trim());
+        if (apiKey != null && !apiKey.isEmpty()) {
+            headers.set("Authorization", "Bearer " + apiKey);
+        }
 
         RestTemplate restTemplate = new RestTemplate();
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();

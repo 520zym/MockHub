@@ -295,6 +295,7 @@ CREATE TABLE IF NOT EXISTS ai_settings (
     id               TEXT PRIMARY KEY,
     enabled          INTEGER NOT NULL DEFAULT 0,
     provider         TEXT NOT NULL DEFAULT 'OPENAI_COMPATIBLE',  -- OPENAI_COMPATIBLE / MOCK
+    vendor           TEXT NOT NULL DEFAULT 'CUSTOM',               -- deepseek / kimi / minimax / glm / qwen / openai / ollama / custom
     base_url         TEXT,
     model            TEXT,
     api_key          TEXT,
