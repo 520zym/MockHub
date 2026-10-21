@@ -20,7 +20,9 @@ import org.springframework.stereotype.Service;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -287,6 +289,8 @@ public class PendingActionService {
                 summary.put("name", draft.getDto().getName());
                 summary.put("teamId", draft.getTeamId());
                 result.put("summary", summary);
+                result.put("responseMode", draft.getDto().getResponseMode());
+                result.put("responses", responseSummaries(draft.getDto()));
                 String preview = draft.getDto().getResponseBody() == null ? "" : draft.getDto().getResponseBody();
                 result.put("preview", preview.length() > 8000 ? preview.substring(0, 8000) + "…" : preview);
             } catch (Exception ignored) {
@@ -306,6 +310,14 @@ public class PendingActionService {
                 result.put("summary", summary);
                 String preview = draft.getNewBody() == null ? "" : draft.getNewBody();
                 result.put("preview", preview.length() > 8000 ? preview.substring(0, 8000) + "…" : preview);
+                List<Map<String, Object>> responses = new ArrayList<Map<String, Object>>();
+                Map<String, Object> response = new LinkedHashMap<String, Object>();
+                response.put("name", draft.getResponseName());
+                response.put("active", true);
+                response.put("body", preview);
+                response.put("conditions", null);
+                responses.add(response);
+                result.put("responses", responses);
                 String oldPreview = draft.getOldBody() == null ? "" : draft.getOldBody();
                 result.put("oldPreview", oldPreview.length() > 2000 ? oldPreview.substring(0, 2000) + "…" : oldPreview);
             } catch (Exception ignored) {
@@ -321,10 +333,31 @@ public class PendingActionService {
             summary.put("name", dto.getName());
             summary.put("teamId", dto.getTeamId());
             result.put("summary", summary);
+            result.put("responseMode", dto.getResponseMode());
+            result.put("responses", responseSummaries(dto));
             String preview = dto.getResponseBody() == null ? "" : dto.getResponseBody();
             result.put("preview", preview.length() > 8000 ? preview.substring(0, 8000) + "…" : preview);
         } catch (Exception ignored) {
             // 草稿内容损坏时仍返回状态，确认时会给出明确错误
+        }
+        return result;
+    }
+
+    private List<Map<String, Object>> responseSummaries(ApiDefinitionDTO dto) {
+        List<Map<String, Object>> result = new ArrayList<Map<String, Object>>();
+        if (dto.getResponses() == null) {
+            return result;
+        }
+        for (ApiResponseDTO response : dto.getResponses()) {
+            Map<String, Object> item = new LinkedHashMap<String, Object>();
+            item.put("name", response.getName());
+            item.put("responseCode", response.getResponseCode());
+            item.put("active", response.isActive());
+            item.put("conditions", response.getConditions());
+            item.put("bodyType", response.getBodyType());
+            String body = response.getResponseBody() == null ? "" : response.getResponseBody();
+            item.put("body", body.length() > 2000 ? body.substring(0, 2000) + "…" : body);
+            result.add(item);
         }
         return result;
     }

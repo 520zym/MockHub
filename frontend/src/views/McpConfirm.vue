@@ -46,8 +46,30 @@
           </div>
         </div>
 
-        <div class="mcp-k" style="margin-top: 16px">{{ isUpdate ? '修改后预览' : '响应体预览' }}</div>
-        <pre class="mcp-preview">{{ action.preview || '（无预览）' }}</pre>
+        <template v-if="action.responses && action.responses.length > 1">
+          <div class="mcp-responses-head">
+            <div class="mcp-k">返回体规则（{{ action.responses.length }} 个）</div>
+            <span class="mcp-mode">{{ action.responseMode === 'RANDOM' ? '随机返回' : '条件匹配' }}</span>
+          </div>
+          <div class="mcp-responses">
+            <div v-for="(res, index) in action.responses" :key="index" class="mcp-response">
+              <div class="mcp-response__head">
+                <span class="mcp-response__index">{{ index + 1 }}</span>
+                <span class="mcp-response__name">{{ res.name || '返回体 ' + (index + 1) }}</span>
+                <span class="mcp-response__state" :class="{ 'is-off': res.active === false }">{{ res.active === false ? '未启用' : '启用' }}</span>
+                <code class="mcp-response__code">{{ res.responseCode || 200 }}</code>
+              </div>
+              <div class="mcp-response__conditions" :class="{ 'is-fallback': !res.conditions }">
+                {{ formatConditions(res.conditions) }}
+              </div>
+              <pre class="mcp-response__body">{{ res.body || '（空响应体）' }}</pre>
+            </div>
+          </div>
+        </template>
+        <template v-else>
+          <div class="mcp-k" style="margin-top: 16px">{{ isUpdate ? '修改后预览' : '响应体预览' }}</div>
+          <pre class="mcp-preview">{{ action.preview || '（无预览）' }}</pre>
+        </template>
 
         <el-alert
           v-if="error"
@@ -177,6 +199,18 @@ function teamLabel(teamId) {
   if (!teamId) return '当前团队'
   const team = appStore.teams.find((item) => item.id === teamId)
   return team ? team.name : '当前团队'
+}
+
+function formatConditions(raw) {
+  if (!raw) return '兜底返回（无规则）'
+  try {
+    const data = JSON.parse(raw)
+    const rules = Array.isArray(data.conditions) ? data.conditions : []
+    if (!rules.length) return '兜底返回（无规则）'
+    return rules.map(rule => `${rule.source || 'BODY'} ${rule.path || ''} ${rule.operator || 'EQ'} ${rule.value === undefined ? '' : rule.value}`.trim()).join(' 且 ')
+  } catch (e) {
+    return raw
+  }
 }
 
 function formatTime(value) {
@@ -332,6 +366,102 @@ function formatTime(value) {
   font-family: 'SF Mono', Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
   font-weight: 400;
+}
+
+.mcp-responses-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 16px;
+}
+
+.mcp-mode {
+  font-size: 10.5px;
+  color: #6366F1;
+  background: #EEF0FF;
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+
+.mcp-responses {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.mcp-response {
+  border: 1px solid #F1F5F9;
+  border-radius: 9px;
+  padding: 9px 10px;
+  background: #FCFCFE;
+}
+
+.mcp-response__head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.mcp-response__index {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #EEF0FF;
+  color: #4F46E5;
+  font-size: 9px;
+  display: grid;
+  place-items: center;
+}
+
+.mcp-response__name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #1B2559;
+}
+
+.mcp-response__state {
+  font-size: 9.5px;
+  color: #0F9D6E;
+  background: #ECFDF5;
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+.mcp-response__state.is-off {
+  color: #A3AED0;
+  background: #F1F5F9;
+}
+
+.mcp-response__code {
+  margin-left: auto;
+  font-size: 10px;
+  color: #A3AED0;
+}
+
+.mcp-response__conditions {
+  margin-top: 5px;
+  font-size: 10.5px;
+  color: #4F46E5;
+  background: #F5F6FF;
+  border-radius: 5px;
+  padding: 3px 6px;
+}
+
+.mcp-response__conditions.is-fallback {
+  color: #A3AED0;
+  background: #F7F8FA;
+}
+
+.mcp-response__body {
+  margin: 5px 0 0;
+  max-height: 76px;
+  overflow: auto;
+  font-family: 'SF Mono', Menlo, Monaco, Consolas, monospace;
+  font-size: 10px;
+  color: #4A5568;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .mcp-preview {
