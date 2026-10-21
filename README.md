@@ -103,9 +103,9 @@
 
 | 项 | 说明 |
 | --- | --- |
-| Provider | `OPENAI_COMPATIBLE`（OpenAI / DeepSeek / Ollama 等）或 `MOCK`（内置演示模型，离线可用） |
-| Base URL | 填服务根地址即可，例如 `https://api.deepseek.com/v1`，服务端会自动补 `/chat/completions` |
-| Model | 例如 `deepseek-chat` |
+| 供应商 | DeepSeek / Kimi / MiniMax / 智谱 GLM / 通义千问 / OpenAI / Ollama / 自定义；统一走 OpenAI 兼容协议 |
+| Base URL | 选择供应商后自动填入默认地址，可修改；例如 `https://api.deepseek.com/v1`，服务端自动补 `/chat/completions` |
+| 默认模型 | 每个供应商有内置推荐列表；也可从服务商 `/models` 实时拉取，或手动输入模型 ID |
 | API Key | 仅保存在服务端并以 AES-GCM 密文落库；接口只返回掩码，支持替换与清除 |
 | 能力开关 | 生成响应体 / 生成条件规则 / 解释匹配结果 / 创建接口草稿 |
 | 使用范围 | 所有成员（继承各自权限）或仅超级管理员 |
@@ -116,6 +116,8 @@
 | --- | --- | --- |
 | GET | `/api/ai/status` | 当前用户可见的 AI 状态与能力 |
 | GET / PUT | `/api/ai/settings` | 读取 / 保存配置（仅超管） |
+| GET | `/api/ai/providers` | 内置供应商预设与推荐模型（仅超管） |
+| GET | `/api/ai/models` | 用已保存的 Key 从服务商拉取模型列表（仅超管） |
 | POST | `/api/ai/settings/test` | 连通性测试（仅超管） |
 | POST | `/api/ai/generate-response` | 生成响应体 |
 | POST | `/api/ai/generate-conditions` | 生成条件规则 |
@@ -133,6 +135,7 @@
 - AI 访问继承当前登录用户权限，团队数据保持隔离；生成与对话均校验 `teamId`。
 - 写操作采用两阶段流程：模型只产出草稿，服务端确认时重新校验权限与路径冲突，并写入操作日志。
 - API Key 不返回前端、不写入日志，并以 AES-GCM 密文存储；加密密钥来自 `MOCKHUB_AI_KEY_SECRET` 或 `data/.ai-key`，备份数据库时请一并备份该文件。
+- 模型列表只在选择时使用，不落库；`/models` 不可用或返回非对话模型时，用内置推荐或手动输入兜底。
 - 请求日志与诊断只使用服务端重放的条件评估结果，模型不参与命中判定。
 - 条件来源支持 `BODY / QUERY / HEADER`；Header 名称不区分大小写。
 - MCP 写操作默认走「草稿 + Web 确认」；`apply_api_draft` 与直接写入模式默认关闭。

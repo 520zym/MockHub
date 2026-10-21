@@ -118,7 +118,7 @@ export function page(cfg) {
     '<meta charset="utf-8">',
     '<meta name="viewport" content="width=1440, initial-scale=1">',
     '<title>' + cfg.title + ' · MockHub AI 设计稿</title>',
-    '<link rel="stylesheet" href="assets/mock.css">',
+    '<link rel="stylesheet" href="assets/mock.css">' + (cfg.cssFile ? '\n<link rel="stylesheet" href="' + cfg.cssFile + '">' : ''),
     '<style>' + (cfg.css || '') + '</style>',
     '</head>',
     '<body>',

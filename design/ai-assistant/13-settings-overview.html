@@ -1,0 +1,119 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>全局设置重构 · 设计稿</title>
+<link rel="stylesheet" href="assets/mock.css">
+<link rel="stylesheet" href="assets/settings-v2.css">
+<style>
+.doc__hero{background:radial-gradient(120% 120% at 10% 0%, #EEF0FF 0%, #F6F4FF 42%, #FBFBFE 100%)}
+.gallery{grid-template-columns:repeat(2,1fr);gap:20px}
+.shot__img{aspect-ratio:16/10;object-fit:cover;object-position:top left;width:100%}
+.doc__note{background:#fff;border-radius:12px;padding:16px 18px;font-size:12.5px;color:#4A5568;line-height:1.8}
+.doc__note b{color:#1B2559}
+.ia-grid{margin-bottom:8px}
+</style></head>
+<body class="scrollable" style="overflow:auto">
+<div class="doc">
+  <div class="doc__hero">
+    <span class="doc__eyebrow"><svg class="icon icon--14" viewBox="0 0 24 24"  aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>全局设置 · 信息架构改版</span>
+    <h1 class="doc__title">设置分类 + AI 供应商</h1>
+    <p class="doc__sub">把原来一页到底的全局设置拆成「AI 能力 / 系统」两组，仍然只占侧边栏一个「全局设置」入口。AI 供应商从助手配置里独立出来，先支持 API Key 接入，并为 DeepSeek、Kimi、MiniMax、智谱 GLM 等预填默认地址与模型。</p>
+    <div class="doc__meta"><span>版本 v1.1</span><span>2026-10-21</span><span>4 个页面</span><span>1440 宽基准</span></div>
+  </div>
+  <div class="doc__wrap">
+    <div class="doc__section-title">设计原则</div>
+    <div class="doc__section-desc">分类是为了减少单页长度，不是增加导航层级。</div>
+    <div class="principle-grid">
+      <div class="principle"><div class="principle__num">01</div><div class="principle__title">一个入口，组内分类</div><div class="principle__desc">侧边栏仍然只有「全局设置」；进入后用左侧子导航切换 AI 能力、系统、日志与文件存储。</div></div>
+      <div class="principle"><div class="principle__num">02</div><div class="principle__title">供应商与能力分离</div><div class="principle__desc">供应商负责地址、模型与 Key；助手页只负责启用、能力开关与使用范围。换模型不用再翻一整页。</div></div>
+      <div class="principle"><div class="principle__num">03</div><div class="principle__title">预设但可改</div><div class="principle__desc">选中供应商自动填默认 Base URL 与模型，字段仍可编辑；自定义入口承接任意 OpenAI 兼容服务。</div></div>
+    </div>
+
+    <div style="height:34px"></div>
+    <div class="doc__section-title">分类结构</div>
+    <div class="doc__section-desc">每个分类只承载一类设置；保存按钮留在当前分类底部。</div>
+    <div class="ia-grid">
+      <div class="ia-col"><div class="ia-col__title">AI 能力</div>
+        <div class="ia-item"><b>AI 供应商</b><span class="tag">新</span></div>
+        <div class="ia-item">助手与能力</div>
+        <div class="ia-item">MCP Server</div>
+      </div>
+      <div class="ia-col"><div class="ia-col__title">系统</div>
+        <div class="ia-item">基础设置</div>
+        <div class="ia-item">日志与保留</div>
+        <div class="ia-item">文件存储</div>
+      </div>
+      <div class="ia-col"><div class="ia-col__title">保持不变</div>
+        <div class="ia-item">侧边栏一个入口</div>
+        <div class="ia-item">仅超管可见</div>
+        <div class="ia-item">保存后全局生效</div>
+      </div>
+    </div>
+
+    <div style="height:34px"></div>
+    <div class="doc__section-title">AI 供应商默认值</div>
+    <div class="doc__section-desc">只做 API Key 接入；地址按 2026-10 官方 OpenAI 兼容端点预填，模型可在页面修改。</div>
+    <table class="provider-table">
+      <thead><tr><th>供应商</th><th>默认 API 地址</th><th>默认模型</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td><b>DeepSeek</b></td><td><code>https://api.deepseek.com/v1</code></td><td><code>deepseek-chat</code></td><td>默认选中</td></tr>
+        <tr><td><b>Kimi</b></td><td><code>https://api.moonshot.cn/v1</code></td><td><code>kimi-k3</code></td><td>月之暗面</td></tr>
+        <tr><td><b>MiniMax</b></td><td><code>https://api.minimax.cn/v1</code></td><td><code>MiniMax-M3</code></td><td>国内站；海外站用 api.minimax.io</td></tr>
+        <tr><td><b>智谱 GLM</b></td><td><code>https://open.bigmodel.cn/api/paas/v4</code></td><td><code>glm-4.6</code></td><td>OpenAI 兼容</td></tr>
+        <tr><td><b>通义千问</b></td><td><code>https://dashscope.aliyuncs.com/compatible-mode/v1</code></td><td><code>qwen-plus</code></td><td>DashScope 兼容模式</td></tr>
+        <tr><td><b>OpenAI</b></td><td><code>https://api.openai.com/v1</code></td><td><code>gpt-4o-mini</code></td><td>海外网络</td></tr>
+        <tr><td><b>Ollama</b></td><td><code>http://localhost:11434/v1</code></td><td><code>llama3.1</code></td><td>本地模型</td></tr>
+        <tr><td><b>自定义</b></td><td>手动填写</td><td>手动填写</td><td>任意 OpenAI 兼容服务</td></tr>
+      </tbody>
+    </table>
+
+    <div style="height:34px"></div>
+    <div class="doc__section-title">页面</div>
+    <div class="doc__section-desc">点击缩略图查看原图；每张卡片下方可直接打开对应 HTML。</div>
+    <div class="gallery">
+<div class="shot">
+  <a href="screens/09-settings-provider.png"><img class="shot__img" src="screens/09-settings-provider.png" alt="AI 供应商"></a>
+  <div class="shot__body">
+    <div class="shot__kicker">09 / SCREEN</div>
+    <div class="shot__title">AI 供应商</div>
+    <div class="shot__desc">供应商预设 + 自动填充地址/模型，Key 只显示掩码</div>
+    <div style="margin-top:8px"><a class="link" style="font-size:11.5px" href="09-settings-provider.html">打开 HTML</a></div>
+  </div>
+</div>
+<div class="shot">
+  <a href="screens/10-settings-assistant.png"><img class="shot__img" src="screens/10-settings-assistant.png" alt="助手与能力"></a>
+  <div class="shot__body">
+    <div class="shot__kicker">10 / SCREEN</div>
+    <div class="shot__title">助手与能力</div>
+    <div class="shot__desc">启用、能力开关、使用范围从供应商配置里拆开</div>
+    <div style="margin-top:8px"><a class="link" style="font-size:11.5px" href="10-settings-assistant.html">打开 HTML</a></div>
+  </div>
+</div>
+<div class="shot">
+  <a href="screens/11-settings-mcp.png"><img class="shot__img" src="screens/11-settings-mcp.png" alt="MCP Server"></a>
+  <div class="shot__body">
+    <div class="shot__kicker">11 / SCREEN</div>
+    <div class="shot__title">MCP Server</div>
+    <div class="shot__desc">独立分类承载接入、写策略、工具与 Token</div>
+    <div style="margin-top:8px"><a class="link" style="font-size:11.5px" href="11-settings-mcp.html">打开 HTML</a></div>
+  </div>
+</div>
+<div class="shot">
+  <a href="screens/12-settings-basic.png"><img class="shot__img" src="screens/12-settings-basic.png" alt="系统基础设置"></a>
+  <div class="shot__body">
+    <div class="shot__kicker">12 / SCREEN</div>
+    <div class="shot__title">系统基础设置</div>
+    <div class="shot__desc">服务地址与跨域归入系统分类</div>
+    <div style="margin-top:8px"><a class="link" style="font-size:11.5px" href="12-settings-basic.html">打开 HTML</a></div>
+  </div>
+</div>
+    </div>
+
+    <div style="height:34px"></div>
+    <div class="doc__section-title">交互说明</div>
+    <div class="doc__section-desc">以下行为需要在实现时一起落地。</div>
+    <div class="principle-grid">
+      <div class="doc__note"><b>切换供应商</b><br>点击卡片后自动填入 Base URL 与默认模型，并清空已测试状态；如果当前已填自定义值，弹二次确认再覆盖。</div>
+      <div class="doc__note"><b>Key 与测试</b><br>Key 只写不回显；未保存的新 Key 不能测试，保存后测试按钮才可用；测试结果带耗时与时间。</div>
+      <div class="doc__note"><b>未配置降级</b><br>供应商未填 Key 时，助手页顶部显示「未配置」，编辑器 AI 按钮隐藏；对话入口仍在，但打开后给出配置引导。</div>
+    </div>
+  </div>
+</div>
+</body></html>
