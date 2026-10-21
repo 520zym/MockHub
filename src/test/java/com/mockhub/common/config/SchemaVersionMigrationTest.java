@@ -223,6 +223,19 @@ class SchemaVersionMigrationTest {
         assertEquals("deepseek", readAiVendor(), "旧配置应按 Base URL 推断为 DeepSeek");
     }
 
+    @Test
+    void case1c_v7MissingColumns_areRepairedWithoutVersionChange() throws Exception {
+        setupFullSchema();
+        execSql("INSERT INTO schema_version(version, description) VALUES(7, 'legacy v7')");
+
+        runMigration();
+
+        assertEquals(7, readSchemaVersion(), "兼容补列不应改变 schema_version");
+        assertTrue(columnExists("ai_settings", "vendor"), "旧 v7 库缺 vendor 时应自动补列");
+        assertTrue(columnExists("api_response", "conditions"), "旧库缺 conditions 时应自动补列");
+        assertTrue(columnExists("api_definition", "scenarios"), "旧库缺 scenarios 时应自动补列");
+    }
+
     // ---------- case2：v1.4.3 发版老库 ----------
 
     @Test
