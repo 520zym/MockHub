@@ -67,7 +67,7 @@
             </div>
             <div class="ai-welcome__title">有什么可以帮你？</div>
             <div class="ai-welcome__desc">
-              可以查询调用统计、搜索接口、生成响应体或创建接口草稿。
+              可以查询调用统计、搜索接口、生成响应体、创建接口草稿，或修改当前接口的返回值。
               涉及写操作时会先给你确认卡片。
             </div>
             <div class="ai-welcome__prompts">
@@ -155,10 +155,10 @@
                         <Check v-if="card.status === 'CONFIRMED'" />
                         <EditPen v-else />
                       </el-icon>
-                      <template v-if="card.status === 'CONFIRMED'">已创建 · {{ card.summary.method }} {{ card.summary.path }}</template>
+                      <template v-if="card.status === 'CONFIRMED'">{{ card.actionType === 'UPDATE_API' ? '已更新' : '已创建' }} · {{ card.summary.method }} {{ card.summary.path }}</template>
                       <template v-else-if="card.status === 'CANCELLED'">已取消 · {{ card.summary.method }} {{ card.summary.path }}</template>
                       <template v-else-if="card.status === 'EXPIRED' || cardExpired(card)">已过期 · 草稿已失效</template>
-                      <template v-else>待确认操作 · {{ card.actionType }}</template>
+                      <template v-else>待确认操作 · {{ card.actionType === 'UPDATE_API' ? '修改接口' : '创建接口' }}</template>
                       <span v-if="card.status === 'PENDING' && !cardExpired(card)" class="ai-countdown">
                         <el-icon><Clock /></el-icon>
                         {{ expiryText(card) }}
@@ -178,6 +178,7 @@
                           <div class="ai-confirm__v">{{ card.summary.name }} · {{ teamLabel(card.summary.teamId) }}</div>
                         </div>
                       </div>
+                      <div class="ai-confirm__k" style="margin: 10px 0 6px">{{ card.actionType === 'UPDATE_API' ? '修改后预览' : '响应体预览' }}</div>
                       <pre class="ai-confirm__preview">{{ previewText(card) }}</pre>
                       <div class="ai-confirm__note">
                         <el-icon><Lock /></el-icon>
@@ -186,7 +187,7 @@
                       <div class="ai-confirm__actions">
                         <template v-if="card.status === 'PENDING' && !cardExpired(card)">
                           <el-button text size="small" @click="cancelCard(card)">取消</el-button>
-                          <el-button size="small" type="primary" :loading="card.busy" @click="confirmCard(card)">确认创建</el-button>
+                          <el-button size="small" type="primary" :loading="card.busy" @click="confirmCard(card)">{{ card.actionType === 'UPDATE_API' ? '确认修改' : '确认创建' }}</el-button>
                         </template>
                         <template v-else-if="card.status === 'CONFIRMED' && card.apiId">
                           <el-button size="small" type="primary" plain @click="openApi(card.apiId)">
@@ -263,7 +264,7 @@
 
 <script setup>
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   MagicStick, Close, Delete, Lock, Search, DataAnalysis,
@@ -279,6 +280,7 @@ const aiStore = useAiStore()
 const appStore = useAppStore()
 const userStore = useUserStore()
 const router = useRouter()
+const route = useRoute()
 
 const open = ref(false)
 const input = ref('')
@@ -291,6 +293,7 @@ const scopeTeamId = ref('__ALL__')
 const assistantTeams = ref([])
 const teamsLoading = ref(false)
 const teamsError = ref('')
+const lastApiId = ref('')
 
 const quickPrompts = [
   '最近 7 天哪个接口调用最多？',
@@ -307,6 +310,11 @@ const teamId = computed(() => {
 const teamName = computed(() => {
   if (!teamId.value) return userStore.isSuperAdmin ? '全部团队' : ''
   return assistantTeams.value.find((team) => team.id === teamId.value)?.name || ''
+})
+
+const contextApiId = computed(() => {
+  if (route.name === 'ApiEdit' && route.params.id) return route.params.id
+  return lastApiId.value || ''
 })
 
 async function loadAssistantTeams(force) {
@@ -399,6 +407,7 @@ async function send(preset) {
     const res = await aiChat({
       teamId: teamId.value,
       message: content,
+      contextApiId: contextApiId.value || undefined,
       history
     })
     messages.value.push({
@@ -428,7 +437,8 @@ async function confirmCard(card) {
     const res = await confirmAiAction(card.actionId)
     card.status = 'CONFIRMED'
     card.apiId = res.apiId
-    ElMessage.success('接口已创建')
+    lastApiId.value = res.apiId || card.apiId || ''
+    ElMessage.success(card.actionType === 'UPDATE_API' ? '接口已更新' : '接口已创建')
   } catch (e) {
     ElMessage.error(e?.msg || '确认失败，请稍后重试')
     if (e?.code === 40901) {
@@ -455,6 +465,7 @@ async function cancelCard(card) {
 
 function openApi(apiId) {
   if (!apiId) return
+  lastApiId.value = apiId
   open.value = false
   router.push('/apis/' + apiId + '/edit')
 }

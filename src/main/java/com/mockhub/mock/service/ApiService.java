@@ -77,6 +77,16 @@ public interface ApiService {
     ApiDefinition update(String id, ApiDefinitionDTO dto);
 
     /**
+     * 只更新某个返回体的正文（AI 修改已有接口时使用）。
+     *
+     * @param apiId      接口 ID
+     * @param responseId 返回体 ID
+     * @param body       新正文
+     * @return 更新后的接口定义
+     */
+    ApiDefinition updateResponseBody(String apiId, String responseId, String body);
+
+    /**
      * 删除接口
      *
      * @param id 接口 ID

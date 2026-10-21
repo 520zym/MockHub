@@ -83,6 +83,15 @@ public class ApiResponseRepository {
     }
 
     /**
+     * 只更新返回体正文；用于 AI 修改已有接口时保留条件、文件元数据与排序。
+     */
+    public void updateBody(String responseId, String responseBody, String updatedAt) {
+        jdbcTemplate.update(
+                "UPDATE api_response SET response_body = ?, updated_at = ? WHERE id = ?",
+                responseBody, updatedAt, responseId);
+    }
+
+    /**
      * 查询接口的所有返回体（含 response_body），按 soap_operation_name 和 sort_order 排序
      *
      * @param apiId 接口 ID

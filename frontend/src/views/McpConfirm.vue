@@ -22,7 +22,7 @@
             <span class="mcp-status" :class="statusClass">{{ statusLabel }}</span>
           </div>
           <div class="mcp-card__desc">
-            {{ action.actionType === 'CREATE_API' ? 'AI 生成的接口草稿，确认后才会写入 MockHub' : action.actionType }}
+            {{ isUpdate ? 'AI 生成的接口修改草稿，确认后才会更新 MockHub' : (action.actionType === 'CREATE_API' ? 'AI 生成的接口草稿，确认后才会写入 MockHub' : action.actionType) }}
             <template v-if="action.expiresAt"> · 有效至 {{ formatTime(action.expiresAt) }}</template>
           </div>
         </div>
@@ -46,7 +46,7 @@
           </div>
         </div>
 
-        <div class="mcp-k" style="margin-top: 16px">响应体预览</div>
+        <div class="mcp-k" style="margin-top: 16px">{{ isUpdate ? '修改后预览' : '响应体预览' }}</div>
         <pre class="mcp-preview">{{ action.preview || '（无预览）' }}</pre>
 
         <el-alert
@@ -61,7 +61,7 @@
         <div class="mcp-actions">
           <template v-if="action.status === 'PENDING' && !expired">
             <el-button :loading="cancelling" @click="handleCancel">取消草稿</el-button>
-            <el-button type="primary" :loading="confirming" @click="handleConfirm">确认创建</el-button>
+            <el-button type="primary" :loading="confirming" @click="handleConfirm">{{ isUpdate ? '确认修改' : '确认创建' }}</el-button>
           </template>
           <template v-else-if="action.status === 'CONFIRMED' && action.resultApiId">
             <el-button type="primary" plain @click="openApi">查看接口</el-button>
@@ -95,6 +95,8 @@ const cancelling = ref(false)
 const action = ref(null)
 const error = ref('')
 
+const isUpdate = computed(() => action.value?.actionType === 'UPDATE_API')
+
 const expired = computed(() => {
   if (!action.value?.expiresAt) return false
   return new Date(action.value.expiresAt).getTime() < Date.now()
@@ -102,7 +104,7 @@ const expired = computed(() => {
 
 const statusLabel = computed(() => {
   if (!action.value) return ''
-  if (action.value.status === 'CONFIRMED') return '已创建'
+  if (action.value.status === 'CONFIRMED') return isUpdate.value ? '已更新' : '已创建'
   if (action.value.status === 'CANCELLED') return '已取消'
   if (action.value.status === 'EXPIRED' || expired.value) return '已过期'
   return '待确认'
@@ -139,7 +141,7 @@ async function handleConfirm() {
   error.value = ''
   try {
     const result = await confirmAiAction(action.value.id)
-    ElMessage.success('接口已创建')
+    ElMessage.success(isUpdate.value ? '接口已更新' : '接口已创建')
     action.value.status = 'CONFIRMED'
     action.value.resultApiId = result.apiId
     action.value.summary = { ...action.value.summary, ...result }
