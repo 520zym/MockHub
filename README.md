@@ -21,13 +21,21 @@
 |:---:|:---:|
 | ![团队管理](screenshots/team-manage.png) | ![用户管理](screenshots/user-manage.png) |
 
-| 日志 | 全局设置 |
+| 日志 | 全局设置 · AI 供应商 |
 |:---:|:---:|
 | ![日志](screenshots/logs.png) | ![全局设置](screenshots/settings.png) |
 
-| 动态变量 |
-|:---:|
-| ![动态变量](screenshots/dynamic-variables.png) |
+| 动态变量 | AI 模型选择 |
+|:---:|:---:|
+| ![动态变量](screenshots/dynamic-variables.png) | ![模型选择](screenshots/ai-model-picker.png) |
+
+| AI 助手 · 对话 | AI 助手 · 会话历史 |
+|:---:|:---:|
+| ![AI 助手](screenshots/ai-assistant.png) | ![会话历史](screenshots/ai-history.png) |
+
+| MCP Server 配置 | MCP 多返回体确认 |
+|:---:|:---:|
+| ![MCP 配置](screenshots/mcp-settings.png) | ![MCP 确认](screenshots/mcp-confirm.png) |
 
 ---
 
@@ -43,7 +51,7 @@
 - [x] **动态变量** -- 内置 `{{timestamp}}`、`{{uuid}}`、`{{date}}`、`{{datetime}}`、`{{random_int}}`；编辑器提供「插入变量」按钮和 `{{` 智能补全
 - [x] **自定义动态变量** -- 团队级维护命名值集合，支持按分组组织；响应体 `{{pet}}` 从全部值随机挑、`{{pet.mammal}}` 从指定分组随机挑；解析失败 fail-fast 返回统一错误格式
 - [x] **多返回体** -- 单个接口可配置多个响应体，支持切换活跃返回体
-- [x] **多场景响应** -- 多个返回体可配置匹配条件（Query / JSON Body / SOAP XML Body），命中即返回，未命中走无规则兜底
+- [x] **多场景响应** -- 多个返回体可配置匹配条件（Query / JSON Body / Header / SOAP XML Body），命中即返回，未命中走无规则兜底
 - [x] **随机返回** -- REST 接口及每个 SOAP Operation 可独立选择等概率随机模式，仅从启用的返回体中选择，无需配置条件与兜底
 - [x] **文件服务器模拟** -- 免登录上传、固定 fileId 下载链接、Range 续传，以及按团队管理、检索、标签、统计、预览和批量删除
 - [x] **接口描述** -- 支持富文本描述接口用途和说明
@@ -62,6 +70,10 @@
 - [x] **AI 生成条件规则** -- 自然语言转成现有 conditions 结构，逐条勾选、字段校验
 - [x] **AI 匹配诊断** -- 请求日志里重放命中链路，解释为什么命中 / 未命中
 - [x] **对话助手** -- 右下角入口，支持统计问答、搜索接口、创建/修改接口草稿（确认卡片）与会话历史
+- [x] **AI 供应商与模型** -- 8 个供应商预设、默认地址/模型、从 `/models` 实时拉取、手动输入
+- [x] **AI 会话历史** -- 会话持久化，可查看历史、继续对话，并恢复确认卡片状态
+- [x] **MCP Server** -- Streamable HTTP JSON-RPC、Token、工具开关、多返回体草稿与修改接口
+- [x] **旧版本自动升级** -- 1.4.6 起自动建表、补列、补索引，无需手工改数据库
 
 ### 使用体验
 
@@ -77,11 +89,11 @@
 
 - [ ] **Swagger / OpenAPI 导入** -- 从 Swagger JSON/YAML 一键导入接口定义，把"批量创建 Mock"的成本从 N 分钟压到 0 秒
 - [ ] **复制为 curl** -- 列表行一键复制 curl 命令，前后端联调对齐请求零摩擦
-- [x] **AI 辅助模块（可选）** -- 已在 v1.5 落地生成、诊断与对话能力，默认关闭；未配置时不影响离线使用
+- [x] **AI 辅助模块（可选）** -- 已在 1.4.6 落地生成、诊断、对话与修改接口能力，默认关闭；未配置时不影响离线使用
     - [x] 根据接口 path/method 生成响应体示例（REST JSON / SOAP XML）
     - [x] 自然语言描述自动转换为多场景匹配条件
     - [ ] cURL 命令一键转换为接口定义（规划中）
-    - [ ] MockHub MCP Server（Phase 3，规划中）
+    - [x] MockHub MCP Server（Streamable HTTP + Token + 多返回体）
 
 > 欢迎提交 [Issue](../../issues) 反馈需求或 Bug！
 
@@ -89,7 +101,7 @@
 
 ## AI 助手（Beta）
 
-> 对应 Issue #6 的实现。默认关闭，超级管理员可在「全局设置 → AI 助手」开启。
+> 对应 Issue #6 的实现。默认关闭，超级管理员可在「全局设置 → AI 供应商」配置并开启。
 
 ### 能力
 
@@ -99,6 +111,16 @@
 - **对话助手**：右下角悬浮入口，支持查询近 7 天调用排行、搜索接口、创建接口草稿、修改已有接口的返回值，并可查看/继续历史会话；超管可选择「全部团队」。写操作只生成 `PENDING` 草稿，用户点「确认创建 / 确认修改」后才落库。
 - **MCP Server**：把检索、统计、生成与草稿能力开放给 Claude / Cursor / Codex 等客户端；Token 鉴权、工具开关、写策略与 Web 确认页均可在「全局设置 → MCP Server」配置。
 
+### 界面
+
+| AI 供应商 | 模型选择 |
+|:---:|:---:|
+| ![AI 供应商](screenshots/settings.png) | ![模型选择](screenshots/ai-model-picker.png) |
+
+| AI 助手 · 会话历史 | MCP 多返回体确认 |
+|:---:|:---:|
+| ![AI 助手](screenshots/ai-assistant.png) | ![MCP 确认](screenshots/mcp-confirm.png) |
+
 ### 配置
 
 | 项 | 说明 |
@@ -107,7 +129,7 @@
 | Base URL | 选择供应商后自动填入默认地址，可修改；例如 `https://api.deepseek.com/v1`，服务端自动补 `/chat/completions` |
 | 默认模型 | 每个供应商有内置推荐列表；也可从服务商 `/models` 实时拉取，或手动输入模型 ID |
 | API Key | 仅保存在服务端并以 AES-GCM 密文落库；接口只返回掩码，支持替换与清除 |
-| 能力开关 | 生成响应体 / 生成条件规则 / 解释匹配结果 / 创建接口草稿 |
+| 能力开关 | 生成响应体 / 生成条件规则 / 解释匹配结果 / 创建、修改接口草稿 |
 | 使用范围 | 所有成员（继承各自权限）或仅超级管理员 |
 
 ### 接口
@@ -142,6 +164,35 @@
 - 条件来源支持 `BODY / QUERY / HEADER`；Header 名称不区分大小写。
 - MCP 写操作默认走「草稿 + Web 确认」；`apply_api_draft` 与直接写入模式默认关闭。
 - MCP 端点仅支持 Streamable HTTP 的 JSON 响应，不提供 stdio 或旧版 HTTP+SSE。
+
+---
+
+### MCP 工具
+
+| 工具 | 说明 |
+| --- | --- |
+| `mockhub.search_apis` | 按关键字搜索当前用户可见接口 |
+| `mockhub.get_api_detail` | 读取接口、返回体与条件规则 |
+| `mockhub.get_api_stats` | 查询窗口内调用总览与 Top 接口 |
+| `mockhub.create_api_draft` | 创建接口草稿，支持 `responses` 多返回体与条件规则；返回 `actionId` 与 `confirmUrl` |
+| `mockhub.update_api_draft` | 修改已有接口，支持整体替换 `responses` 或 `addResponses` 追加返回体 |
+| `mockhub.apply_api_draft` | 应用草稿（仅在 DIRECT 写策略且工具开启时可用） |
+| `mockhub.generate_response_body` | 生成 JSON / XML 响应体 |
+| `mockhub.generate_conditions` | 生成 Body / Query / Header 条件 |
+| `mockhub.explain_match_result` | 解释一次请求的命中链路 |
+
+客户端配置示例（Cursor / Claude Desktop 的 `mcpServers` 片段）：
+
+```json
+{
+  "mcpServers": {
+    "mockhub": {
+      "url": "http://<host>:18080/mcp",
+      "headers": { "Authorization": "Bearer mhk_xxxxxxxx" }
+    }
+  }
+}
+```
 
 ---
 
@@ -394,30 +445,3 @@ mockhub-service.exe uninstall # 卸载服务
 ## 开源协议
 
 [MIT License](LICENSE)
-
-### MCP 工具
-
-| 工具 | 说明 |
-| --- | --- |
-| `mockhub.search_apis` | 按关键字搜索当前用户可见接口 |
-| `mockhub.get_api_detail` | 读取接口、返回体与条件规则 |
-| `mockhub.get_api_stats` | 查询窗口内调用总览与 Top 接口 |
-| `mockhub.create_api_draft` | 创建接口草稿，支持 `responses` 多返回体与条件规则；返回 `actionId` 与 `confirmUrl` |
-| `mockhub.update_api_draft` | 修改已有接口，支持整体替换 `responses` 或 `addResponses` 追加返回体 |
-| `mockhub.apply_api_draft` | 应用草稿（仅在 DIRECT 写策略且工具开启时可用） |
-| `mockhub.generate_response_body` | 生成 JSON / XML 响应体 |
-| `mockhub.generate_conditions` | 生成 Body / Query / Header 条件 |
-| `mockhub.explain_match_result` | 解释一次请求的命中链路 |
-
-客户端配置示例（Cursor / Claude Desktop 的 `mcpServers` 片段）：
-
-```json
-{
-  "mcpServers": {
-    "mockhub": {
-      "url": "http://<host>:18080/mcp",
-      "headers": { "Authorization": "Bearer mhk_xxxxxxxx" }
-    }
-  }
-}
-```
