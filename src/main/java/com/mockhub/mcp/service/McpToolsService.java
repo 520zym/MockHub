@@ -2,6 +2,7 @@ package com.mockhub.mcp.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mockhub.ai.model.dto.AiApiFullUpdateDraft;
 import com.mockhub.ai.model.dto.AiConditionsResult;
 import com.mockhub.ai.model.dto.AiExplainResult;
 import com.mockhub.ai.model.dto.AiGenerateRequest;
@@ -19,6 +20,8 @@ import com.mockhub.mock.model.dto.ApiDefinitionVO;
 import com.mockhub.mock.model.dto.ApiResponseDTO;
 import com.mockhub.mock.model.entity.ApiResponse;
 import com.mockhub.mock.service.ApiService;
+import com.mockhub.mock.service.match.ResponseValidator;
+import com.mockhub.mock.model.entity.Tag;
 import com.mockhub.stats.model.dto.StatsOverviewVO;
 import com.mockhub.stats.model.dto.TopApiVO;
 import com.mockhub.stats.service.StatsService;
@@ -79,6 +82,9 @@ public class McpToolsService {
         }
         if (McpToolRegistry.CREATE_API_DRAFT.equals(name)) {
             return createDraft(args);
+        }
+        if (McpToolRegistry.UPDATE_API_DRAFT.equals(name)) {
+            return updateDraft(args);
         }
         if (McpToolRegistry.APPLY_API_DRAFT.equals(name)) {
             return applyDraft(args);
@@ -141,6 +147,9 @@ public class McpToolsService {
                 item.put("responseCode", response.getResponseCode());
                 item.put("contentType", response.getContentType());
                 item.put("active", response.isActive());
+                item.put("bodyType", response.getBodyType());
+                item.put("sortOrder", response.getSortOrder());
+                item.put("delayMs", response.getDelayMs());
                 item.put("conditions", response.getConditions());
                 item.put("body", truncate(response.getResponseBody(), 2000));
                 responses.add(item);
@@ -202,10 +211,14 @@ public class McpToolsService {
         if (contentType.isEmpty()) {
             contentType = "application/json";
         }
+        String responseMode = normalizeResponseMode(text(args, "responseMode"));
         String conflict = apiService.findConflictingApiName(teamId, method, path, null);
         if (conflict != null) {
             throw new BizException(40401, "该团队已存在相同路径与方法的接口：" + conflict);
         }
+
+        List<ApiResponseDTO> responses = parseResponses(args, body, contentType, "成功响应");
+        validateResponses(responses, responseMode);
 
         ApiDefinitionDTO dto = new ApiDefinitionDTO();
         dto.setTeamId(teamId);
@@ -216,24 +229,100 @@ public class McpToolsService {
         dto.setPath(path);
         dto.setResponseCode(200);
         dto.setContentType(contentType);
-        dto.setResponseBody(body);
+        dto.setResponseBody(responses.get(0).getResponseBody());
         dto.setEnabled(true);
-        dto.setResponseMode("CONDITION");
-        ApiResponseDTO first = new ApiResponseDTO();
-        first.setName("成功响应");
-        first.setResponseCode(200);
-        first.setContentType(contentType);
-        first.setResponseBody(body);
-        first.setBodyType("TEXT");
-        first.setActive(true);
-        first.setSortOrder(0);
-        dto.setResponses(Collections.singletonList(first));
+        dto.setResponseMode(responseMode);
+        dto.setResponses(responses);
 
         Map<String, Object> action = pendingActionService.createApiDraft(dto, method + " " + path);
         String actionId = String.valueOf(action.get("actionId"));
         Map<String, Object> result = new LinkedHashMap<String, Object>(action);
         result.put("confirmUrl", confirmUrl(actionId));
-        result.put("preview", truncate(body, 1200));
+        result.put("responseCount", responses.size());
+        result.put("preview", truncate(responses.get(0).getResponseBody(), 8000));
+        return result;
+    }
+
+    private Object updateDraft(JsonNode args) {
+        String apiId = required(args, "apiId");
+        ApiDefinitionDetailVO detail = apiService.getById(apiId);
+        permissionChecker.checkTeamAccess(detail.getTeamId());
+
+        ApiDefinitionDTO dto = new ApiDefinitionDTO();
+        dto.setTeamId(detail.getTeamId());
+        dto.setGroupId(detail.getGroupId());
+        dto.setType(detail.getType());
+        dto.setName(detail.getName());
+        dto.setDescription(detail.getDescription());
+        dto.setMethod(detail.getMethod());
+        dto.setPath(detail.getPath());
+        dto.setResponseCode(detail.getResponseCode());
+        dto.setContentType(detail.getContentType());
+        dto.setResponseBody(detail.getResponseBody());
+        dto.setDelayMs(detail.getDelayMs());
+        dto.setEnabled(detail.isEnabled());
+        dto.setResponseMode(normalizeResponseMode(detail.getResponseMode()));
+        if (detail.getGlobalHeaderOverrides() != null && !detail.getGlobalHeaderOverrides().trim().isEmpty()) {
+            try {
+                dto.setGlobalHeaderOverrides(objectMapper.readValue(detail.getGlobalHeaderOverrides(), Map.class));
+            } catch (Exception ignored) {
+                // 老数据格式异常时不阻塞修改
+            }
+        }
+        dto.setSoapConfig(detail.getSoapConfig());
+        List<String> tagIds = new ArrayList<String>();
+        if (detail.getTags() != null) {
+            for (Tag tag : detail.getTags()) {
+                tagIds.add(tag.getId());
+            }
+        }
+        dto.setTagIds(tagIds);
+
+        if (args.has("name") && !text(args, "name").isEmpty()) dto.setName(text(args, "name"));
+        if (args.has("description")) dto.setDescription(text(args, "description"));
+        if (args.has("method") && !text(args, "method").isEmpty()) dto.setMethod(text(args, "method").toUpperCase());
+        if (args.has("path") && !text(args, "path").isEmpty()) {
+            String path = text(args, "path");
+            dto.setPath(path.startsWith("/") ? path : "/" + path);
+        }
+        if (args.has("enabled")) dto.setEnabled(args.get("enabled").asBoolean(dto.isEnabled()));
+        if (args.has("responseMode") && !text(args, "responseMode").isEmpty()) {
+            dto.setResponseMode(normalizeResponseMode(text(args, "responseMode")));
+        }
+
+        List<ApiResponseDTO> responses;
+        if (args.has("responses") && args.get("responses").isArray() && args.get("responses").size() > 0) {
+            responses = parseResponses(args, dto.getResponseBody(), dto.getContentType(), "响应体");
+        } else {
+            responses = existingResponseDtos(detail);
+            if (args.has("addResponses") && args.get("addResponses").isArray()) {
+                List<ApiResponseDTO> added = parseResponseArray(args.get("addResponses"), dto.getResponseBody(), dto.getContentType(), responses.size());
+                responses.addAll(added);
+            }
+        }
+        if (responses.isEmpty()) {
+            throw new BizException(40001, "至少需要一个返回体");
+        }
+        validateResponses(responses, dto.getResponseMode());
+        dto.setResponses(responses);
+        dto.setResponseBody(responses.get(0).getResponseBody());
+
+        String conflict = apiService.findConflictingApiName(dto.getTeamId(), dto.getMethod(), dto.getPath(), apiId);
+        if (conflict != null) {
+            throw new BizException(40401, "该团队已存在相同路径与方法的接口：" + conflict);
+        }
+
+        AiApiFullUpdateDraft draft = new AiApiFullUpdateDraft();
+        draft.setApiId(apiId);
+        draft.setTeamId(detail.getTeamId());
+        draft.setDto(dto);
+        Map<String, Object> action = pendingActionService.createApiFullUpdateDraft(
+                draft, dto.getMethod() + " " + dto.getPath());
+        String actionId = String.valueOf(action.get("actionId"));
+        Map<String, Object> result = new LinkedHashMap<String, Object>(action);
+        result.put("confirmUrl", confirmUrl(actionId));
+        result.put("responseCount", responses.size());
+        result.put("preview", truncate(dto.getResponseBody(), 8000));
         return result;
     }
 
@@ -277,6 +366,93 @@ public class McpToolsService {
         String requestLogId = required(args, "requestLogId");
         AiExplainResult result = explainService.explain(requestLogId);
         return result;
+    }
+
+    private List<ApiResponseDTO> parseResponses(JsonNode args, String defaultBody, String defaultContentType, String defaultName) {
+        if (args.has("responses") && args.get("responses").isArray() && args.get("responses").size() > 0) {
+            return parseResponseArray(args.get("responses"), defaultBody, defaultContentType, 0);
+        }
+        ApiResponseDTO single = new ApiResponseDTO();
+        single.setName(defaultName);
+        single.setResponseCode(200);
+        single.setContentType(defaultContentType);
+        single.setResponseBody(defaultBody);
+        single.setBodyType("TEXT");
+        single.setActive(true);
+        single.setSortOrder(0);
+        return new ArrayList<ApiResponseDTO>(Collections.singletonList(single));
+    }
+
+    private List<ApiResponseDTO> parseResponseArray(JsonNode array, String defaultBody, String defaultContentType, int offset) {
+        List<ApiResponseDTO> result = new ArrayList<ApiResponseDTO>();
+        for (int i = 0; i < array.size(); i++) {
+            JsonNode item = array.get(i);
+            if (!item.isObject()) {
+                throw new BizException(40001, "responses[" + i + "] 必须是对象");
+            }
+            ApiResponseDTO response = new ApiResponseDTO();
+            response.setName(text(item, "name").isEmpty() ? "响应体 " + (offset + i + 1) : text(item, "name"));
+            response.setResponseCode(item.path("responseCode").asInt(200));
+            response.setContentType(text(item, "contentType").isEmpty() ? defaultContentType : text(item, "contentType"));
+            response.setResponseBody(text(item, "responseBody").isEmpty() ? defaultBody : text(item, "responseBody"));
+            response.setBodyType(text(item, "bodyType").isEmpty() ? "TEXT" : text(item, "bodyType").toUpperCase());
+            response.setActive(!item.has("active") || item.get("active").asBoolean(true));
+            response.setSortOrder(item.has("sortOrder") ? item.get("sortOrder").asInt(offset + i) : offset + i);
+            response.setDelayMs(item.path("delayMs").asInt(0));
+            JsonNode conditions = item.get("conditions");
+            if (conditions != null && !conditions.isNull()) {
+                response.setConditions(conditions.isTextual() ? conditions.asText() : conditions.toString());
+            }
+            result.add(response);
+        }
+        boolean hasActive = false;
+        for (ApiResponseDTO response : result) {
+            if (response.isActive()) {
+                hasActive = true;
+                break;
+            }
+        }
+        if (!hasActive && !result.isEmpty()) {
+            result.get(0).setActive(true);
+        }
+        return result;
+    }
+
+    private List<ApiResponseDTO> existingResponseDtos(ApiDefinitionDetailVO detail) {
+        List<ApiResponseDTO> result = new ArrayList<ApiResponseDTO>();
+        if (detail.getResponses() == null) {
+            return result;
+        }
+        for (ApiResponse response : detail.getResponses()) {
+            ApiResponseDTO dto = new ApiResponseDTO();
+            dto.setId(response.getId());
+            dto.setSoapOperationName(response.getSoapOperationName());
+            dto.setName(response.getName());
+            dto.setResponseCode(response.getResponseCode());
+            dto.setContentType(response.getContentType());
+            dto.setResponseBody(response.getResponseBody());
+            dto.setBodyType(response.getBodyType());
+            dto.setFileName(response.getFileName());
+            dto.setFilePath(response.getFilePath());
+            dto.setDownloadName(response.getDownloadName());
+            dto.setFileSize(response.getFileSize());
+            dto.setDelayMs(response.getDelayMs());
+            dto.setActive(response.isActive());
+            dto.setSortOrder(response.getSortOrder());
+            dto.setConditions(response.getConditions());
+            result.add(dto);
+        }
+        return result;
+    }
+
+    private void validateResponses(List<ApiResponseDTO> responses, String responseMode) {
+        Map<String, String> modes = new LinkedHashMap<String, String>();
+        modes.put("__REST__", responseMode);
+        ResponseValidator.validateDtos(responses, modes);
+    }
+
+    private String normalizeResponseMode(String mode) {
+        return "RANDOM".equalsIgnoreCase(mode) ? "RANDOM" : "CONDITION";
     }
 
     private String getWriteMode() {

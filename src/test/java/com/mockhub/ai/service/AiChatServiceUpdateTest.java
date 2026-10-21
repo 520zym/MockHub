@@ -1,6 +1,7 @@
 package com.mockhub.ai.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mockhub.ai.model.AiConversation;
 import com.mockhub.ai.model.AiSettings;
 import com.mockhub.ai.model.dto.AiChatRequest;
 import com.mockhub.ai.model.dto.AiChatResponse;
@@ -9,10 +10,15 @@ import com.mockhub.mock.model.dto.ApiDefinitionDetailVO;
 import com.mockhub.mock.model.entity.ApiResponse;
 import com.mockhub.mock.service.ApiService;
 import com.mockhub.stats.service.StatsService;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,12 +34,26 @@ import static org.mockito.Mockito.when;
 /** 对话助手识别并生成「修改已有接口」草稿。 */
 class AiChatServiceUpdateTest {
 
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
+    }
+
     @Test
     void mockProviderCreatesUpdateCardForContextApi() {
         AiSettingsService settingsService = mock(AiSettingsService.class);
         AiService aiService = mock(AiService.class);
         ApiService apiService = mock(ApiService.class);
         PendingActionService pendingActionService = mock(PendingActionService.class);
+        AiConversationService conversationService = mock(AiConversationService.class);
+        Map<String, Object> details = new HashMap<String, Object>();
+        details.put("userId", "user-1");
+        details.put("username", "tester");
+        details.put("globalRole", "SUPER_ADMIN");
+        details.put("teamIds", Collections.emptyList());
+        UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken("tester", null);
+        auth.setDetails(details);
+        SecurityContextHolder.getContext().setAuthentication(auth);
 
         AiSettings settings = new AiSettings();
         settings.setProvider(AiSettings.PROVIDER_MOCK);
@@ -69,10 +89,15 @@ class AiChatServiceUpdateTest {
         card.put("actionType", "UPDATE_API");
         card.put("actionId", "action-1");
         when(pendingActionService.createApiUpdateDraft(any(), anyString())).thenReturn(card);
+        AiConversation conversation = new AiConversation();
+        conversation.setId("conv-1");
+        conversation.setTitle("测试会话");
+        when(conversationService.appendExchange(any(), anyString(), any(), anyString(), anyString(), any(), any(), any()))
+                .thenReturn(conversation);
 
         AiChatService service = new AiChatService(settingsService, mock(OpenAiCompatibleProvider.class),
                 mock(MockAiGenerator.class), aiService, apiService, mock(StatsService.class),
-                pendingActionService, new ObjectMapper());
+                pendingActionService, conversationService, new ObjectMapper());
 
         AiChatRequest request = new AiChatRequest();
         request.setTeamId("team-1");

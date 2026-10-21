@@ -518,7 +518,8 @@ const mcpToolOptions = [
   { key: 'toolSearchApis', name: 'mockhub.search_apis', desc: '按关键字搜索接口' },
   { key: 'toolGetApiDetail', name: 'mockhub.get_api_detail', desc: '读取接口与返回体配置' },
   { key: 'toolGetApiStats', name: 'mockhub.get_api_stats', desc: '查询调用次数与热门接口' },
-  { key: 'toolCreateApiDraft', name: 'mockhub.create_api_draft', desc: '根据参数创建接口草稿' },
+  { key: 'toolCreateApiDraft', name: 'mockhub.create_api_draft', desc: '根据参数创建接口草稿（支持多返回体）' },
+  { key: 'toolUpdateApiDraft', name: 'mockhub.update_api_draft', desc: '修改接口、替换或追加返回体' },
   { key: 'toolApplyApiDraft', name: 'mockhub.apply_api_draft', desc: '应用草稿（默认需 Web 确认）' },
   { key: 'toolGenerateResponseBody', name: 'mockhub.generate_response_body', desc: '生成 JSON / XML 响应体' },
   { key: 'toolGenerateConditions', name: 'mockhub.generate_conditions', desc: '自然语言转条件规则' },
@@ -697,6 +698,7 @@ async function loadMcpSettings() {
     mcpForm.toolGetApiDetail = !!data.toolGetApiDetail
     mcpForm.toolGetApiStats = !!data.toolGetApiStats
     mcpForm.toolCreateApiDraft = !!data.toolCreateApiDraft
+    mcpForm.toolUpdateApiDraft = !!data.toolUpdateApiDraft
     mcpForm.toolApplyApiDraft = !!data.toolApplyApiDraft
     mcpForm.toolGenerateResponseBody = !!data.toolGenerateResponseBody
     mcpForm.toolGenerateConditions = !!data.toolGenerateConditions

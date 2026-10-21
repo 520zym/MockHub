@@ -17,14 +17,41 @@
             </div>
           </div>
           <div class="ai-chat__actions">
-            <el-button text circle size="small" title="清空对话" @click="clearChat">
-              <el-icon><Delete /></el-icon>
+            <el-button text circle size="small" title="会话历史" @click="openHistory">
+              <el-icon><Clock /></el-icon>
+            </el-button>
+            <el-button text circle size="small" title="新会话" @click="clearChat">
+              <el-icon><Plus /></el-icon>
             </el-button>
             <el-button text circle size="small" title="收起" @click="open = false">
               <el-icon><Close /></el-icon>
             </el-button>
           </div>
         </header>
+
+        <div v-if="historyOpen" class="ai-history">
+          <div class="ai-history__head">
+            <span>会话历史</span>
+            <el-button text circle size="small" @click="historyOpen = false">
+              <el-icon><Close /></el-icon>
+            </el-button>
+          </div>
+          <div class="ai-history__list" v-loading="historyLoading">
+            <div v-if="!conversations.length" class="ai-history__empty">还没有历史会话，先聊一句吧。</div>
+            <button
+              v-for="conv in conversations"
+              :key="conv.id"
+              type="button"
+              class="ai-history__item"
+              :class="{ 'ai-history__item--on': conv.id === conversationId }"
+              @click="loadConversation(conv.id)"
+            >
+              <div class="ai-history__title">{{ conv.title || '未命名会话' }}</div>
+              <div class="ai-history__preview">{{ conv.preview || '暂无消息' }}</div>
+              <div class="ai-history__meta">{{ conv.messageCount || 0 }} 条 · {{ formatHistoryTime(conv.updatedAt) }}</div>
+            </button>
+          </div>
+        </div>
 
         <div class="ai-chat__ctx">
           <el-select
@@ -179,7 +206,12 @@
                         </div>
                       </div>
                       <div class="ai-confirm__k" style="margin: 10px 0 6px">{{ card.actionType === 'UPDATE_API' ? '修改后预览' : '响应体预览' }}</div>
-                      <pre class="ai-confirm__preview">{{ previewText(card) }}</pre>
+                      <div class="ai-confirm__preview-wrap">
+                        <pre class="ai-confirm__preview">{{ card.preview || '（无预览）' }}</pre>
+                        <button v-if="isLongPreview(card)" type="button" class="ai-confirm__expand" @click="openPreview(card)">
+                          展开完整内容
+                        </button>
+                      </div>
                       <div class="ai-confirm__note">
                         <el-icon><Lock /></el-icon>
                         确认后服务端会重新校验权限并写入，操作记入日志。
@@ -255,6 +287,10 @@
       </section>
     </transition>
 
+    <el-dialog v-model="previewDialogVisible" :title="previewDialogTitle" width="680px" append-to-body>
+      <pre class="ai-preview-full">{{ previewDialogContent }}</pre>
+    </el-dialog>
+
     <button v-if="!open" class="ai-fab" title="MockHub AI 助手" @click="openChat">
       <el-icon><MagicStick /></el-icon>
       <span class="ai-fab__dot"></span>
@@ -267,10 +303,10 @@ import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
-  MagicStick, Close, Delete, Lock, Search, DataAnalysis,
+  MagicStick, Close, Lock, Search, DataAnalysis, Plus,
   Check, EditPen, Clock, Promotion, OfficeBuilding
 } from '@element-plus/icons-vue'
-import { aiChat, confirmAiAction, cancelAiAction } from '@/api/ai'
+import { aiChat, confirmAiAction, cancelAiAction, getAiAction, getAiConversation, getAiConversations } from '@/api/ai'
 import { getTeams } from '@/api/teams'
 import { useAiStore } from '@/stores/ai'
 import { useAppStore } from '@/stores/app'
@@ -294,6 +330,13 @@ const assistantTeams = ref([])
 const teamsLoading = ref(false)
 const teamsError = ref('')
 const lastApiId = ref('')
+const conversationId = ref('')
+const historyOpen = ref(false)
+const historyLoading = ref(false)
+const conversations = ref([])
+const previewDialogVisible = ref(false)
+const previewDialogContent = ref('')
+const previewDialogTitle = ref('')
 
 const quickPrompts = [
   '最近 7 天哪个接口调用最多？',
@@ -386,6 +429,76 @@ function openChat() {
 function clearChat() {
   messages.value = []
   input.value = ''
+  conversationId.value = ''
+  lastApiId.value = ''
+  historyOpen.value = false
+}
+
+async function openHistory() {
+  historyOpen.value = true
+  historyLoading.value = true
+  try {
+    conversations.value = await getAiConversations()
+  } catch (e) {
+    conversations.value = []
+  } finally {
+    historyLoading.value = false
+  }
+}
+
+async function loadConversation(id) {
+  if (!id) return
+  historyLoading.value = true
+  try {
+    const detail = await getAiConversation(id)
+    conversationId.value = detail.id
+    lastApiId.value = ''
+    messages.value = (detail.messages || []).map((msg) => {
+      if (msg.role === 'user') {
+        return { role: 'user', text: msg.content || '' }
+      }
+      return {
+        role: 'assistant',
+        reply: msg.content || '',
+        cards: Array.isArray(msg.cards) ? msg.cards : [],
+        provider: msg.provider,
+        model: msg.model
+      }
+    })
+    // 历史卡片里的待确认操作可能已经处理过；打开会话时对齐状态。
+    for (const msg of messages.value) {
+      for (const card of (msg.cards || [])) {
+        if (card && card.actionId && card.status === 'PENDING') {
+          try {
+            const action = await getAiAction(card.actionId)
+            card.status = action.status
+            card.apiId = action.resultApiId || card.apiId
+          } catch (e) {
+            // 草稿已清理时保持原状态，确认时会给出提示
+          }
+        }
+        if (card && card.apiId) {
+          lastApiId.value = card.apiId
+        }
+      }
+    }
+    historyOpen.value = false
+    await scrollToBottom()
+  } catch (e) {
+    ElMessage.error(e?.msg || '加载会话失败')
+  } finally {
+    historyLoading.value = false
+  }
+}
+
+function formatHistoryTime(value) {
+  if (!value) return ''
+  const date = new Date(value)
+  const now = new Date()
+  if (date.toDateString() === now.toDateString()) {
+    return String(date.getHours()).padStart(2, '0') + ':' + String(date.getMinutes()).padStart(2, '0')
+  }
+  return (date.getMonth() + 1) + '/' + date.getDate()
 }
 
 async function send(preset) {
@@ -407,9 +520,11 @@ async function send(preset) {
     const res = await aiChat({
       teamId: teamId.value,
       message: content,
+      conversationId: conversationId.value || undefined,
       contextApiId: contextApiId.value || undefined,
       history
     })
+    conversationId.value = res.conversationId || conversationId.value
     messages.value.push({
       role: 'assistant',
       reply: res.reply || '没有生成回复，请换个说法试试。',
@@ -438,6 +553,7 @@ async function confirmCard(card) {
     card.status = 'CONFIRMED'
     card.apiId = res.apiId
     lastApiId.value = res.apiId || card.apiId || ''
+    appStore.bumpApiRevision()
     ElMessage.success(card.actionType === 'UPDATE_API' ? '接口已更新' : '接口已创建')
   } catch (e) {
     ElMessage.error(e?.msg || '确认失败，请稍后重试')
@@ -470,10 +586,15 @@ function openApi(apiId) {
   router.push('/apis/' + apiId + '/edit')
 }
 
-function previewText(card) {
-  const lines = String(card.preview || '').split('\n')
-  if (lines.length <= 5) return card.preview
-  return lines.slice(0, 5).join('\n') + '\n…'
+function isLongPreview(card) {
+  const text = String(card.preview || '')
+  return text.length > 420 || text.split('\n').length > 12
+}
+
+function openPreview(card) {
+  previewDialogContent.value = String(card.preview || '')
+  previewDialogTitle.value = card.actionType === 'UPDATE_API' ? '修改后完整内容' : '接口完整内容'
+  previewDialogVisible.value = true
 }
 
 function cardExpired(card) {
@@ -568,6 +689,85 @@ watch(() => aiStore.available, (available) => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.ai-history {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+}
+
+.ai-history__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 62px;
+  padding: 0 12px 0 18px;
+  border-bottom: 1px solid #F1F5F9;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1B2559;
+}
+
+.ai-history__list {
+  flex: 1;
+  overflow: auto;
+  padding: 10px;
+}
+
+.ai-history__empty {
+  padding: 48px 16px;
+  text-align: center;
+  font-size: 12px;
+  color: #A3AED0;
+}
+
+.ai-history__item {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  margin-bottom: 4px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ai-history__item:hover {
+  background: #F7F8FA;
+}
+
+.ai-history__item--on {
+  background: #F5F6FF;
+  border-color: #E0E7FF;
+}
+
+.ai-history__title {
+  font-size: 13px;
+  font-weight: 500;
+  color: #1B2559;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-history__preview {
+  margin-top: 3px;
+  font-size: 11px;
+  color: #8A93A8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-history__meta {
+  margin-top: 4px;
+  font-size: 10px;
+  color: #A3AED0;
 }
 
 .ai-chat__head {
@@ -1097,20 +1297,53 @@ watch(() => aiStore.available, (available) => {
   font-weight: 400;
 }
 
+.ai-confirm__preview-wrap {
+  margin-top: 8px;
+}
+
 .ai-confirm__preview {
-  margin: 8px 0 0;
+  margin: 0;
+  max-height: 170px;
+  overflow: auto;
   padding: 8px 10px;
   background: #FAFBFD;
   border: 1px solid #F1F5F9;
   border-radius: 8px;
   font-family: 'SF Mono', Menlo, Monaco, Consolas, monospace;
   font-size: 10.5px;
+  white-space: pre-wrap;
+  word-break: break-word;
   line-height: 1.7;
   color: #4A5568;
-  max-height: 124px;
-  overflow: hidden;
+  max-height: 170px;
+  overflow: auto;
   white-space: pre-wrap;
-  word-break: break-all;
+  word-break: break-word;
+}
+
+.ai-confirm__expand {
+  margin-top: 6px;
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: #6366F1;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.ai-preview-full {
+  margin: 0;
+  max-height: 60vh;
+  overflow: auto;
+  padding: 12px;
+  border-radius: 8px;
+  background: #FAFBFD;
+  border: 1px solid #F1F5F9;
+  font-family: 'SF Mono', Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .ai-confirm__note {

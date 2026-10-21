@@ -2,6 +2,7 @@ package com.mockhub.ai.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mockhub.ai.model.AiPendingAction;
+import com.mockhub.ai.model.dto.AiApiFullUpdateDraft;
 import com.mockhub.ai.model.dto.AiApiUpdateDraft;
 import com.mockhub.ai.repository.AiPendingActionRepository;
 import com.mockhub.common.model.BizException;
@@ -103,6 +104,29 @@ public class PendingActionService {
     }
 
     /**
+     * 保存一个「整体修改已有接口」草稿（MCP 多返回体）。
+     */
+    public Map<String, Object> createApiFullUpdateDraft(AiApiFullUpdateDraft draft, String summary) {
+        AiPendingAction action = new AiPendingAction();
+        action.setId(UUID.randomUUID().toString());
+        action.setUserId(SecurityContextUtil.getCurrentUserId());
+        action.setTeamId(draft.getTeamId());
+        action.setActionType("UPDATE_API_FULL");
+        action.setSummary(summary);
+        action.setStatus("PENDING");
+        action.setCreatedAt(now());
+        action.setExpiresAt(format(new Date(System.currentTimeMillis() + TTL_MILLIS)));
+        try {
+            action.setPayload(objectMapper.writeValueAsString(draft));
+        } catch (Exception e) {
+            throw new BizException(50001, "序列化接口修改草稿失败");
+        }
+        repository.insert(action);
+        log.info("创建 AI 整体修改草稿：id={}, apiId={}", action.getId(), draft.getApiId());
+        return toFullUpdateCardMap(action, draft);
+    }
+
+    /**
      * 确认并落库。
      */
     public Map<String, Object> confirm(String id) {
@@ -123,6 +147,9 @@ public class PendingActionService {
 
         if ("UPDATE_API".equals(action.getActionType())) {
             return confirmUpdate(action, now);
+        }
+        if ("UPDATE_API_FULL".equals(action.getActionType())) {
+            return confirmUpdateFull(action, now);
         }
 
         ApiDefinitionDTO dto;
@@ -186,6 +213,36 @@ public class PendingActionService {
         }
     }
 
+    private Map<String, Object> confirmUpdateFull(AiPendingAction action, String now) {
+        AiApiFullUpdateDraft draft;
+        try {
+            draft = objectMapper.readValue(action.getPayload(), AiApiFullUpdateDraft.class);
+        } catch (Exception e) {
+            repository.release(action.getId());
+            throw new BizException(50001, "草稿内容损坏，无法更新");
+        }
+        try {
+            permissionChecker.checkTeamAccess(draft.getTeamId());
+            ApiDefinition updated = apiService.update(draft.getApiId(), draft.getDto());
+            repository.complete(action.getId(), updated.getId(), now);
+            recordAudit(action, updated, "CONFIRM");
+            Map<String, Object> result = new LinkedHashMap<String, Object>();
+            result.put("apiId", updated.getId());
+            result.put("name", updated.getName());
+            result.put("method", updated.getMethod());
+            result.put("path", updated.getPath());
+            result.put("status", "CONFIRMED");
+            return result;
+        } catch (BizException e) {
+            repository.release(action.getId());
+            throw e;
+        } catch (Exception e) {
+            repository.release(action.getId());
+            log.error("确认 AI 整体修改失败：id={}", action.getId(), e);
+            throw new BizException(50001, "更新接口失败，请稍后重试");
+        }
+    }
+
     /**
      * 取消草稿。
      */
@@ -221,6 +278,22 @@ public class PendingActionService {
         result.put("teamId", action.getTeamId());
         result.put("expiresAt", action.getExpiresAt());
         result.put("resultApiId", action.getResultApiId());
+        if ("UPDATE_API_FULL".equals(action.getActionType())) {
+            try {
+                AiApiFullUpdateDraft draft = objectMapper.readValue(action.getPayload(), AiApiFullUpdateDraft.class);
+                Map<String, Object> summary = new LinkedHashMap<String, Object>();
+                summary.put("method", draft.getDto().getMethod());
+                summary.put("path", draft.getDto().getPath());
+                summary.put("name", draft.getDto().getName());
+                summary.put("teamId", draft.getTeamId());
+                result.put("summary", summary);
+                String preview = draft.getDto().getResponseBody() == null ? "" : draft.getDto().getResponseBody();
+                result.put("preview", preview.length() > 8000 ? preview.substring(0, 8000) + "…" : preview);
+            } catch (Exception ignored) {
+                // 草稿内容损坏时仍返回状态
+            }
+            return result;
+        }
         if ("UPDATE_API".equals(action.getActionType())) {
             try {
                 AiApiUpdateDraft draft = objectMapper.readValue(action.getPayload(), AiApiUpdateDraft.class);
@@ -232,7 +305,7 @@ public class PendingActionService {
                 summary.put("responseName", draft.getResponseName());
                 result.put("summary", summary);
                 String preview = draft.getNewBody() == null ? "" : draft.getNewBody();
-                result.put("preview", preview.length() > 2000 ? preview.substring(0, 2000) + "…" : preview);
+                result.put("preview", preview.length() > 8000 ? preview.substring(0, 8000) + "…" : preview);
                 String oldPreview = draft.getOldBody() == null ? "" : draft.getOldBody();
                 result.put("oldPreview", oldPreview.length() > 2000 ? oldPreview.substring(0, 2000) + "…" : oldPreview);
             } catch (Exception ignored) {
@@ -249,7 +322,7 @@ public class PendingActionService {
             summary.put("teamId", dto.getTeamId());
             result.put("summary", summary);
             String preview = dto.getResponseBody() == null ? "" : dto.getResponseBody();
-            result.put("preview", preview.length() > 2000 ? preview.substring(0, 2000) + "…" : preview);
+            result.put("preview", preview.length() > 8000 ? preview.substring(0, 8000) + "…" : preview);
         } catch (Exception ignored) {
             // 草稿内容损坏时仍返回状态，确认时会给出明确错误
         }
@@ -271,7 +344,7 @@ public class PendingActionService {
         card.put("expiresAt", action.getExpiresAt());
         card.put("summary", summary);
         String preview = dto.getResponseBody() == null ? "" : dto.getResponseBody();
-        card.put("preview", preview.length() > 1200 ? preview.substring(0, 1200) + "…" : preview);
+        card.put("preview", preview.length() > 8000 ? preview.substring(0, 8000) + "…" : preview);
         return card;
     }
 
@@ -291,9 +364,28 @@ public class PendingActionService {
         card.put("expiresAt", action.getExpiresAt());
         card.put("summary", summary);
         String preview = draft.getNewBody() == null ? "" : draft.getNewBody();
-        card.put("preview", preview.length() > 1200 ? preview.substring(0, 1200) + "…" : preview);
+        card.put("preview", preview.length() > 8000 ? preview.substring(0, 8000) + "…" : preview);
         String oldPreview = draft.getOldBody() == null ? "" : draft.getOldBody();
-        card.put("oldPreview", oldPreview.length() > 1200 ? oldPreview.substring(0, 1200) + "…" : oldPreview);
+        card.put("oldPreview", oldPreview.length() > 8000 ? oldPreview.substring(0, 8000) + "…" : oldPreview);
+        return card;
+    }
+
+    private Map<String, Object> toFullUpdateCardMap(AiPendingAction action, AiApiFullUpdateDraft draft) {
+        Map<String, Object> summary = new LinkedHashMap<String, Object>();
+        summary.put("method", draft.getDto().getMethod());
+        summary.put("path", draft.getDto().getPath());
+        summary.put("name", draft.getDto().getName());
+        summary.put("teamId", draft.getTeamId());
+
+        Map<String, Object> card = new LinkedHashMap<String, Object>();
+        card.put("type", "PENDING_ACTION");
+        card.put("actionId", action.getId());
+        card.put("actionType", action.getActionType());
+        card.put("status", action.getStatus());
+        card.put("expiresAt", action.getExpiresAt());
+        card.put("summary", summary);
+        String preview = draft.getDto().getResponseBody() == null ? "" : draft.getDto().getResponseBody();
+        card.put("preview", preview.length() > 8000 ? preview.substring(0, 8000) + "…" : preview);
         return card;
     }
 
@@ -325,7 +417,8 @@ public class PendingActionService {
             opLog.setTargetName(created == null ? "AI 草稿" : created.getName());
             if (created == null) {
                 opLog.setDetail("取消 AI 草稿");
-            } else if ("UPDATE_API".equals(action.getActionType())) {
+            } else if ("UPDATE_API".equals(action.getActionType())
+                    || "UPDATE_API_FULL".equals(action.getActionType())) {
                 opLog.setDetail("确认 AI 修改接口：" + created.getMethod() + " " + created.getPath());
             } else {
                 opLog.setDetail("确认 AI 创建的接口：" + created.getMethod() + " " + created.getPath());

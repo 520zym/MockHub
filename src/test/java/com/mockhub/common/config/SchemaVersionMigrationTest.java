@@ -196,7 +196,7 @@ class SchemaVersionMigrationTest {
 
         runMigration();
 
-        assertEquals(6, readSchemaVersion(), "全新库应记录 schema_version=6（v1 至 v6）");
+        assertEquals(7, readSchemaVersion(), "全新库应记录 schema_version=7（v1 至 v7）");
         assertTrue(columnExists("api_definition", "description"),
                 "description 列应已存在（全新库 schema.sql 已建出）");
         assertTrue(columnExists("api_definition", "group_id"),
@@ -242,7 +242,7 @@ class SchemaVersionMigrationTest {
                 "api_response.body_type 列应在 v4 迁移后存在");
         assertTrue(columnExists("api_definition", "response_mode"),
                 "api_definition.response_mode 列应在 v5 迁移后存在");
-        assertEquals(6, readSchemaVersion(), "迁移完成后 schema_version 应记为 6（v1 至 v6）");
+        assertEquals(7, readSchemaVersion(), "迁移完成后 schema_version 应记为 6（v1 至 v7）");
     }
 
     // ---------- case3：已跑过 soap-mock-enhancement 的本地库 ----------
@@ -265,7 +265,7 @@ class SchemaVersionMigrationTest {
         runMigration();
 
         assertEquals(1, countApiResponse(), "已迁移的数据不应被重复插入");
-        assertEquals(6, readSchemaVersion());
+        assertEquals(7, readSchemaVersion());
     }
 
     // ---------- case4：二次启动幂等 ----------
@@ -280,8 +280,8 @@ class SchemaVersionMigrationTest {
 
         assertEquals(firstRunResponseCount, countApiResponse(),
                 "二次迁移不应新增 api_response 数据");
-        assertEquals(6, readSchemaVersion());
-        assertEquals(6, countSchemaVersionRows(),
-                "schema_version 应有六条记录：version=1 至 6，二次执行不重复写入");
+        assertEquals(7, readSchemaVersion());
+        assertEquals(7, countSchemaVersionRows(),
+                "schema_version 应有六条记录：version=1 至 7，二次执行不重复写入");
     }
 }

@@ -74,15 +74,18 @@ public class AiModelCatalogService {
         factory.setReadTimeout(10000);
         restTemplate.setRequestFactory(factory);
 
+        long started = System.currentTimeMillis();
+        log.info("拉取模型列表：endpoint={}, keyConfigured={}", endpoint, key != null && !key.isEmpty());
         try {
             ResponseEntity<String> response = restTemplate.exchange(
                     endpoint, HttpMethod.GET, new HttpEntity<String>(headers), String.class);
             List<Map<String, Object>> models = parseModels(response.getBody());
-            log.info("获取模型列表成功，共 {} 个", models.size());
+            log.info("拉取模型列表成功：count={}, durationMs={}", models.size(), System.currentTimeMillis() - started);
             return models;
         } catch (HttpStatusCodeException e) {
             int status = e.getStatusCode().value();
-            log.warn("获取模型列表失败，HTTP {}（endpoint={}）", status, endpoint);
+            log.warn("拉取模型列表失败：status={}, endpoint={}, durationMs={}",
+                    status, endpoint, System.currentTimeMillis() - started);
             if (status == 401 || status == 403) {
                 throw new BizException(40303, "API Key 无效或无权限（" + status + "），请检查后重试");
             }
@@ -91,7 +94,8 @@ public class AiModelCatalogService {
             }
             throw new BizException(50201, "获取模型列表失败，服务商返回 " + status);
         } catch (ResourceAccessException e) {
-            log.warn("获取模型列表超时：{}", e.getMessage());
+            log.warn("拉取模型列表超时：endpoint={}, durationMs={}, error={}",
+                    endpoint, System.currentTimeMillis() - started, e.getMessage());
             throw new BizException(50202, "连接服务商超时，请检查网络或手动输入模型 ID");
         } catch (BizException e) {
             throw e;

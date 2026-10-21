@@ -1247,6 +1247,10 @@ function responseCodeClass(code) {
 }
 
 // --- 初始化 ---
+watch(() => appStore.apiRevision, () => {
+  loadApis()
+})
+
 onMounted(async () => {
   loadApis()
   loadTags()

@@ -67,6 +67,9 @@ public class AiService {
     public AiResponseResult generateResponse(AiGenerateRequest req) {
         validateRequest(req);
         AiSettings settings = settingsService.assertUsable(AiSettingsService.CAP_RESPONSE, req.getTeamId());
+        log.info("AI 生成响应体：provider={}, model={}, apiType={}, mode={}, existingChars={}",
+                settings.getProvider(), settings.getModel(), req.getApiType(), req.getMode(),
+                req.getExistingBody() == null ? 0 : req.getExistingBody().length());
 
         if (AiSettings.PROVIDER_MOCK.equals(settings.getProvider())) {
             return mockGenerator.response(req);

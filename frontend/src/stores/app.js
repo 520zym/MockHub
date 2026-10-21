@@ -5,7 +5,8 @@ export const useAppStore = defineStore('app', {
   state: () => ({
     sidebarCollapsed: false,
     teams: [],
-    currentTeamId: null
+    currentTeamId: null,
+    apiRevision: 0
   }),
 
   getters: {
@@ -27,6 +28,10 @@ export const useAppStore = defineStore('app', {
 
     toggleSidebar() {
       this.sidebarCollapsed = !this.sidebarCollapsed
+    },
+
+    bumpApiRevision() {
+      this.apiRevision += 1
     }
   }
 })

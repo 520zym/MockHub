@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.mockhub.ai.model.AiSettings;
 import com.mockhub.common.model.BizException;
 import org.slf4j.Logger;
+import java.util.UUID;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -69,6 +70,10 @@ public class OpenAiCompatibleProvider implements AiProvider {
         restTemplate.setRequestFactory(factory);
 
         long started = System.currentTimeMillis();
+        String requestId = UUID.randomUUID().toString().substring(0, 8);
+        log.info("AI 请求开始：requestId={}, model={}, endpoint={}, systemChars={}, userChars={}, maxTokens=1800",
+                requestId, settings.getModel(), endpoint, system == null ? 0 : system.length(),
+                user == null ? 0 : user.length());
         try {
             ResponseEntity<String> response = restTemplate.exchange(
                     endpoint, HttpMethod.POST,
@@ -82,23 +87,32 @@ public class OpenAiCompatibleProvider implements AiProvider {
             if (content.trim().isEmpty()) {
                 throw new BizException(50201, "模型返回为空内容");
             }
-            log.info("AI 调用完成，耗时 {} ms", System.currentTimeMillis() - started);
+            JsonNode usage = root.path("usage");
+            log.info("AI 请求完成：requestId={}, model={}, status={}, durationMs={}, responseChars={}, promptTokens={}, completionTokens={}, totalTokens={}",
+                    requestId, settings.getModel(), response.getStatusCodeValue(),
+                    System.currentTimeMillis() - started, content.length(),
+                    usage.path("prompt_tokens").asLong(-1), usage.path("completion_tokens").asLong(-1),
+                    usage.path("total_tokens").asLong(-1));
             return content;
         } catch (HttpStatusCodeException e) {
             String detail = e.getResponseBodyAsString();
             if (detail != null && detail.length() > 300) {
                 detail = detail.substring(0, 300) + "…";
             }
-            log.warn("AI 服务返回 {}：{}", e.getStatusCode(), detail);
+            log.warn("AI 请求失败：requestId={}, model={}, status={}, durationMs={}, response={}",
+                    requestId, settings.getModel(), e.getStatusCode().value(),
+                    System.currentTimeMillis() - started, detail);
             throw new BizException(50201, "AI 服务返回 " + e.getStatusCode().value()
                     + (detail != null && !detail.isEmpty() ? "：" + detail : ""));
         } catch (ResourceAccessException e) {
-            log.warn("AI 服务连接失败：{}", e.getMessage());
+            log.warn("AI 请求连接失败：requestId={}, model={}, durationMs={}, error={}",
+                    requestId, settings.getModel(), System.currentTimeMillis() - started, e.getMessage());
             throw new BizException(50202, "连接 AI 服务超时或失败，请检查 Base URL 与网络");
         } catch (BizException e) {
             throw e;
         } catch (Exception e) {
-            log.error("调用 AI 服务失败", e);
+            log.error("AI 请求异常：requestId={}, model={}, durationMs={}",
+                    requestId, settings.getModel(), System.currentTimeMillis() - started, e);
             throw new BizException(50203, "调用 AI 服务失败：" + e.getMessage());
         }
     }

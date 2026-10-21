@@ -1115,6 +1115,12 @@ async function handleGroupSelectChange(val) {
 }
 
 // --- 初始化 ---
+watch(() => appStore.apiRevision, () => {
+  if (isEdit.value) {
+    loadApiDetail()
+  }
+})
+
 onMounted(async () => {
   // 加载服务器局域网地址
   try {

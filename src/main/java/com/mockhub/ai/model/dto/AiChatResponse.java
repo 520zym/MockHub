@@ -13,6 +13,8 @@ public class AiChatResponse {
     private List<Map<String, Object>> cards = new ArrayList<Map<String, Object>>();
     private String provider;
     private String model;
+    private String conversationId;
+    private String conversationTitle;
 
     public String getReply() {
         return reply;
@@ -28,6 +30,22 @@ public class AiChatResponse {
 
     public void setCards(List<Map<String, Object>> cards) {
         this.cards = cards;
+    }
+
+    public String getConversationId() {
+        return conversationId;
+    }
+
+    public void setConversationId(String conversationId) {
+        this.conversationId = conversationId;
+    }
+
+    public String getConversationTitle() {
+        return conversationTitle;
+    }
+
+    public void setConversationTitle(String conversationTitle) {
+        this.conversationTitle = conversationTitle;
     }
 
     public String getProvider() {

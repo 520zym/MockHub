@@ -8,6 +8,21 @@ export function getAiStatus() {
   return request.get('/ai/status')
 }
 
+/** 当前用户的 AI 会话历史 */
+export function getAiConversations() {
+  return request.get('/ai/conversations')
+}
+
+/** 会话详情（含消息与卡片） */
+export function getAiConversation(id) {
+  return request.get('/ai/conversations/' + id)
+}
+
+/** 删除会话 */
+export function deleteAiConversation(id) {
+  return request.delete('/ai/conversations/' + id)
+}
+
 /** 读取 AI 配置（仅超管） */
 export function getAiSettings() {
   return request.get('/ai/settings')

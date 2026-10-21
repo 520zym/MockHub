@@ -336,6 +336,7 @@ CREATE TABLE IF NOT EXISTS mcp_settings (
     tool_get_api_detail         INTEGER NOT NULL DEFAULT 1,
     tool_get_api_stats          INTEGER NOT NULL DEFAULT 1,
     tool_create_api_draft       INTEGER NOT NULL DEFAULT 1,
+    tool_update_api_draft       INTEGER NOT NULL DEFAULT 1,
     tool_apply_api_draft        INTEGER NOT NULL DEFAULT 0,
     tool_generate_response_body INTEGER NOT NULL DEFAULT 1,
     tool_generate_conditions    INTEGER NOT NULL DEFAULT 1,
@@ -359,3 +360,26 @@ CREATE TABLE IF NOT EXISTS mcp_token (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_mcp_token_hash ON mcp_token(token_hash);
 CREATE INDEX IF NOT EXISTS idx_mcp_token_user ON mcp_token(user_id, revoked_at);
+
+-- ========== AI 对话历史 ==========
+CREATE TABLE IF NOT EXISTS ai_conversation (
+    id          TEXT PRIMARY KEY,
+    user_id     TEXT NOT NULL,
+    team_id     TEXT,
+    title       TEXT,
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ai_conversation_user ON ai_conversation(user_id, updated_at);
+
+CREATE TABLE IF NOT EXISTS ai_conversation_message (
+    id              TEXT PRIMARY KEY,
+    conversation_id TEXT NOT NULL,
+    role            TEXT NOT NULL,              -- user / assistant
+    content         TEXT,
+    cards           TEXT,                       -- assistant 卡片 JSON 数组
+    provider        TEXT,
+    model           TEXT,
+    created_at      TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ai_conversation_message ON ai_conversation_message(conversation_id);

@@ -61,7 +61,7 @@
 - [x] **AI 生成响应体** -- 在返回体编辑器里根据接口信息生成 JSON / XML 示例，预览确认后写入
 - [x] **AI 生成条件规则** -- 自然语言转成现有 conditions 结构，逐条勾选、字段校验
 - [x] **AI 匹配诊断** -- 请求日志里重放命中链路，解释为什么命中 / 未命中
-- [x] **对话助手** -- 右下角入口，支持统计问答、搜索接口、创建接口草稿（确认卡片）
+- [x] **对话助手** -- 右下角入口，支持统计问答、搜索接口、创建/修改接口草稿（确认卡片）与会话历史
 
 ### 使用体验
 
@@ -96,7 +96,7 @@
 - **生成响应体**：返回体编辑器工具栏的「AI 生成」，根据接口名称、方法、路径与描述生成 JSON / XML，预览确认后插入。
 - **生成条件规则**：响应规则工具条的「AI 生成规则」，把自然语言转成现有 `conditions` 结构；支持 Body / Query / Header 三类来源，不存在的字段会标黄并默认不勾选。
 - **匹配诊断**：请求日志详情里的「解释这次匹配」，由服务端重放条件链路，模型只负责组织说明；模型失败时回退到模板。
-- **对话助手**：右下角悬浮入口，支持查询近 7 天调用排行、搜索接口、创建接口草稿、修改已有接口的返回值；超管可选择「全部团队」。写操作只生成 `PENDING` 草稿，用户点「确认创建 / 确认修改」后才落库。
+- **对话助手**：右下角悬浮入口，支持查询近 7 天调用排行、搜索接口、创建接口草稿、修改已有接口的返回值，并可查看/继续历史会话；超管可选择「全部团队」。写操作只生成 `PENDING` 草稿，用户点「确认创建 / 确认修改」后才落库。
 - **MCP Server**：把检索、统计、生成与草稿能力开放给 Claude / Cursor / Codex 等客户端；Token 鉴权、工具开关、写策略与 Web 确认页均可在「全局设置 → MCP Server」配置。
 
 ### 配置
@@ -122,7 +122,9 @@
 | POST | `/api/ai/generate-response` | 生成响应体 |
 | POST | `/api/ai/generate-conditions` | 生成条件规则 |
 | POST | `/api/ai/explain-match` | 解释一次请求的命中链路 |
-| POST | `/api/ai/chat` | 对话助手 |
+| POST | `/api/ai/chat` | 对话助手（可选 `conversationId` 继续会话） |
+| GET | `/api/ai/conversations` | 当前用户的会话历史 |
+| GET / DELETE | `/api/ai/conversations/{id}` | 会话详情 / 删除自己的会话 |
 | POST | `/api/ai/actions/{id}/confirm` | 确认待确认操作 |
 | POST | `/api/ai/actions/{id}/cancel` | 取消待确认操作 |
 | GET / PUT | `/api/mcp/settings` | MCP 开关、写策略与工具开关（仅超管） |
@@ -392,7 +394,8 @@ mockhub-service.exe uninstall # 卸载服务
 | `mockhub.search_apis` | 按关键字搜索当前用户可见接口 |
 | `mockhub.get_api_detail` | 读取接口、返回体与条件规则 |
 | `mockhub.get_api_stats` | 查询窗口内调用总览与 Top 接口 |
-| `mockhub.create_api_draft` | 创建接口草稿，返回 `actionId` 与 `confirmUrl` |
+| `mockhub.create_api_draft` | 创建接口草稿，支持 `responses` 多返回体与条件规则；返回 `actionId` 与 `confirmUrl` |
+| `mockhub.update_api_draft` | 修改已有接口，支持整体替换 `responses` 或 `addResponses` 追加返回体 |
 | `mockhub.apply_api_draft` | 应用草稿（仅在 DIRECT 写策略且工具开启时可用） |
 | `mockhub.generate_response_body` | 生成 JSON / XML 响应体 |
 | `mockhub.generate_conditions` | 生成 Body / Query / Header 条件 |

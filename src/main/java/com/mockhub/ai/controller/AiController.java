@@ -11,6 +11,7 @@ import com.mockhub.ai.model.dto.AiSettingsDTO;
 import com.mockhub.ai.model.dto.AiSettingsUpdateRequest;
 import com.mockhub.ai.model.dto.AiStatusDTO;
 import com.mockhub.ai.service.AiChatService;
+import com.mockhub.ai.service.AiConversationService;
 import com.mockhub.ai.service.AiExplainService;
 import com.mockhub.ai.service.AiService;
 import com.mockhub.ai.service.AiModelCatalogService;
@@ -22,6 +23,7 @@ import com.mockhub.common.model.Result;
 import com.mockhub.common.util.SecurityContextUtil;
 import com.mockhub.log.model.OperationLog;
 import com.mockhub.log.service.LogService;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -49,19 +51,41 @@ public class AiController {
     private final AiService aiService;
     private final AiExplainService explainService;
     private final AiChatService chatService;
+    private final AiConversationService conversationService;
     private final PendingActionService pendingActionService;
     private final LogService logService;
 
     public AiController(AiSettingsService settingsService, AiModelCatalogService modelCatalogService,
                         AiService aiService, AiExplainService explainService, AiChatService chatService,
+                        AiConversationService conversationService,
                         PendingActionService pendingActionService, LogService logService) {
         this.settingsService = settingsService;
         this.modelCatalogService = modelCatalogService;
         this.aiService = aiService;
         this.explainService = explainService;
         this.chatService = chatService;
+        this.conversationService = conversationService;
         this.pendingActionService = pendingActionService;
         this.logService = logService;
+    }
+
+    /** 当前用户的会话历史列表。 */
+    @GetMapping("/conversations")
+    public Result<java.util.List<com.mockhub.ai.model.AiConversation>> conversations() {
+        return Result.ok(conversationService.list(SecurityContextUtil.getCurrentUserId()));
+    }
+
+    /** 会话详情（含消息与卡片）。 */
+    @GetMapping("/conversations/{id}")
+    public Result<Map<String, Object>> conversation(@PathVariable String id) {
+        return Result.ok(conversationService.detail(id, SecurityContextUtil.getCurrentUserId()));
+    }
+
+    /** 删除自己的会话。 */
+    @DeleteMapping("/conversations/{id}")
+    public Result<Void> deleteConversation(@PathVariable String id) {
+        conversationService.delete(id, SecurityContextUtil.getCurrentUserId());
+        return Result.ok(null);
     }
 
     /** 当前用户可见的 AI 状态（入口是否渲染、能力是否可用）。 */
