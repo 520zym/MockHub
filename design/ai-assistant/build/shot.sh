@@ -30,4 +30,11 @@ shot 05-settings-ai 1440 1480
 shot 06-settings-mcp 1440 1400
 shot 07-match-explain 1440 900
 shot 08-states 1440 1300
+shot 09-settings-provider 1440 1240
+shot 10-settings-assistant 1440 1120
+shot 11-settings-mcp 1440 1320
+shot 12-settings-basic 1440 820
+shot 13-settings-overview 1440 3000
+shot 14-model-picker 1440 980
+shot 15-model-states 1440 1200
 echo "done."

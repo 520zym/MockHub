@@ -2,7 +2,7 @@
 
 对应 GitHub Issue [#6 AI功能支持](https://github.com/520zym/MockHub/issues/6) 的界面方案。
 
-> **实现状态（2026-10-20）**：9 个页面均已落地（含 06 MCP Server）。代码见 frontend/src/components/ai、frontend/src/views、src/main/java/com/mockhub/ai 与 src/main/java/com/mockhub/mcp；条件来源已支持 Body / Query / Header。视觉完全沿用 MockHub 现有 Soft UI 扁平化风格，只额外引入一层紫色渐变作为 AI 的识别色。
+> **实现状态（2026-10-21）**：05/06 的配置已重构为 09-12 的分类页面，并新增 14/15 的默认模型选择交互；MCP、Header 条件、供应商预设与模型拉取均已落地。代码见 frontend/src/components/ai、frontend/src/views、src/main/java/com/mockhub/ai 与 src/main/java/com/mockhub/mcp。视觉完全沿用 MockHub 现有 Soft UI 扁平化风格，只额外引入一层紫色渐变作为 AI 的识别色。
 
 - 起始页：[00-overview.html](00-overview.html)
 - 预览图：[screens/00-overview.png](screens/00-overview.png)
@@ -21,7 +21,15 @@ design/ai-assistant/
 ├── 06-settings-mcp.html        MCP Server 配置
 ├── 07-match-explain.html       请求日志 · AI 匹配诊断
 ├── 08-states.html              组件状态与边界
+├── 09-settings-provider.html   全局设置 · AI 供应商
+├── 10-settings-assistant.html  全局设置 · 助手与能力
+├── 11-settings-mcp.html        全局设置 · MCP Server
+├── 12-settings-basic.html      全局设置 · 基础设置
+├── 13-settings-overview.html   设置分类 + 供应商设计总览
+├── 14-model-picker.html        默认模型选择交互
+├── 15-model-states.html        默认模型状态与边界
 ├── assets/mock.css             设计 token 与组件样式（从 frontend/src/styles 复制）
+├── assets/settings-v2.css      设置分类与模型选择器样式
 ├── build/                      静态页面生成脚本
 └── screens/                    每个页面的 2x 截图
 ```
@@ -50,10 +58,17 @@ AI 相关元素只改变“识别色”，不改变排版：正文仍是中性�
 | 02 | 对话助手 | 428×824 面板；团队范围 / 权限提示；统计卡与 CREATE_API 确认卡 |
 | 03 | 生成响应体 | 右侧 600px 抽屉；描述 + 生成方式 + 字段规模；预览后插入，确认前不覆盖 |
 | 04 | 生成条件规则 | 自然语言 → conditions 表格；逐条勾选、字段不存在时警告并默认不勾选 |
-| 05 | AI 配置 | 仅超管；Provider / Model / Base URL / Key（只写不回显）/ 连通性测试 / 能力开关 / 使用范围 |
-| 06 | MCP Server | 服务地址、8 个工具开关、写操作策略、访问 Token 管理 |
+| 05 | AI 配置（旧版） | 单页 Provider / Model / Base URL / Key；已被 09/10 取代 |
+| 06 | MCP Server（旧版） | 单页配置；已被 11 取代 |
 | 07 | 匹配诊断 | 请求详情抽屉；结论、判定链路、修正建议；应用建议前二次确认 |
 | 08 | 状态与边界 | 入口、确认卡、加载、失败、未启用、权限受限、长内容折叠 |
+| 09 | 全局设置 · AI 供应商 | 左侧分类导航 + 8 个供应商预设 + 地址/Key/测试 |
+| 10 | 全局设置 · 助手与能力 | 供应商摘要 + 能力开关 + 使用范围 |
+| 11 | 全局设置 · MCP Server | 接入、写策略、工具与 Token |
+| 12 | 全局设置 · 基础设置 | 服务地址与 Mock 跨域 |
+| 13 | 设置重构总览 | 信息架构、供应商默认值、4 个页面索引 |
+| 14 | 默认模型选择 | 推荐列表 / 服务商拉取 / 手动输入 + 数据流 |
+| 15 | 模型选择状态 | 已选、拉取成功、拉取失败、自定义输入 |
 
 ## 核心流程
 
