@@ -1,5 +1,6 @@
 package com.mockhub.ai.service;
 
+import com.mockhub.ai.model.AiProviderPreset;
 import com.mockhub.ai.model.AiSettings;
 import com.mockhub.ai.model.dto.AiSettingsDTO;
 import com.mockhub.ai.model.dto.AiSettingsUpdateRequest;
@@ -57,6 +58,9 @@ public class AiSettingsService {
         if (settings.getProvider() == null) {
             settings.setProvider(AiSettings.PROVIDER_OPENAI);
         }
+        if (settings.getVendor() == null || settings.getVendor().trim().isEmpty()) {
+            settings.setVendor(AiProviderPresets.infer(settings.getBaseUrl()));
+        }
         if (settings.getAccessScope() == null) {
             settings.setAccessScope(AiSettings.SCOPE_ALL);
         }
@@ -97,6 +101,19 @@ public class AiSettingsService {
         current.setEnabled(request.isEnabled());
         current.setBaseUrl(trimToNull(request.getBaseUrl()));
         current.setModel(trimToNull(request.getModel()));
+        if (request.getVendor() != null) {
+            String vendor = AiProviderPresets.normalize(request.getVendor());
+            current.setVendor(vendor);
+            AiProviderPreset preset = AiProviderPresets.get(vendor);
+            if (preset != null && !AiProviderPresets.CUSTOM.equals(vendor)) {
+                if (!notBlank(current.getBaseUrl())) {
+                    current.setBaseUrl(preset.getBaseUrl());
+                }
+                if (!notBlank(current.getModel())) {
+                    current.setModel(preset.getDefaultModel());
+                }
+            }
+        }
         if (request.getApiKey() != null) {
             String key = request.getApiKey().trim();
             current.setApiKey(key.isEmpty() ? null : keyCipher.encrypt(key));
@@ -213,9 +230,10 @@ public class AiSettingsService {
         if (AiSettings.PROVIDER_MOCK.equals(settings.getProvider())) {
             return true;
         }
+        boolean keyRequired = !"ollama".equalsIgnoreCase(settings.getVendor());
         return notBlank(settings.getBaseUrl())
                 && notBlank(settings.getModel())
-                && notBlank(settings.getApiKey());
+                && (!keyRequired || notBlank(settings.getApiKey()));
     }
 
     private boolean isCapabilityEnabled(AiSettings settings, String capability) {
@@ -238,6 +256,7 @@ public class AiSettingsService {
         AiSettingsDTO dto = new AiSettingsDTO();
         dto.setEnabled(settings.isEnabled());
         dto.setProvider(settings.getProvider());
+        dto.setVendor(settings.getVendor());
         dto.setBaseUrl(settings.getBaseUrl());
         dto.setModel(settings.getModel());
         boolean configured = notBlank(settings.getApiKey());

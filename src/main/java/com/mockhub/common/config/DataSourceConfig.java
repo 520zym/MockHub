@@ -181,8 +181,13 @@ public class DataSourceConfig {
                     recordSchemaVersion(conn, 5,
                             "多返回体随机模式：api_definition 增加 response_mode 列");
                 }
+                if (current < 6) {
+                    migrateV6(conn);
+                    recordSchemaVersion(conn, 6,
+                            "AI 供应商：ai_settings 增加 vendor 列，并按已有 Base URL 回填");
+                }
                 // 后续版本追加：
-                // if (current < 6) { migrateV6(conn); recordSchemaVersion(conn, 6, "..."); }
+                // if (current < 7) { migrateV7(conn); recordSchemaVersion(conn, 7, "..."); }
 
                 conn.commit();
                 log.info("DB 迁移完成");
@@ -311,6 +316,41 @@ public class DataSourceConfig {
     private void migrateV5(Connection conn) throws SQLException {
         addColumnIfNotExists(conn, "api_definition", "response_mode",
                 "TEXT NOT NULL DEFAULT 'CONDITION'");
+    }
+
+    /**
+     * v6 迁移：AI 供应商开关。为 ai_settings 增加 vendor 列，
+     * 并按已有 Base URL 推断旧配置的供应商，避免升级后卡片全部落到「自定义」。
+     * 表不存在时直接跳过（单元测试/异常场景兜底）。
+     */
+    private void migrateV6(Connection conn) throws SQLException {
+        if (!tableExists(conn, "ai_settings")) {
+            log.info("ai_settings 表不存在，跳过 v6 AI 供应商迁移");
+            return;
+        }
+        addColumnIfNotExists(conn, "ai_settings", "vendor", "TEXT NOT NULL DEFAULT 'CUSTOM'");
+        try (Statement st = conn.createStatement()) {
+            st.execute("UPDATE ai_settings SET vendor = CASE "
+                    + "WHEN lower(base_url) LIKE '%api.deepseek.com%' THEN 'deepseek' "
+                    + "WHEN lower(base_url) LIKE '%moonshot%' THEN 'kimi' "
+                    + "WHEN lower(base_url) LIKE '%minimax%' THEN 'minimax' "
+                    + "WHEN lower(base_url) LIKE '%bigmodel%' THEN 'glm' "
+                    + "WHEN lower(base_url) LIKE '%dashscope%' THEN 'qwen' "
+                    + "WHEN lower(base_url) LIKE '%api.openai.com%' THEN 'openai' "
+                    + "WHEN lower(base_url) LIKE '%11434%' THEN 'ollama' "
+                    + "ELSE 'custom' END "
+                    + "WHERE vendor IS NULL OR vendor = '' OR upper(vendor) = 'CUSTOM'");
+        }
+    }
+
+    private boolean tableExists(Connection conn, String table) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(
+                "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")) {
+            ps.setString(1, table);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next();
+            }
+        }
     }
 
     /**

@@ -34,13 +34,14 @@ public class AiSettingsRepository {
      * 覆盖保存（UPSERT）。SQLite 下用 INSERT OR REPLACE 保证单行语义。
      */
     public void save(AiSettings s) {
-        String sql = "INSERT OR REPLACE INTO ai_settings (id, enabled, provider, base_url, model, api_key, "
+        String sql = "INSERT OR REPLACE INTO ai_settings (id, enabled, provider, vendor, base_url, model, api_key, "
                 + "cap_response_body, cap_conditions, cap_explain, cap_drafts, access_scope, updated_at, updated_by) "
-                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         jdbcTemplate.update(sql,
                 s.getId(),
                 s.isEnabled() ? 1 : 0,
                 s.getProvider(),
+                s.getVendor(),
                 s.getBaseUrl(),
                 s.getModel(),
                 s.getApiKey(),
@@ -60,6 +61,7 @@ public class AiSettingsRepository {
             s.setId(rs.getString("id"));
             s.setEnabled(rs.getInt("enabled") == 1);
             s.setProvider(rs.getString("provider"));
+            s.setVendor(rs.getString("vendor"));
             s.setBaseUrl(rs.getString("base_url"));
             s.setModel(rs.getString("model"));
             s.setApiKey(rs.getString("api_key"));
