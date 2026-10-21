@@ -175,7 +175,7 @@
                   <el-switch v-model="aiForm.capExplain" />
                 </div>
                 <div class="ai-cap-row">
-                  <div><div class="ai-cap-title">创建接口草稿</div><div class="ai-cap-desc">在对话中创建接口草稿，需回到确认卡片才会写入</div></div>
+                  <div><div class="ai-cap-title">创建 / 修改接口草稿</div><div class="ai-cap-desc">在对话中创建或修改接口，需回到确认卡片才会写入</div></div>
                   <el-switch v-model="aiForm.capDrafts" />
                 </div>
               </div>

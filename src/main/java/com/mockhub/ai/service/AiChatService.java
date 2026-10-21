@@ -1,18 +1,23 @@
 package com.mockhub.ai.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mockhub.ai.model.AiSettings;
+import com.mockhub.ai.model.dto.AiApiUpdateDraft;
 import com.mockhub.ai.model.dto.AiChatMessage;
 import com.mockhub.ai.model.dto.AiChatRequest;
 import com.mockhub.ai.model.dto.AiChatResponse;
 import com.mockhub.ai.model.dto.AiGenerateRequest;
+import com.mockhub.ai.model.dto.AiResponseResult;
 import com.mockhub.common.model.BizException;
 import com.mockhub.common.model.PageResult;
 import com.mockhub.common.util.SecurityContextUtil;
 import com.mockhub.mock.model.dto.ApiDefinitionDTO;
+import com.mockhub.mock.model.dto.ApiDefinitionDetailVO;
 import com.mockhub.mock.model.dto.ApiDefinitionVO;
 import com.mockhub.mock.model.dto.ApiResponseDTO;
+import com.mockhub.mock.model.entity.ApiResponse;
 import com.mockhub.mock.service.ApiService;
 import com.mockhub.stats.model.dto.StatsOverviewVO;
 import com.mockhub.stats.model.dto.TopApiVO;
@@ -26,6 +31,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -46,11 +52,13 @@ public class AiChatService {
     private static final String INTENT_SEARCH = "SEARCH_APIS";
     private static final String INTENT_STATS = "API_STATS";
     private static final String INTENT_CREATE = "CREATE_API_DRAFT";
+    private static final String INTENT_UPDATE = "UPDATE_API_DRAFT";
     private static final String INTENT_HELP = "HELP";
 
     private final AiSettingsService settingsService;
     private final OpenAiCompatibleProvider provider;
     private final MockAiGenerator mockGenerator;
+    private final AiService aiService;
     private final ApiService apiService;
     private final StatsService statsService;
     private final PendingActionService pendingActionService;
@@ -59,6 +67,7 @@ public class AiChatService {
     public AiChatService(AiSettingsService settingsService,
                          OpenAiCompatibleProvider provider,
                          MockAiGenerator mockGenerator,
+                         AiService aiService,
                          ApiService apiService,
                          StatsService statsService,
                          PendingActionService pendingActionService,
@@ -66,6 +75,7 @@ public class AiChatService {
         this.settingsService = settingsService;
         this.provider = provider;
         this.mockGenerator = mockGenerator;
+        this.aiService = aiService;
         this.apiService = apiService;
         this.statsService = statsService;
         this.pendingActionService = pendingActionService;
@@ -90,7 +100,7 @@ public class AiChatService {
 
         ChatPlan plan;
         if (AiSettings.PROVIDER_MOCK.equals(settings.getProvider())) {
-            plan = mockPlan(request.getMessage());
+            plan = mockPlan(request.getMessage(), request.getContextApiId());
         } else {
             plan = modelPlan(settings, request);
         }
@@ -105,6 +115,8 @@ public class AiChatService {
             handleSearch(request, response, plan.keyword);
         } else if (INTENT_CREATE.equals(plan.intent)) {
             handleCreate(request, settings, response, plan);
+        } else if (INTENT_UPDATE.equals(plan.intent)) {
+            handleUpdate(request, settings, response, plan);
         } else {
             response.setReply(plan.reply != null && !plan.reply.trim().isEmpty()
                     ? plan.reply : helpText());
@@ -253,11 +265,203 @@ public class AiChatService {
         response.setReply("已生成接口草稿，确认后才会真正创建：");
     }
 
+    private void handleUpdate(AiChatRequest request, AiSettings settings,
+                              AiChatResponse response, ChatPlan plan) {
+        if (!settings.isCapDrafts()) {
+            response.setReply("管理员已关闭「创建 / 修改接口草稿」能力，暂时不能通过对话修改接口。");
+            return;
+        }
+        if (!settings.isCapResponseBody()) {
+            response.setReply("管理员已关闭「生成响应体」能力，暂时不能用 AI 修改返回值。");
+            return;
+        }
+        ApiDefinitionDetailVO detail = resolveUpdateTarget(request, plan);
+        if (detail == null) {
+            response.setReply("请告诉我要修改哪个接口，例如：把 GET /api/user/info 的返回值数组弄大一些；如果刚创建过接口，也可以直接说「把返回值数组弄大一些」。");
+            return;
+        }
+        ApiResponse target = selectResponse(detail, plan);
+        if (target == null) {
+            response.setReply("接口「" + detail.getName() + "」没有可修改的文本返回体。文件类型返回体请到接口编辑页处理。");
+            return;
+        }
+        if (!"TEXT".equalsIgnoreCase(target.getBodyType())) {
+            response.setReply("返回体「" + target.getName() + "」是文件类型，暂不支持通过对话修改。");
+            return;
+        }
+        String oldBody = target.getResponseBody() == null ? "" : target.getResponseBody();
+        AiGenerateRequest gen = new AiGenerateRequest();
+        gen.setTeamId(detail.getTeamId());
+        gen.setApiType(detail.getType());
+        gen.setApiName(detail.getName());
+        gen.setMethod(detail.getMethod());
+        gen.setPath(detail.getPath());
+        gen.setResponseName(target.getName());
+        gen.setContentType(target.getContentType());
+        gen.setExistingBody(oldBody);
+        gen.setInstruction(request.getMessage() + "\n保持原有结构和字段，只修改用户要求变化的部分。");
+        gen.setMode("COMPLETE");
+        gen.setSize("STANDARD");
+
+        AiResponseResult generated = aiService.generateResponse(gen);
+        String newBody = generated.getContent();
+        if (AiSettings.PROVIDER_MOCK.equals(settings.getProvider())) {
+            newBody = expandArrayForUpdate(newBody, request.getMessage());
+        }
+        if (newBody == null || newBody.trim().isEmpty()) {
+            response.setReply("这次没有生成可用的返回体，请把要改的字段说得更具体一些。");
+            return;
+        }
+        if (newBody.equals(oldBody)) {
+            response.setReply("模型没有产生实际变化，请说明要改哪个字段或数组，例如「把 data 数组补到 5 条」。");
+            return;
+        }
+
+        AiApiUpdateDraft draft = new AiApiUpdateDraft();
+        draft.setApiId(detail.getId());
+        draft.setResponseId(target.getId());
+        draft.setTeamId(detail.getTeamId());
+        draft.setApiName(detail.getName());
+        draft.setMethod(detail.getMethod());
+        draft.setPath(detail.getPath());
+        draft.setResponseName(target.getName());
+        draft.setOldBody(oldBody);
+        draft.setNewBody(newBody);
+
+        Map<String, Object> card = pendingActionService.createApiUpdateDraft(
+                draft, detail.getMethod() + " " + detail.getPath() + " · " + target.getName());
+        response.getCards().add(card);
+        response.setReply("已生成接口修改草稿，确认后才会更新「" + detail.getName() + "」：");
+    }
+
+    private ApiDefinitionDetailVO resolveUpdateTarget(AiChatRequest request, ChatPlan plan) {
+        String contextId = firstNonBlank(plan.apiId, request.getContextApiId());
+        if (contextId != null) {
+            try {
+                return apiService.getById(contextId);
+            } catch (BizException ignored) {
+                // 上下文接口可能已删除或无权限，继续按路径查找
+            }
+        }
+        String path = firstNonBlank(plan.path, extractPath(request.getMessage()));
+        if (path == null) {
+            return null;
+        }
+        String method = plan.method == null || plan.method.trim().isEmpty() ? null : normalizeMethod(plan.method);
+        // 模型可能把方法猜错，路径命中优先；方法只作为偏好。
+        PageResult<ApiDefinitionVO> page = apiService.list(request.getTeamId(), null, null, null,
+                path, null, null, null, null, 1, 20);
+        ApiDefinitionVO matched = null;
+        for (ApiDefinitionVO api : page.getItems()) {
+            if (path.equals(api.getPath())) {
+                if (method == null || method.equals(api.getMethod())) {
+                    return apiService.getById(api.getId());
+                }
+                if (matched == null) {
+                    matched = api;
+                }
+            }
+        }
+        return matched == null ? null : apiService.getById(matched.getId());
+    }
+
+    private ApiResponse selectResponse(ApiDefinitionDetailVO detail, ChatPlan plan) {
+        List<ApiResponse> responses = detail.getResponses();
+        if (responses == null || responses.isEmpty()) {
+            return null;
+        }
+        if (plan.responseName != null && !plan.responseName.trim().isEmpty()) {
+            for (ApiResponse response : responses) {
+                if (plan.responseName.trim().equals(response.getName())) {
+                    return response;
+                }
+            }
+        }
+        for (ApiResponse response : responses) {
+            if (response.isActive() && "TEXT".equalsIgnoreCase(response.getBodyType())) {
+                return response;
+            }
+        }
+        for (ApiResponse response : responses) {
+            if ("TEXT".equalsIgnoreCase(response.getBodyType())) {
+                return response;
+            }
+        }
+        return null;
+    }
+
+    private String expandArrayForUpdate(String body, String message) {
+        String lower = message == null ? "" : message.toLowerCase();
+        if (!containsAny(lower, "数组", "列表", "多条", "大一些", "多一点", "扩充", "扩展", "丰富")) {
+            return body;
+        }
+        try {
+            JsonNode root = objectMapper.readTree(body);
+            boolean changed = expandArrays(root, 0);
+            if (!changed) {
+                return body;
+            }
+            return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(root);
+        } catch (Exception e) {
+            return body;
+        }
+    }
+
+    private boolean expandArrays(JsonNode node, int depth) {
+        if (node == null || depth > 5) {
+            return false;
+        }
+        boolean changed = false;
+        if (node.isObject()) {
+            java.util.Iterator<java.util.Map.Entry<String, JsonNode>> fields = node.fields();
+            while (fields.hasNext()) {
+                JsonNode child = fields.next().getValue();
+                if (child.isArray() && child.size() > 0 && child.size() < 4) {
+                    ArrayNode array = (ArrayNode) child;
+                    while (array.size() < 4) {
+                        array.add(array.get(0).deepCopy());
+                    }
+                    changed = true;
+                } else if (child.isObject() || child.isArray()) {
+                    changed = expandArrays(child, depth + 1) || changed;
+                }
+            }
+        } else if (node.isArray() && node.size() > 0 && node.size() < 4) {
+            ArrayNode array = (ArrayNode) node;
+            while (array.size() < 4) {
+                array.add(array.get(0).deepCopy());
+            }
+            changed = true;
+        }
+        return changed;
+    }
+
+    private String extractPath(String message) {
+        Matcher matcher = PATH_PATTERN.matcher(message == null ? "" : message);
+        return matcher.find() ? matcher.group(1) : null;
+    }
+
+    private String firstNonBlank(String first, String second) {
+        if (first != null && !first.trim().isEmpty()) return first.trim();
+        if (second != null && !second.trim().isEmpty()) return second.trim();
+        return null;
+    }
+
     // ===== 意图识别 =====
 
-    private ChatPlan mockPlan(String message) {
+    private ChatPlan mockPlan(String message, String contextApiId) {
         ChatPlan plan = new ChatPlan();
         String lower = message.toLowerCase();
+        if (containsAny(lower, "修改", "改成", "改为", "更新", "调整", "把返回", "返回值", "响应体", "数组", "大一些", "多条", "扩充", "扩展", "丰富")
+                && !containsAny(lower, "创建", "新建")) {
+            plan.intent = INTENT_UPDATE;
+            plan.apiId = contextApiId;
+            Matcher pathMatcher = PATH_PATTERN.matcher(message);
+            if (pathMatcher.find()) {
+                plan.path = pathMatcher.group(1);
+            }
+            return plan;
+        }
         if (containsAny(lower, "统计", "调用次数", "调用量", "最多", "热门", "排行")) {
             plan.intent = INTENT_STATS;
             return plan;
@@ -285,15 +489,20 @@ public class AiChatService {
 
     private ChatPlan modelPlan(AiSettings settings, AiChatRequest request) {
         String system = "你是 MockHub 的 AI 助手。判断用户意图，只输出 JSON："
-                + "{\"intent\":\"SEARCH_APIS|API_STATS|CREATE_API_DRAFT|HELP\","
-                + "\"keyword\":\"搜索关键词\",\"method\":\"GET\",\"path\":\"/api/xxx\","
-                + "\"name\":\"接口名称\",\"responseBody\":\"响应体字符串\",\"reply\":\"中文回答\"}。"
-                + "只有用户明确要求创建接口时才用 CREATE_API_DRAFT；不确定时用 HELP。"
+                + "{\"intent\":\"SEARCH_APIS|API_STATS|CREATE_API_DRAFT|UPDATE_API_DRAFT|HELP\","
+                + "\"apiId\":\"要修改的接口 ID\",\"keyword\":\"搜索关键词\",\"method\":\"GET\",\"path\":\"/api/xxx\","
+                + "\"name\":\"接口名称\",\"responseName\":\"要修改的返回体名称\","
+                + "\"responseBody\":\"响应体字符串\",\"reply\":\"中文回答\"}。"
+                + "只有用户明确要求创建接口时才用 CREATE_API_DRAFT；要求修改已有接口或其返回值/响应体时用 UPDATE_API_DRAFT；不确定时用 HELP。"
+                + "UPDATE_API_DRAFT 优先使用上下文接口 ID；没有上下文时尽量从用户话里提取 path。创建与修改不要混淆。"
                 + "SEARCH_APIS 时 keyword 必填；CREATE_API_DRAFT 时 method/path 必填，responseBody 为合法 JSON 字符串。"
                 + "不要输出 Markdown 或额外文本。";
 
         StringBuilder user = new StringBuilder();
         user.append("当前团队 ID：").append(request.getTeamId()).append("\n");
+        if (request.getContextApiId() != null && !request.getContextApiId().trim().isEmpty()) {
+            user.append("当前上下文接口 ID：").append(request.getContextApiId()).append("\n");
+        }
         List<AiChatMessage> history = request.getHistory();
         if (history != null && !history.isEmpty()) {
             user.append("最近对话：\n");
@@ -329,13 +538,16 @@ public class AiChatService {
             JsonNode node = objectMapper.readTree(json.substring(start, end + 1));
             String intent = node.path("intent").asText(INTENT_HELP).toUpperCase();
             if (INTENT_SEARCH.equals(intent) || INTENT_STATS.equals(intent)
-                    || INTENT_CREATE.equals(intent) || INTENT_HELP.equals(intent)) {
+                    || INTENT_CREATE.equals(intent) || INTENT_UPDATE.equals(intent)
+                    || INTENT_HELP.equals(intent)) {
                 plan.intent = intent;
             }
+            plan.apiId = node.path("apiId").asText("");
             plan.keyword = node.path("keyword").asText("");
             plan.method = node.path("method").asText("");
             plan.path = node.path("path").asText("");
             plan.name = node.path("name").asText("");
+            plan.responseName = node.path("responseName").asText("");
             JsonNode bodyNode = node.path("responseBody");
             plan.responseBody = bodyNode.isObject() || bodyNode.isArray()
                     ? bodyNode.toString() : bodyNode.asText("");
@@ -417,6 +629,7 @@ public class AiChatService {
                 + "1. 查询近 7 天调用统计，例如「最近 7 天哪个接口调用最多？」\n"
                 + "2. 搜索 Mock 接口，例如「找一下用户相关的接口」\n"
                 + "3. 创建接口草稿，例如「帮我创建 GET /api/user/info 的 Mock，返回姓名、头像、等级」\n"
+                + "4. 修改已有接口，例如「把 GET /api/user/info 的返回值数组弄大一些」；在编辑页直接说「把返回值数组弄大一些」即可。\n"
                 + "写操作都会先生成确认卡片，确认后才会落库。";
     }
 
@@ -431,7 +644,9 @@ public class AiChatService {
 
     private static class ChatPlan {
         private String intent;
+        private String apiId;
         private String keyword;
+        private String responseName;
         private String method;
         private String path;
         private String name;
