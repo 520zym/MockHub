@@ -33,15 +33,19 @@
             size="small"
             class="ai-scope-select"
             placeholder="选择团队"
+            filterable
+            :loading="teamsLoading"
+            @visible-change="onScopeVisible"
           >
             <el-option label="全部团队" value="__ALL__" />
-            <el-option v-for="team in appStore.teams" :key="team.id" :label="team.name" :value="team.id" />
+            <el-option v-for="team in assistantTeams" :key="team.id" :label="team.name" :value="team.id" />
           </el-select>
           <span v-else class="ctx-chip">范围：{{ teamName || '未选择团队' }}</span>
           <span class="ctx-chip">
             <el-icon><Lock /></el-icon>
             以你的权限运行
           </span>
+          <span v-if="teamsError" class="ai-team-error" @click="loadAssistantTeams(true)">{{ teamsError }}，重试</span>
         </div>
 
         <div ref="bodyRef" class="ai-chat__body">
@@ -265,6 +269,7 @@ import {
   Check, EditPen, Clock, Promotion, OfficeBuilding
 } from '@element-plus/icons-vue'
 import { aiChat, confirmAiAction, cancelAiAction } from '@/api/ai'
+import { getTeams } from '@/api/teams'
 import { useAiStore } from '@/stores/ai'
 import { useAppStore } from '@/stores/app'
 import { useUserStore } from '@/stores/user'
@@ -281,6 +286,9 @@ const messages = ref([])
 const bodyRef = ref(null)
 const composerFocus = ref(false)
 const scopeTeamId = ref('__ALL__')
+const assistantTeams = ref([])
+const teamsLoading = ref(false)
+const teamsError = ref('')
 
 const quickPrompts = [
   '最近 7 天哪个接口调用最多？',
@@ -292,24 +300,53 @@ const teamId = computed(() => {
   if (userStore.isSuperAdmin) {
     return scopeTeamId.value && scopeTeamId.value !== '__ALL__' ? scopeTeamId.value : null
   }
-  return appStore.currentTeamId || appStore.teams[0]?.id || null
+  return appStore.currentTeamId || assistantTeams.value[0]?.id || appStore.teams[0]?.id || null
 })
 const teamName = computed(() => {
   if (!teamId.value) return userStore.isSuperAdmin ? '全部团队' : ''
-  return appStore.teams.find((team) => team.id === teamId.value)?.name || ''
+  return assistantTeams.value.find((team) => team.id === teamId.value)?.name || ''
 })
+
+async function loadAssistantTeams(force) {
+  if (teamsLoading.value) return
+  if (!force && assistantTeams.value.length) return
+  teamsLoading.value = true
+  teamsError.value = ''
+  try {
+    const data = await getTeams()
+    assistantTeams.value = Array.isArray(data) ? data : []
+    if (assistantTeams.value.length && appStore.teams.length === 0) {
+      appStore.teams = assistantTeams.value
+    }
+    if (userStore.isSuperAdmin && scopeTeamId.value !== '__ALL__'
+      && !assistantTeams.value.some(team => team.id === scopeTeamId.value)) {
+      scopeTeamId.value = '__ALL__'
+    }
+  } catch (e) {
+    if (assistantTeams.value.length === 0 && appStore.teams.length) {
+      assistantTeams.value = appStore.teams
+    }
+    teamsError.value = '团队列表加载失败'
+  } finally {
+    teamsLoading.value = false
+  }
+}
+
+function onScopeVisible(visible) {
+  if (visible) {
+    loadAssistantTeams(true)
+  }
+}
 
 onMounted(async () => {
   aiStore.load()
-  if (appStore.teams.length === 0) {
-    try {
-      await appStore.loadTeams()
-    } catch (e) {
-      // 团队加载失败时悬浮入口仍可打开，输入区会提示先选择团队
-    }
-  }
+  assistantTeams.value = appStore.teams
+  await loadAssistantTeams(true)
   if (userStore.isSuperAdmin) {
-    scopeTeamId.value = appStore.currentTeamId || '__ALL__'
+    const preferred = appStore.currentTeamId
+    scopeTeamId.value = preferred && assistantTeams.value.some(team => team.id === preferred)
+      ? preferred
+      : '__ALL__'
   }
 })
 
@@ -324,6 +361,9 @@ function goSettings() {
 
 function openChat() {
   open.value = true
+  if (!assistantTeams.value.length) {
+    loadAssistantTeams()
+  }
   scrollToBottom()
 }
 
@@ -431,7 +471,8 @@ function expiryText(card) {
 }
 
 function teamLabel(id) {
-  const team = appStore.teams.find((item) => item.id === id)
+  const team = assistantTeams.value.find((item) => item.id === id)
+    || appStore.teams.find((item) => item.id === id)
   return team ? team.name : '当前团队'
 }
 
@@ -621,6 +662,14 @@ watch(() => aiStore.available, (available) => {
   flex-shrink: 0;
   font-size: 11.5px;
   color: #7B87A8;
+}
+
+.ai-team-error {
+  margin-left: auto;
+  color: #EF4444;
+  font-size: 10.5px;
+  cursor: pointer;
+  white-space: nowrap;
 }
 
 .ctx-chip {
