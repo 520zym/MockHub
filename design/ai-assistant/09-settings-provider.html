@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440, initial-scale=1">
+<title>全局设置 · MockHub AI 设计稿</title>
+<link rel="stylesheet" href="assets/mock.css">
+<link rel="stylesheet" href="assets/settings-v2.css">
+<style></style>
+</head>
+<body>
+<aside class="sidebar">
+  <div class="sidebar__logo"><div class="sidebar__mark">M</div><div class="sidebar__name">MockHub</div></div>
+  <div class="sidebar__nav">
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg><span>接口管理</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg><span>文件服务器</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72"/><path d="m14 7 3 3"/><path d="M5 6v4"/><path d="M19 14v4"/><path d="M10 2v2"/><path d="M7 8H3"/><path d="M21 16h-4"/><path d="M11 3H9"/></svg><span>动态变量</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg><span>使用统计</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01M16 6h.01M12 6h.01M12 10h.01M12 14h.01M16 10h.01M16 14h.01M8 10h.01M8 14h.01"/></svg><span>团队管理</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>用户管理</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg><span>日志</span></div>
+      <div class="nav-item nav-item--active"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg><span>全局设置</span></div>
+  </div>
+    <div style="flex:1"></div>
+  <div class="sidebar__footer" style="color:#A3AED0"><svg class="icon icon--16" viewBox="0 0 24 24"  aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg></div>
+</aside>
+<header class="topbar">
+  <div class="topbar__left">
+    <div class="topbar__toggle"><svg class="icon icon--18" viewBox="0 0 24 24"  aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg></div>
+    <div class="topbar__title">全局设置</div>
+  </div>
+  <div class="topbar__user"><div class="avatar">张</div><span class="topbar__username">张一鸣</span></div>
+</header>
+<main class="main"><div class="settings2">
+<aside class="settings2__nav">
+  <div class="nav-group">
+    <div class="nav-group__title">AI 能力</div>
+<div class="s2-item s2-item--on"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M12 22v-5"/><path d="M9 8V2M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></svg><span>AI 供应商</span><span class="s2-item__badge">新</span></div>
+<div class="s2-item"><svg class="icon " viewBox="0 0 24 24" style="fill:currentColor;stroke:none" aria-hidden="true"><path d="M11 3.2l1.8 5 5 1.8-5 1.8-1.8 5-1.8-5-5-1.8 5-1.8z"/><path d="M18.5 14.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z"/></svg><span>助手与能力</span></div>
+<div class="s2-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="m4 17 6-6-6-6"/><path d="M12 19h8"/></svg><span>MCP Server</span></div>
+  </div>
+  <div class="nav-group">
+    <div class="nav-group__title">系统</div>
+<div class="s2-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><rect x="2" y="3" width="20" height="8" rx="2"/><rect x="2" y="13" width="20" height="8" rx="2"/><path d="M6 7h.01M6 17h.01"/></svg><span>基础设置</span></div>
+<div class="s2-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg><span>日志与保留</span></div>
+<div class="s2-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg><span>文件存储</span></div>
+  </div>
+  <div class="settings2__hint">仅超级管理员可修改全局设置，保存后对全部团队生效。</div>
+</aside>
+<section class="settings2__panel">
+  <div class="crumb">全局设置 / AI 供应商</div>
+  <div class="panel-title">AI 供应商<span class="api-type-chip">API 接入</span></div>
+  <div class="panel-desc">选择模型服务商，用 API Key 接入。请求全部由服务端发出，浏览器不会直接访问模型服务。</div>
+  <div class="panel-body"><div class="conn-strip">
+  <span class="provider__logo" style="background:#EEF0FF;color:#4F46E5">D</span>
+  <span>当前使用 <b>DeepSeek</b> · deepseek-chat</span>
+  <span class="conn-ok">连接正常 · 1.1s</span>
+</div>
+<div class="block-title">选择供应商</div>
+<div class="block-desc">先选服务商，再填 Key。DeepSeek、Kimi、MiniMax、智谱 GLM 等都走 OpenAI 兼容协议。</div>
+<div class="provider-grid">
+<div class="provider provider--on">  <span class="provider__logo" style="background:#EEF0FF;color:#4F46E5">D</span>  <span class="provider__body">    <span class="provider__name">DeepSeek</span>    <span class="provider__host">api.deepseek.com</span>  </span><span class="provider__check"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="m20 6-11 11-5-5"/></svg></span></div>
+<div class="provider">  <span class="provider__logo" style="background:#F3F4F6;color:#111827">K</span>  <span class="provider__body">    <span class="provider__name">Kimi</span>    <span class="provider__host">api.moonshot.cn</span>  </span></div>
+<div class="provider">  <span class="provider__logo" style="background:#FFF7ED;color:#C2410C">M</span>  <span class="provider__body">    <span class="provider__name">MiniMax</span>    <span class="provider__host">api.minimax.cn</span>  </span></div>
+<div class="provider">  <span class="provider__logo" style="background:#EFF6FF;color:#2563EB">G</span>  <span class="provider__body">    <span class="provider__name">智谱 GLM</span>    <span class="provider__host">open.bigmodel.cn</span>  </span></div>
+<div class="provider">  <span class="provider__logo" style="background:#F5F3FF;color:#7C3AED">Q</span>  <span class="provider__body">    <span class="provider__name">通义千问</span>    <span class="provider__host">dashscope.aliyuncs.com</span>  </span></div>
+<div class="provider">  <span class="provider__logo" style="background:#ECFDF5;color:#059669">O</span>  <span class="provider__body">    <span class="provider__name">OpenAI</span>    <span class="provider__host">api.openai.com</span>  </span></div>
+<div class="provider">  <span class="provider__logo" style="background:#F1F5F9;color:#475569">L</span>  <span class="provider__body">    <span class="provider__name">Ollama<span class="s2-item__badge" style="font-size:9px;color:#64748B;background:#F1F5F9;border-color:#E2E8F0">本地</span></span>    <span class="provider__host">localhost:11434</span>  </span></div>
+<div class="provider provider--dashed">  <span class="provider__logo" style="background:#F7F8FA;color:#A3AED0">+</span>  <span class="provider__body">    <span class="provider__name">自定义</span>    <span class="provider__host">OpenAI 兼容接口</span>  </span></div>
+</div>
+<div class="provider-hint">选择供应商会自动填入默认接口地址与模型，仍可手动修改；自定义用于任何 OpenAI 兼容服务。</div>
+<div class="section-divider"></div>
+<div class="block-title">连接配置</div>
+<div class="block-desc">只支持 API Key 方式，不接入 OAuth 或账号授权。</div>
+<div class="form-grid2">
+<div class="field2 full">  <div class="field2__label">API 地址</div>  <div class="input ">https://api.deepseek.com/v1</div>  <div class="field2__hint">已按供应商自动填写；服务端会拼接 /chat/completions</div></div>
+<div class="field2 ">  <div class="field2__label">默认模型</div>  <div class="model-field"><div class="input model-input"><span class="model-id">deepseek-chat</span><span class="model-chip">推荐</span></div><button class="btn btn--plain btn--sm"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button></div>  <div class="field2__hint">可从推荐列表选择、从服务商拉取，或手动输入</div></div>
+<div class="field2 ">  <div class="field2__label">接口协议</div>  <div class="input input--readonly">OpenAI Chat Completions</div>  <div class="field2__hint">所有供应商统一使用这一协议</div></div>
+<div class="field2 full">  <div class="field2__label">API Key</div>  <div class="key-row2">  <div class="input key-mask2">sk-••••••••••••5416</div>  <span class="chip" style="height:22px;font-size:11px;color:#10B981;background:#ECFDF5">已配置</span>  <button class="btn btn--plain btn--sm"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>替换</button></div>  <div class="field2__hint">仅写入不回显；保存后只返回掩码，不会进入日志或 localStorage</div></div>
+</div>
+<div class="test-line">
+  <button class="btn btn--plain"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M12 22v-5"/><path d="M9 8V2M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></svg>测试连接</button>
+  <span class="test-ok2"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg>连接正常 · 1.1s</span>
+  <span class="hint">最近检测：刚刚</span>
+</div>
+<div class="alert alert--info" style="margin-top:16px">
+<svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg>
+<div><div class="alert__title">Key 只存在服务端</div>API Key 以 AES-GCM 密文写入数据库；页面只显示掩码。备份数据库时请同时备份 data/.ai-key。</div>
+</div></div>
+  <div class="panel-foot"><button class="btn btn--primary btn--lg">保存供应商配置</button><span class="link-btn">没有 Key？先用内置演示模型 <svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span></div>
+</section>
+</div></main>
+
+</body>
+</html>

@@ -229,6 +229,7 @@
               v-model:selection-mode="op.responseMode"
               :operation-name="op.operationName"
               :team-id="form.teamId"
+              :api-context="aiApiContext"
               default-content-type="text/xml"
               editor-language="xml"
             />
@@ -244,7 +245,12 @@
     <!-- 卡片：返回体配置（REST 模式，使用 ResponseTabs 组件） -->
     <div class="soft-card section-card" v-if="form.type === 'REST'">
       <h3 class="section-title">返回体配置</h3>
-      <ResponseTabs v-model="form.responses" v-model:selection-mode="form.responseMode" :team-id="form.teamId" />
+      <ResponseTabs
+        v-model="form.responses"
+        v-model:selection-mode="form.responseMode"
+        :team-id="form.teamId"
+        :api-context="aiApiContext"
+      />
     </div>
 
     <!-- 卡片：标签 -->
@@ -412,6 +418,15 @@ const form = reactive({
     sortOrder: 0
   }]
 })
+
+// AI 生成使用的接口上下文（类型 / 名称 / 方法 / 路径）
+const aiApiContext = computed(() => ({
+  type: form.type,
+  name: form.name,
+  method: form.method,
+  path: form.path
+}))
+
 
 // WSDL 上传相关
 const wsdlFile = ref(null)
@@ -1100,6 +1115,12 @@ async function handleGroupSelectChange(val) {
 }
 
 // --- 初始化 ---
+watch(() => appStore.apiRevision, () => {
+  if (isEdit.value) {
+    loadApiDetail()
+  }
+})
+
 onMounted(async () => {
   // 加载服务器局域网地址
   try {

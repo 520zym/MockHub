@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440, initial-scale=1">
+<title>全局设置 · MockHub AI 设计稿</title>
+<link rel="stylesheet" href="assets/mock.css">
+<style></style>
+</head>
+<body>
+<aside class="sidebar">
+  <div class="sidebar__logo"><div class="sidebar__mark">M</div><div class="sidebar__name">MockHub</div></div>
+  <div class="sidebar__nav">
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg><span>接口管理</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg><span>文件服务器</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72"/><path d="m14 7 3 3"/><path d="M5 6v4"/><path d="M19 14v4"/><path d="M10 2v2"/><path d="M7 8H3"/><path d="M21 16h-4"/><path d="M11 3H9"/></svg><span>动态变量</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg><span>使用统计</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01M16 6h.01M12 6h.01M12 10h.01M12 14h.01M16 10h.01M16 14h.01M8 10h.01M8 14h.01"/></svg><span>团队管理</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>用户管理</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg><span>日志</span></div>
+      <div class="nav-item nav-item--active"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg><span>全局设置</span></div>
+  </div>
+    <div style="flex:1"></div>
+  <div class="sidebar__footer" style="color:#A3AED0"><svg class="icon icon--16" viewBox="0 0 24 24"  aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg></div>
+</aside>
+<header class="topbar">
+  <div class="topbar__left">
+    <div class="topbar__toggle"><svg class="icon icon--18" viewBox="0 0 24 24"  aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg></div>
+    <div class="topbar__title">全局设置</div>
+  </div>
+  <div class="topbar__user"><div class="avatar">张</div><span class="topbar__username">张一鸣</span></div>
+</header>
+<main class="main"><div class="settings" style="max-width:780px">
+  <div class="settings-card">
+    <div class="settings-section">
+      <h3 class="section-title">MCP Server</h3>
+      <p class="section-desc">把 MockHub 的检索、统计与生成能力开放给 Claude、Cursor、Codex 等外部 AI 工具。</p>
+
+      <div class="switch-row" style="justify-content:space-between;padding:4px 0 16px">
+        <div><div class="switch-row__label" style="font-size:14px;font-weight:500;color:#1B2559">启用 MCP Server</div><div class="switch-row__desc">外部客户端通过 Bearer Token 调用，权限与 Token 所属用户一致</div></div>
+        <div style="display:flex;align-items:center;gap:10px"><span style="font-size:12px;color:#10B981">已启用</span><span class="switch switch--on"></span></div>
+      </div>
+
+      <div class="form-item"><div class="form-item__label">服务地址</div>
+        <div class="mcp-endpoint"><span>https://mockhub.example.com/mcp</span><span class="tag">SSE</span><button class="btn btn--sm" style="margin-left:auto"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>复制</button></div>
+        <div class="form-item__hint">本地部署时使用 <code style="font-family:monospace">http://&lt;host&gt;:8080/mcp</code>；连接示例见文档。</div>
+      </div>
+    </div>
+
+    <div class="divider" style="margin:24px 0"></div>
+
+    <div class="settings-section">
+      <h3 class="section-title">可用工具</h3>
+      <p class="section-desc">工具内部复用现有业务服务，不会绕过权限与团队隔离。</p>
+      <div class="tool-list">
+<div class="tool-item">
+  <code>mockhub.search_apis</code>
+  <span class="desc">按关键字搜索接口</span>
+  <span class="chip" style="height:18px;font-size:10px;color:#4A5568">读</span>
+<span class="switch switch--on"></span>
+</div>
+<div class="tool-item">
+  <code>mockhub.get_api_detail</code>
+  <span class="desc">读取接口与返回体配置</span>
+  <span class="chip" style="height:18px;font-size:10px;color:#4A5568">读</span>
+<span class="switch switch--on"></span>
+</div>
+<div class="tool-item">
+  <code>mockhub.get_api_stats</code>
+  <span class="desc">查询调用次数、最近调用与僵尸 Mock</span>
+  <span class="chip" style="height:18px;font-size:10px;color:#4A5568">读</span>
+<span class="switch switch--on"></span>
+</div>
+<div class="tool-item">
+  <code>mockhub.create_api_draft</code>
+  <span class="desc">根据描述生成接口草稿</span>
+  <span class="chip" style="height:18px;font-size:10px;color:#B45309;background:#FFFBEB">写</span>
+<span class="switch switch--on"></span>
+</div>
+<div class="tool-item">
+  <code>mockhub.apply_api_draft</code>
+  <span class="desc">应用草稿（默认需 Web 确认）</span>
+  <span class="chip" style="height:18px;font-size:10px;color:#B45309;background:#FFFBEB">写</span>
+<span class="switch"></span>
+</div>
+<div class="tool-item">
+  <code>mockhub.generate_response_body</code>
+  <span class="desc">生成 JSON / XML 响应体</span>
+  <span class="chip" style="height:18px;font-size:10px;color:#B45309;background:#FFFBEB">写</span>
+<span class="switch switch--on"></span>
+</div>
+<div class="tool-item">
+  <code>mockhub.generate_conditions</code>
+  <span class="desc">把自然语言转成条件规则</span>
+  <span class="chip" style="height:18px;font-size:10px;color:#B45309;background:#FFFBEB">写</span>
+<span class="switch switch--on"></span>
+</div>
+<div class="tool-item">
+  <code>mockhub.explain_match_result</code>
+  <span class="desc">解释一次请求的命中链路</span>
+  <span class="chip" style="height:18px;font-size:10px;color:#4A5568">读</span>
+<span class="switch switch--on"></span>
+</div>
+      </div>
+    </div>
+
+    <div class="divider" style="margin:24px 0"></div>
+
+    <div class="settings-section">
+      <h3 class="section-title">写操作策略</h3>
+      <p class="section-desc">外部 AI 工具默认只能创建草稿，最终写入必须由用户在 MockHub 页面确认。</p>
+      <div class="apply-grid">
+        <div class="apply-opt apply-opt--on"><span class="radio radio--on"></span><div><div class="apply-opt__t">草稿 + Web 确认（推荐）</div><div class="apply-opt__d">返回确认链接，用户在 MockHub 完成最终确认</div></div></div>
+        <div class="apply-opt"><span class="radio"></span><div><div class="apply-opt__t">允许直接写入</div><div class="apply-opt__d">风险较高，仅建议在隔离环境开启</div></div></div>
+      </div>
+    </div>
+
+    <div class="divider" style="margin:24px 0"></div>
+
+    <div class="settings-section">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <h3 class="section-title" style="margin:0">访问 Token</h3>
+        <button class="btn btn--primary btn--sm"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg>新建 Token</button>
+      </div>
+      <p class="section-desc">Token 只在创建时显示一次，可随时撤销。</p>
+      <table class="token-table">
+        <thead><tr><th>名称</th><th>所有者</th><th>创建时间</th><th>最后使用</th><th>状态</th><th></th></tr></thead>
+        <tbody>
+          <tr><td>Cursor · 本地</td><td>张一鸣</td><td>2026-06-18 10:24</td><td>3 分钟前</td><td><span style="color:#10B981">生效中</span></td><td style="text-align:right"><span class="link" style="font-size:12px">撤销</span></td></tr>
+          <tr><td>Claude Desktop</td><td>张一鸣</td><td>2026-06-03 15:08</td><td>2 天前</td><td><span style="color:#10B981">生效中</span></td><td style="text-align:right"><span class="link" style="font-size:12px">撤销</span></td></tr>
+          <tr><td>CI 冒烟测试</td><td>李闻</td><td>2026-05-21 09:41</td><td>31 天前</td><td><span style="color:#A3AED0">已过期</span></td><td style="text-align:right"><span class="link" style="font-size:12px">删除</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="alert alert--warn" style="margin-top:22px"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg><div><div class="alert__title">开放前请确认</div>MCP 工具继承 Token 对应用户的权限；草稿确认链接会过期；所有工具调用（含读取）都会写入操作日志，便于追溯。</div></div>
+  </div>
+</div></main>
+
+</body>
+</html>

@@ -22,6 +22,7 @@
         <el-radio-group v-model="source" size="small">
           <el-radio-button value="BODY">Body</el-radio-button>
           <el-radio-button value="QUERY">Query</el-radio-button>
+          <el-radio-button value="HEADER">Header</el-radio-button>
         </el-radio-group>
 
         <el-button size="small" class="from-log-btn" disabled>
@@ -31,6 +32,7 @@
         </el-button>
 
         <el-popover
+          v-if="source !== 'HEADER'"
           :width="460"
           trigger="click"
           placement="bottom"
@@ -61,6 +63,16 @@
           </div>
         </el-popover>
 
+        <el-button
+          v-if="aiStore.capabilities.conditions"
+          size="small"
+          class="ai-rule-btn"
+          @click="aiDrawerVisible = true"
+        >
+          <el-icon><MagicStick /></el-icon>
+          AI 生成规则
+        </el-button>
+
         <span class="hint-right">
           <el-icon><InfoFilled /></el-icon>
           规则空时，该返回体作为兜底
@@ -69,13 +81,20 @@
 
       <!-- 左右分栏 -->
       <div class="split">
-        <div class="col-left">
+        <div v-if="source !== 'HEADER'" class="col-left">
           <SampleTree
             :model-value="sampleText"
             :used-paths="usedPaths"
             :sample-kind="source === 'BODY' ? bodySampleKind : 'json'"
             @select="onTreePick"
           />
+        </div>
+        <div v-else class="col-left header-hint">
+          <el-icon><InfoFilled /></el-icon>
+          <div>
+            <div class="header-hint__title">Header 条件</div>
+            <div class="header-hint__desc">在右侧填写请求头名称与预期值，例如 <code>X-Env</code> 等于 <code>test</code>；名称不区分大小写。</div>
+          </div>
         </div>
         <div class="col-right">
           <ConditionTable
@@ -86,6 +105,17 @@
         </div>
       </div>
     </div>
+
+    <AiConditionsDrawer
+      v-model="aiDrawerVisible"
+      :team-id="teamId"
+      :api-context="apiContext"
+      :response-name="responseName"
+      :conditions="modelValue"
+      :body-sample="sampleText"
+      :sample-kind="bodySampleKind"
+      @apply="applyAiRules"
+    />
   </div>
 </template>
 
@@ -101,21 +131,32 @@
  *
  * 点击左树叶子 → 追加一条条件（字段路径 / 值 / 类型预填）。
  */
-import { ref, computed, watch } from 'vue'
-import { ArrowDown, ArrowRight, Document, Edit, InfoFilled } from '@element-plus/icons-vue'
+import { ref, computed, watch, onMounted } from 'vue'
+import { ArrowDown, ArrowRight, Document, Edit, InfoFilled, MagicStick } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import SampleTree from './SampleTree.vue'
 import ConditionTable from './ConditionTable.vue'
+import AiConditionsDrawer from '@/components/ai/AiConditionsDrawer.vue'
+import { useAiStore } from '@/stores/ai'
 import { parseXmlSampleTree } from '@/utils/xmlSampleTree'
 
 const props = defineProps({
   /** conditions JSON 字符串，对应 api_response.conditions 字段；空字符串 / null 表示无规则 */
   modelValue: { type: String, default: '' },
   /** BODY 示例类型：REST 使用 json；SOAP 使用 xml 生成点分元素路径 */
-  bodySampleKind: { type: String, default: 'json' }
+  bodySampleKind: { type: String, default: 'json' },
+  /** 所属团队，供 AI 生成使用 */
+  teamId: { type: String, default: null },
+  /** 接口上下文 */
+  apiContext: { type: Object, default: () => ({}) },
+  /** 当前返回体名称 */
+  responseName: { type: String, default: '默认返回体' }
 })
 
 const emit = defineEmits(['update:modelValue'])
+
+const aiStore = useAiStore()
+const aiDrawerVisible = ref(false)
 
 // 本地状态
 const expanded = ref(true)
@@ -128,6 +169,10 @@ const pastedText = ref('')
 watch([source, () => props.bodySampleKind], () => {
   sampleText.value = ''
   pastedText.value = ''
+})
+
+onMounted(() => {
+  aiStore.load()
 })
 
 // 从 modelValue 解析出初始条件数组
@@ -179,6 +224,17 @@ function serializeConditions(list) {
 function onConditionsUpdate(next) {
   conditions.value = next
   emit('update:modelValue', serializeConditions(next))
+}
+
+/** 应用 AI 生成的规则（已在前端按追加/替换合并） */
+function applyAiRules(payload) {
+  try {
+    const parsed = JSON.parse(payload.json)
+    const next = Array.isArray(parsed?.conditions) ? parsed.conditions : []
+    onConditionsUpdate(next)
+  } catch (e) {
+    ElMessage.error('规则内容解析失败，请重试')
+  }
 }
 
 function onTreePick(path, value, valueType) {
@@ -333,6 +389,19 @@ function queryStringToObject(s) {
 }
 .col-left { flex: 0 0 44%; }
 .col-right { flex: 1; }
+.ai-rule-btn {
+  background: #fff;
+  border: 1px solid #E7E3FD;
+  color: #4F46E5;
+}
+
+.ai-rule-btn:hover,
+.ai-rule-btn:focus {
+  background: #F5F3FF;
+  border-color: #C7D2FE;
+  color: #4F46E5;
+}
+
 .paste-dialog {
   display: flex;
   flex-direction: column;
@@ -346,5 +415,31 @@ function queryStringToObject(s) {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+.header-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 16px;
+  background: #F8FAFC;
+  border-right: 1px solid #E5E7EB;
+  color: #64748B;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.header-hint__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1B2559;
+  margin-bottom: 4px;
+}
+
+.header-hint__desc code {
+  font-family: 'SF Mono', Menlo, Monaco, Consolas, monospace;
+  background: #fff;
+  border: 1px solid #E5E7EB;
+  border-radius: 4px;
+  padding: 0 4px;
 }
 </style>

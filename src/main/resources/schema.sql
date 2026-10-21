@@ -288,3 +288,98 @@ CREATE TABLE IF NOT EXISTS file_server_tag (
     PRIMARY KEY (file_id, tag)
 );
 CREATE INDEX IF NOT EXISTS idx_file_server_tag_name ON file_server_tag(tag);
+
+-- ========== AI 助手（issue #6） ==========
+-- 单行配置表：id 固定为 'default'。API Key 只在服务端使用，接口永不回显明文。
+CREATE TABLE IF NOT EXISTS ai_settings (
+    id               TEXT PRIMARY KEY,
+    enabled          INTEGER NOT NULL DEFAULT 0,
+    provider         TEXT NOT NULL DEFAULT 'OPENAI_COMPATIBLE',  -- OPENAI_COMPATIBLE / MOCK
+    vendor           TEXT NOT NULL DEFAULT 'CUSTOM',               -- deepseek / kimi / minimax / glm / qwen / openai / ollama / custom
+    base_url         TEXT,
+    model            TEXT,
+    api_key          TEXT,
+    cap_response_body INTEGER NOT NULL DEFAULT 1,
+    cap_conditions    INTEGER NOT NULL DEFAULT 1,
+    cap_explain       INTEGER NOT NULL DEFAULT 1,
+    cap_drafts        INTEGER NOT NULL DEFAULT 1,
+    access_scope      TEXT NOT NULL DEFAULT 'ALL_MEMBERS',       -- ALL_MEMBERS / SUPER_ADMIN_ONLY
+    updated_at        TEXT,
+    updated_by        TEXT
+);
+INSERT OR IGNORE INTO ai_settings (id, enabled) VALUES ('default', 0);
+
+-- 待确认操作：AI 只产出草稿，用户确认后由服务端重新校验并写入
+CREATE TABLE IF NOT EXISTS ai_pending_action (
+    id            TEXT PRIMARY KEY,
+    user_id       TEXT NOT NULL,
+    team_id       TEXT,
+    action_type   TEXT NOT NULL,          -- CREATE_API
+    payload       TEXT NOT NULL,          -- ApiDefinitionDTO JSON
+    summary       TEXT,                   -- 卡片摘要文本
+    status        TEXT NOT NULL DEFAULT 'PENDING', -- PENDING / CONFIRMED / CANCELLED / EXPIRED
+    created_at    TEXT NOT NULL,
+    expires_at    TEXT NOT NULL,
+    confirmed_at  TEXT,
+    result_api_id TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_ai_pending_action_user ON ai_pending_action(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_ai_pending_action_expires ON ai_pending_action(status, expires_at);
+
+-- ========== MCP Server（issue #6 / 设计稿 06） ==========
+-- 单行配置：id 固定为 default。工具开关按工具名逐一控制。
+CREATE TABLE IF NOT EXISTS mcp_settings (
+    id                          TEXT PRIMARY KEY,
+    enabled                     INTEGER NOT NULL DEFAULT 0,
+    write_mode                  TEXT NOT NULL DEFAULT 'DRAFT_ONLY', -- DRAFT_ONLY / DIRECT
+    tool_search_apis            INTEGER NOT NULL DEFAULT 1,
+    tool_get_api_detail         INTEGER NOT NULL DEFAULT 1,
+    tool_get_api_stats          INTEGER NOT NULL DEFAULT 1,
+    tool_create_api_draft       INTEGER NOT NULL DEFAULT 1,
+    tool_update_api_draft       INTEGER NOT NULL DEFAULT 1,
+    tool_apply_api_draft        INTEGER NOT NULL DEFAULT 0,
+    tool_generate_response_body INTEGER NOT NULL DEFAULT 1,
+    tool_generate_conditions    INTEGER NOT NULL DEFAULT 1,
+    tool_explain_match_result   INTEGER NOT NULL DEFAULT 1,
+    updated_at                  TEXT,
+    updated_by                  TEXT
+);
+INSERT OR IGNORE INTO mcp_settings (id, enabled, write_mode) VALUES ('default', 0, 'DRAFT_ONLY');
+
+-- MCP 访问 Token：只保存 SHA-256 哈希与前缀，明文仅在创建时返回一次
+CREATE TABLE IF NOT EXISTS mcp_token (
+    id            TEXT PRIMARY KEY,
+    name          TEXT NOT NULL,
+    token_hash    TEXT NOT NULL,
+    token_prefix  TEXT NOT NULL,
+    user_id       TEXT NOT NULL,
+    created_at    TEXT NOT NULL,
+    last_used_at  TEXT,
+    expires_at    TEXT,
+    revoked_at    TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_mcp_token_hash ON mcp_token(token_hash);
+CREATE INDEX IF NOT EXISTS idx_mcp_token_user ON mcp_token(user_id, revoked_at);
+
+-- ========== AI 对话历史 ==========
+CREATE TABLE IF NOT EXISTS ai_conversation (
+    id          TEXT PRIMARY KEY,
+    user_id     TEXT NOT NULL,
+    team_id     TEXT,
+    title       TEXT,
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ai_conversation_user ON ai_conversation(user_id, updated_at);
+
+CREATE TABLE IF NOT EXISTS ai_conversation_message (
+    id              TEXT PRIMARY KEY,
+    conversation_id TEXT NOT NULL,
+    role            TEXT NOT NULL,              -- user / assistant
+    content         TEXT,
+    cards           TEXT,                       -- assistant 卡片 JSON 数组
+    provider        TEXT,
+    model           TEXT,
+    created_at      TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ai_conversation_message ON ai_conversation_message(conversation_id);

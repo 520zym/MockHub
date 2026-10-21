@@ -66,6 +66,9 @@ public class DataSourceConfig {
         enableWalMode(jdbcTemplate);
         executeSchemaSql(jdbcTemplate);
         executeMigrations(ds);
+        // 老库第一次执行 schema.sql 时，部分索引依赖的列还不存在，
+        // 迁移/兼容补列完成后再执行一次，补建这些索引。
+        executeSchemaSql(jdbcTemplate);
 
         return ds;
     }
@@ -122,8 +125,21 @@ public class DataSourceConfig {
             String[] statements = cleaned.toString().split(";");
             for (String statement : statements) {
                 String trimmed = statement.trim();
-                if (!trimmed.isEmpty()) {
+                if (trimmed.isEmpty()) {
+                    continue;
+                }
+                try {
                     jdbcTemplate.execute(trimmed);
+                } catch (org.springframework.dao.DataAccessException e) {
+                    String upper = trimmed.toUpperCase();
+                    if (upper.startsWith("CREATE INDEX") || upper.startsWith("CREATE UNIQUE INDEX")) {
+                        // 极老版本的 api_definition 可能还没有 group_id 等列，先跳过索引，
+                        // 等 migrate/ensureCompatibilityColumns 补列后由第二次 schema.sql 补建。
+                        log.warn("schema.sql 暂跳过索引（列尚未补齐）：{}", trimmed);
+                    } else {
+                        log.error("schema.sql 执行失败：{}", trimmed, e);
+                        throw e;
+                    }
                 }
             }
             log.info("schema.sql 执行完成，数据库表已就绪");
@@ -181,9 +197,20 @@ public class DataSourceConfig {
                     recordSchemaVersion(conn, 5,
                             "多返回体随机模式：api_definition 增加 response_mode 列");
                 }
+                if (current < 6) {
+                    migrateV6(conn);
+                    recordSchemaVersion(conn, 6,
+                            "AI 供应商：ai_settings 增加 vendor 列，并按已有 Base URL 回填");
+                }
+                if (current < 7) {
+                    migrateV7(conn);
+                    recordSchemaVersion(conn, 7,
+                            "MCP 工具：mcp_settings 增加 tool_update_api_draft 开关");
+                }
                 // 后续版本追加：
-                // if (current < 6) { migrateV6(conn); recordSchemaVersion(conn, 6, "..."); }
+                // if (current < 8) { migrateV8(conn); recordSchemaVersion(conn, 8, "..."); }
 
+                ensureCompatibilityColumns(conn);
                 conn.commit();
                 log.info("DB 迁移完成");
             } catch (Exception e) {
@@ -311,6 +338,112 @@ public class DataSourceConfig {
     private void migrateV5(Connection conn) throws SQLException {
         addColumnIfNotExists(conn, "api_definition", "response_mode",
                 "TEXT NOT NULL DEFAULT 'CONDITION'");
+    }
+
+    /**
+     * v6 迁移：AI 供应商开关。为 ai_settings 增加 vendor 列，
+     * 并按已有 Base URL 推断旧配置的供应商，避免升级后卡片全部落到「自定义」。
+     * 表不存在时直接跳过（单元测试/异常场景兜底）。
+     */
+    private void migrateV6(Connection conn) throws SQLException {
+        if (!tableExists(conn, "ai_settings")) {
+            log.info("ai_settings 表不存在，跳过 v6 AI 供应商迁移");
+            return;
+        }
+        addColumnIfNotExists(conn, "ai_settings", "vendor", "TEXT NOT NULL DEFAULT 'CUSTOM'");
+        try (Statement st = conn.createStatement()) {
+            st.execute("UPDATE ai_settings SET vendor = CASE "
+                    + "WHEN lower(base_url) LIKE '%api.deepseek.com%' THEN 'deepseek' "
+                    + "WHEN lower(base_url) LIKE '%moonshot%' THEN 'kimi' "
+                    + "WHEN lower(base_url) LIKE '%minimax%' THEN 'minimax' "
+                    + "WHEN lower(base_url) LIKE '%bigmodel%' THEN 'glm' "
+                    + "WHEN lower(base_url) LIKE '%dashscope%' THEN 'qwen' "
+                    + "WHEN lower(base_url) LIKE '%api.openai.com%' THEN 'openai' "
+                    + "WHEN lower(base_url) LIKE '%11434%' THEN 'ollama' "
+                    + "ELSE 'custom' END "
+                    + "WHERE vendor IS NULL OR vendor = '' OR upper(vendor) = 'CUSTOM'");
+        }
+    }
+
+    /** v7：MCP 增加「修改接口草稿」工具开关。 */
+    private void migrateV7(Connection conn) throws SQLException {
+        if (!tableExists(conn, "mcp_settings")) {
+            log.info("mcp_settings 表不存在，跳过 v7 迁移");
+            return;
+        }
+        addColumnIfNotExists(conn, "mcp_settings", "tool_update_api_draft", "INTEGER NOT NULL DEFAULT 1");
+    }
+
+    /**
+     * 老版本兼容兜底：不依赖 schema_version，逐列补齐当前代码会读取的字段。
+     * <p>
+     * 老用户可能来自任意历史版本，甚至没有完整的版本记录；这里只做幂等补列，
+     * 不修改已有数据，保证升级后不用手工改库。
+     */
+    private void ensureCompatibilityColumns(Connection conn) throws SQLException {
+        ensureColumns(conn, "api_definition", new String[][]{
+                {"description", "TEXT"}, {"group_id", "TEXT"}, {"scenarios", "TEXT"},
+                {"response_mode", "TEXT NOT NULL DEFAULT 'CONDITION'"},
+                {"hit_count", "INTEGER NOT NULL DEFAULT 0"}, {"last_called_at", "TEXT"},
+                {"global_header_overrides", "TEXT"}, {"soap_config", "TEXT"},
+                {"created_by", "TEXT"}, {"updated_by", "TEXT"}
+        });
+        ensureColumns(conn, "api_response", new String[][]{
+                {"body_type", "TEXT NOT NULL DEFAULT 'TEXT'"}, {"file_name", "TEXT"},
+                {"file_path", "TEXT"}, {"download_name", "TEXT"}, {"file_size", "INTEGER"},
+                {"sort_order", "INTEGER NOT NULL DEFAULT 0"}, {"conditions", "TEXT"},
+                {"delay_ms", "INTEGER NOT NULL DEFAULT 0"}, {"is_active", "INTEGER NOT NULL DEFAULT 0"}
+        });
+        ensureColumns(conn, "ai_settings", new String[][]{
+                {"enabled", "INTEGER NOT NULL DEFAULT 0"},
+                {"provider", "TEXT NOT NULL DEFAULT 'OPENAI_COMPATIBLE'"},
+                {"vendor", "TEXT NOT NULL DEFAULT 'CUSTOM'"}, {"base_url", "TEXT"},
+                {"model", "TEXT"}, {"api_key", "TEXT"},
+                {"cap_response_body", "INTEGER NOT NULL DEFAULT 1"},
+                {"cap_conditions", "INTEGER NOT NULL DEFAULT 1"},
+                {"cap_explain", "INTEGER NOT NULL DEFAULT 1"},
+                {"cap_drafts", "INTEGER NOT NULL DEFAULT 1"},
+                {"access_scope", "TEXT NOT NULL DEFAULT 'ALL_MEMBERS'"},
+                {"updated_at", "TEXT"}, {"updated_by", "TEXT"}
+        });
+        ensureColumns(conn, "ai_pending_action", new String[][]{
+                {"team_id", "TEXT"}, {"summary", "TEXT"}, {"confirmed_at", "TEXT"},
+                {"result_api_id", "TEXT"}
+        });
+        ensureColumns(conn, "mcp_settings", new String[][]{
+                {"enabled", "INTEGER NOT NULL DEFAULT 0"},
+                {"write_mode", "TEXT NOT NULL DEFAULT 'DRAFT_ONLY'"},
+                {"tool_search_apis", "INTEGER NOT NULL DEFAULT 1"},
+                {"tool_get_api_detail", "INTEGER NOT NULL DEFAULT 1"},
+                {"tool_get_api_stats", "INTEGER NOT NULL DEFAULT 1"},
+                {"tool_create_api_draft", "INTEGER NOT NULL DEFAULT 1"},
+                {"tool_update_api_draft", "INTEGER NOT NULL DEFAULT 1"},
+                {"tool_apply_api_draft", "INTEGER NOT NULL DEFAULT 0"},
+                {"tool_generate_response_body", "INTEGER NOT NULL DEFAULT 1"},
+                {"tool_generate_conditions", "INTEGER NOT NULL DEFAULT 1"},
+                {"tool_explain_match_result", "INTEGER NOT NULL DEFAULT 1"},
+                {"updated_at", "TEXT"}, {"updated_by", "TEXT"}
+        });
+    }
+
+    private void ensureColumns(Connection conn, String table, String[][] columns) throws SQLException {
+        if (!tableExists(conn, table)) {
+            log.info("兼容检查：{} 表不存在，跳过补列", table);
+            return;
+        }
+        for (String[] column : columns) {
+            addColumnIfNotExists(conn, table, column[0], column[1]);
+        }
+    }
+
+    private boolean tableExists(Connection conn, String table) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(
+                "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")) {
+            ps.setString(1, table);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next();
+            }
+        }
     }
 
     /**

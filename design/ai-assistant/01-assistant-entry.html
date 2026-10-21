@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440, initial-scale=1">
+<title>接口管理 · MockHub AI 设计稿</title>
+<link rel="stylesheet" href="assets/mock.css">
+<style></style>
+</head>
+<body>
+<aside class="sidebar">
+  <div class="sidebar__logo"><div class="sidebar__mark">M</div><div class="sidebar__name">MockHub</div></div>
+  <div class="sidebar__nav">
+      <div class="nav-item nav-item--active"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg><span>接口管理</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg><span>文件服务器</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72"/><path d="m14 7 3 3"/><path d="M5 6v4"/><path d="M19 14v4"/><path d="M10 2v2"/><path d="M7 8H3"/><path d="M21 16h-4"/><path d="M11 3H9"/></svg><span>动态变量</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg><span>使用统计</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01M16 6h.01M12 6h.01M12 10h.01M12 14h.01M16 10h.01M16 14h.01M8 10h.01M8 14h.01"/></svg><span>团队管理</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>用户管理</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg><span>日志</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg><span>全局设置</span></div>
+  </div>
+    <div class="sidebar__tree">
+      <div class="sidebar__divider"></div>
+      <div class="sidebar__section">团队筛选</div>
+      <div class="tree-node tree-node--active"><span class="tree-node__label">所有接口</span><span class="tree-node__count">12</span></div>
+      <div class="tree-node"><span class="team-tag team-tag--pay">PAY</span><span class="tree-node__label">支付中心</span><span class="tree-node__count">5</span></div>
+      <div class="tree-node"><span class="team-tag team-tag--user">USER</span><span class="tree-node__label">用户中心</span><span class="tree-node__count">4</span></div>
+      <div class="tree-node"><span class="team-tag team-tag--order">ORDER</span><span class="tree-node__label">订单服务</span><span class="tree-node__count">3</span></div>
+    </div>
+  <div class="sidebar__footer" style="color:#A3AED0"><svg class="icon icon--16" viewBox="0 0 24 24"  aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg></div>
+</aside>
+<header class="topbar">
+  <div class="topbar__left">
+    <div class="topbar__toggle"><svg class="icon icon--18" viewBox="0 0 24 24"  aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg></div>
+    <div class="topbar__title">接口管理</div>
+  </div>
+  <div class="topbar__user"><div class="avatar">张</div><span class="topbar__username">张一鸣</span></div>
+</header>
+<main class="main"><div class="card toolbar" style="padding:14px 16px">
+  <div class="toolbar__filters">
+    <div class="input search-box"><svg class="icon icon--16" viewBox="0 0 24 24"  aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="input__placeholder">搜索接口名称或路径</span></div>
+    <div class="input select" style="width:118px"><span class="input__placeholder">接口类型</span><svg class="icon chev" viewBox="0 0 24 24"  aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></div>
+    <div class="input select" style="width:118px"><span class="input__placeholder">HTTP 方法</span><svg class="icon chev" viewBox="0 0 24 24"  aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></div>
+    <div class="input select" style="width:118px"><span class="input__placeholder">启用状态</span><svg class="icon chev" viewBox="0 0 24 24"  aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></div>
+  </div>
+  <div class="toolbar__actions">
+    <button class="btn"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.2 8.2a2 2 0 0 0 2.8 0l7.2-7.2a2 2 0 0 0 0-2.8Z"/><circle cx="7.5" cy="7.5" r="1.2"/></svg>标签管理</button>
+    <button class="btn"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/></svg>导入</button>
+    <button class="btn"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg>导出</button>
+    <button class="btn btn--primary"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg>新建接口</button>
+  </div>
+</div>
+<div class="table-card">
+  <table class="tbl">
+    <thead><tr>
+      <th style="width:36px"><span class="cb"></span></th>
+      <th style="width:72px">类型</th>
+      <th style="width:76px">方法</th>
+      <th>路径</th>
+      <th style="width:132px">名称</th>
+      <th style="width:132px">标签</th>
+      <th style="width:88px">团队</th>
+      <th style="width:64px">启用</th>
+      <th style="width:104px">最近调用</th>
+      <th style="width:108px" class="t-right">操作</th>
+    </tr></thead>
+    <tbody>
+<tr>
+  <td style="width:36px"><span class="cb"></span></td>
+  <td style="width:72px"><span class="type-tag type-rest">REST</span></td>
+  <td style="width:76px"><span class="m-tag m-get">GET</span></td>
+  <td class="path">/api/order/detail</td>
+  <td class="name">订单详情</td>
+  <td style="width:132px"><div class="tag-list"><span class="mini-tag">订单</span><span class="mini-tag">核心</span></div></td>
+  <td style="width:88px"><span class="team-tag team-tag--order">ORDER</span></td>
+  <td style="width:64px"><span class="switch switch--on"></span></td>
+  <td style="width:104px;color:#4A5568;font-size:12.5px">3 分钟前</td>
+  <td style="width:108px"><div class="row-actions"><span class="link">编辑</span><span class="link">日志</span><span style="color:#CBD5E0">⋯</span></div></td>
+</tr>
+<tr>
+  <td style="width:36px"><span class="cb"></span></td>
+  <td style="width:72px"><span class="type-tag type-rest">REST</span></td>
+  <td style="width:76px"><span class="m-tag m-post">POST</span></td>
+  <td class="path">/api/pay/create</td>
+  <td class="name">创建支付单</td>
+  <td style="width:132px"><div class="tag-list"><span class="mini-tag">支付</span></div></td>
+  <td style="width:88px"><span class="team-tag team-tag--pay">PAY</span></td>
+  <td style="width:64px"><span class="switch switch--on"></span></td>
+  <td style="width:104px;color:#4A5568;font-size:12.5px">12 分钟前</td>
+  <td style="width:108px"><div class="row-actions"><span class="link">编辑</span><span class="link">日志</span><span style="color:#CBD5E0">⋯</span></div></td>
+</tr>
+<tr>
+  <td style="width:36px"><span class="cb"></span></td>
+  <td style="width:72px"><span class="type-tag type-rest">REST</span></td>
+  <td style="width:76px"><span class="m-tag m-get">GET</span></td>
+  <td class="path">/api/user/info</td>
+  <td class="name">用户信息</td>
+  <td style="width:132px"><div class="tag-list"><span class="mini-tag">用户</span></div></td>
+  <td style="width:88px"><span class="team-tag team-tag--user">USER</span></td>
+  <td style="width:64px"><span class="switch switch--on"></span></td>
+  <td style="width:104px;color:#4A5568;font-size:12.5px">1 小时前</td>
+  <td style="width:108px"><div class="row-actions"><span class="link">编辑</span><span class="link">日志</span><span style="color:#CBD5E0">⋯</span></div></td>
+</tr>
+<tr>
+  <td style="width:36px"><span class="cb"></span></td>
+  <td style="width:72px"><span class="type-tag type-rest">REST</span></td>
+  <td style="width:76px"><span class="m-tag m-post">POST</span></td>
+  <td class="path">/api/refund/apply</td>
+  <td class="name">退款申请</td>
+  <td style="width:132px"><div class="tag-list"><span class="mini-tag">支付</span><span class="mini-tag">异步</span></div></td>
+  <td style="width:88px"><span class="team-tag team-tag--pay">PAY</span></td>
+  <td style="width:64px"><span class="switch switch--on"></span></td>
+  <td style="width:104px;color:#4A5568;font-size:12.5px">2 小时前</td>
+  <td style="width:108px"><div class="row-actions"><span class="link">编辑</span><span class="link">日志</span><span style="color:#CBD5E0">⋯</span></div></td>
+</tr>
+<tr>
+  <td style="width:36px"><span class="cb"></span></td>
+  <td style="width:72px"><span class="type-tag type-rest">REST</span></td>
+  <td style="width:76px"><span class="m-tag m-get">GET</span></td>
+  <td class="path">/api/coupon/list</td>
+  <td class="name">优惠券列表</td>
+  <td style="width:132px"><span class="muted" style="color:#CBD5E0">-</span></td>
+  <td style="width:88px"><span class="team-tag team-tag--user">USER</span></td>
+  <td style="width:64px"><span class="switch switch--on"></span></td>
+  <td style="width:104px;color:#4A5568;font-size:12.5px">昨天 18:42</td>
+  <td style="width:108px"><div class="row-actions"><span class="link">编辑</span><span class="link">日志</span><span style="color:#CBD5E0">⋯</span></div></td>
+</tr>
+<tr style="opacity:.55">
+  <td style="width:36px"><span class="cb"></span></td>
+  <td style="width:72px"><span class="type-tag type-soap">SOAP</span></td>
+  <td style="width:76px"><span class="m-tag m-post">POST</span></td>
+  <td class="path">/ws/notice</td>
+  <td class="name">通知服务</td>
+  <td style="width:132px"><div class="tag-list"><span class="mini-tag">SOAP</span></div></td>
+  <td style="width:88px"><span class="team-tag team-tag--order">ORDER</span></td>
+  <td style="width:64px"><span class="switch"></span></td>
+  <td style="width:104px;color:#B0B7C3;font-size:12.5px">从未调用</td>
+  <td style="width:108px"><div class="row-actions"><span class="link">编辑</span><span class="link">日志</span><span style="color:#CBD5E0">⋯</span></div></td>
+</tr>
+    </tbody>
+  </table>
+  <div class="table-foot"><span>共 12 条 · 每页 20 条</span><div class="pager"><span>‹</span><span class="on">1</span><span>2</span><span>›</span></div></div>
+</div>
+<div class="fab-bubble">
+  <div class="fab-bubble__title">MockHub AI 助手 <span class="ai-badge">Beta</span></div>
+  <div class="fab-bubble__text">试试「最近 7 天调用最多的接口」，或让我帮你建一个 Mock。</div>
+  <div class="fab-bubble__close"><svg class="icon icon--14" viewBox="0 0 24 24"  aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></div>
+</div>
+<div class="fab"><svg class="icon " viewBox="0 0 24 24" style="fill:currentColor;stroke:none" aria-hidden="true"><path d="M11 3.2l1.8 5 5 1.8-5 1.8-1.8 5-1.8-5-5-1.8 5-1.8z"/><path d="M18.5 14.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z"/></svg><span class="fab__status"></span></div></main>
+
+</body>
+</html>

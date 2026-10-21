@@ -425,6 +425,52 @@ public class ApiServiceImpl implements ApiService {
     }
 
     @Override
+    public ApiDefinition updateResponseBody(String apiId, String responseId, String body) {
+        ApiDefinition api = apiRepository.findById(apiId);
+        if (api == null) {
+            throw new BizException(40402, "接口不存在");
+        }
+        permissionChecker.checkTeamAccess(api.getTeamId());
+
+        List<ApiResponse> responses = apiResponseRepository.findByApiId(apiId);
+        ApiResponse target = null;
+        for (ApiResponse response : responses) {
+            if (response.getId().equals(responseId)) {
+                target = response;
+                break;
+            }
+        }
+        if (target == null) {
+            throw new BizException(40403, "返回体不存在");
+        }
+        if (!"TEXT".equalsIgnoreCase(target.getBodyType())) {
+            throw new BizException(40001, "暂不支持修改文件类型的返回体");
+        }
+
+        String now = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss").format(new Date());
+        String userId = SecurityContextUtil.getCurrentUserId();
+        String oldBody = target.getResponseBody();
+        apiResponseRepository.updateBody(responseId, body, now);
+
+        // 单返回体接口同步旧版 api_definition.response_body，保持列表/详情一致。
+        boolean single = responses.size() == 1;
+        boolean firstAndLegacyMatch = !responses.isEmpty()
+                && responses.get(0).getId().equals(responseId)
+                && oldBody != null && oldBody.equals(api.getResponseBody());
+        if (single || firstAndLegacyMatch) {
+            api.setResponseBody(body);
+            api.setUpdatedAt(now);
+            api.setUpdatedBy(userId);
+            apiRepository.update(api);
+        }
+
+        recordOperation("UPDATE", "API", api.getId(), api.getName(),
+                "AI 修改返回体 " + api.getMethod() + " " + api.getPath(), api.getTeamId());
+        log.info("AI 更新接口返回体: apiId={}, responseId={}", apiId, responseId);
+        return api;
+    }
+
+    @Override
     public void delete(String id) {
         ApiDefinition api = apiRepository.findById(id);
         if (api == null) {

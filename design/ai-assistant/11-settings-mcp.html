@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440, initial-scale=1">
+<title>全局设置 · MockHub AI 设计稿</title>
+<link rel="stylesheet" href="assets/mock.css">
+<link rel="stylesheet" href="assets/settings-v2.css">
+<style></style>
+</head>
+<body>
+<aside class="sidebar">
+  <div class="sidebar__logo"><div class="sidebar__mark">M</div><div class="sidebar__name">MockHub</div></div>
+  <div class="sidebar__nav">
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg><span>接口管理</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg><span>文件服务器</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72"/><path d="m14 7 3 3"/><path d="M5 6v4"/><path d="M19 14v4"/><path d="M10 2v2"/><path d="M7 8H3"/><path d="M21 16h-4"/><path d="M11 3H9"/></svg><span>动态变量</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg><span>使用统计</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01M16 6h.01M12 6h.01M12 10h.01M12 14h.01M16 10h.01M16 14h.01M8 10h.01M8 14h.01"/></svg><span>团队管理</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>用户管理</span></div>
+      <div class="nav-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg><span>日志</span></div>
+      <div class="nav-item nav-item--active"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg><span>全局设置</span></div>
+  </div>
+    <div style="flex:1"></div>
+  <div class="sidebar__footer" style="color:#A3AED0"><svg class="icon icon--16" viewBox="0 0 24 24"  aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg></div>
+</aside>
+<header class="topbar">
+  <div class="topbar__left">
+    <div class="topbar__toggle"><svg class="icon icon--18" viewBox="0 0 24 24"  aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg></div>
+    <div class="topbar__title">全局设置</div>
+  </div>
+  <div class="topbar__user"><div class="avatar">张</div><span class="topbar__username">张一鸣</span></div>
+</header>
+<main class="main"><div class="settings2">
+<aside class="settings2__nav">
+  <div class="nav-group">
+    <div class="nav-group__title">AI 能力</div>
+<div class="s2-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M12 22v-5"/><path d="M9 8V2M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></svg><span>AI 供应商</span><span class="s2-item__badge">新</span></div>
+<div class="s2-item"><svg class="icon " viewBox="0 0 24 24" style="fill:currentColor;stroke:none" aria-hidden="true"><path d="M11 3.2l1.8 5 5 1.8-5 1.8-1.8 5-1.8-5-5-1.8 5-1.8z"/><path d="M18.5 14.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z"/></svg><span>助手与能力</span></div>
+<div class="s2-item s2-item--on"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="m4 17 6-6-6-6"/><path d="M12 19h8"/></svg><span>MCP Server</span></div>
+  </div>
+  <div class="nav-group">
+    <div class="nav-group__title">系统</div>
+<div class="s2-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><rect x="2" y="3" width="20" height="8" rx="2"/><rect x="2" y="13" width="20" height="8" rx="2"/><path d="M6 7h.01M6 17h.01"/></svg><span>基础设置</span></div>
+<div class="s2-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg><span>日志与保留</span></div>
+<div class="s2-item"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg><span>文件存储</span></div>
+  </div>
+  <div class="settings2__hint">仅超级管理员可修改全局设置，保存后对全部团队生效。</div>
+</aside>
+<section class="settings2__panel">
+  <div class="crumb">全局设置 / MCP Server</div>
+  <div class="panel-title">MCP Server<span class="api-type-chip">Streamable HTTP</span></div>
+  <div class="panel-desc">把检索、统计与生成能力开放给 Claude、Cursor、Codex 等外部 AI 工具。</div>
+  <div class="panel-body"><div class="conn-strip">
+  <span class="provider__logo" style="background:#ECFDF5;color:#059669"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="m4 17 6-6-6-6"/><path d="M12 19h8"/></svg></span>
+  <span>MCP Server <b>已启用</b> · 3 个有效 Token</span>
+  <span class="conn-ok">最近调用：2 分钟前</span>
+</div>
+<div class="switch-row" style="justify-content:space-between;padding:2px 0 16px">
+  <div><div class="switch-row__label" style="font-size:14px;font-weight:500;color:#1B2559">启用 MCP Server</div><div class="switch-row__desc">关闭后 /mcp 返回 403，已有 Token 保留</div></div>
+  <div style="display:flex;align-items:center;gap:10px"><span style="font-size:12px;color:#10B981">已启用</span><span class="switch switch--on"></span></div>
+</div>
+<div class="block-title">服务地址</div>
+<div class="block-desc">外部客户端使用 Streamable HTTP（POST /mcp）连接，返回 JSON 响应。</div>
+<div class="mcp-endpoint2"><code>https://mockhub.example.com/mcp</code><button class="btn btn--plain btn--sm"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>复制</button></div>
+<div class="section-divider"></div>
+<div class="block-title">写操作策略</div>
+<div class="block-desc">控制外部工具能否直接创建接口。</div>
+<div class="radio-row" style="margin-bottom:18px">
+  <div class="radio-row__item"><span class="radio radio--on"></span><div><div>草稿 + Web 确认（推荐）</div><div class="radio-row__desc">返回确认链接，用户在 MockHub 页面确认后才落库</div></div></div>
+  <div class="radio-row__item"><span class="radio"></span><div><div>允许直接写入</div><div class="radio-row__desc">仅对可信客户端开启；仍会写操作日志</div></div></div>
+</div>
+<div class="block-title">可用工具</div>
+<div class="block-desc">关闭后从 tools/list 移除；直接调用返回 -32602。</div>
+<div class="tool2-grid">
+<div class="tool2">  <code>search_apis</code>  <span class="desc">搜索接口</span>  <span class="switch switch--on"></span></div>
+<div class="tool2">  <code>get_api_detail</code>  <span class="desc">读取接口详情</span>  <span class="switch switch--on"></span></div>
+<div class="tool2">  <code>get_api_stats</code>  <span class="desc">查询调用统计</span>  <span class="switch switch--on"></span></div>
+<div class="tool2">  <code>create_api_draft</code>  <span class="desc">创建接口草稿</span>  <span class="switch switch--on"></span></div>
+<div class="tool2">  <code>apply_api_draft</code>  <span class="desc">应用草稿</span>  <span class="switch"></span></div>
+<div class="tool2">  <code>generate_response_body</code>  <span class="desc">生成响应体</span>  <span class="switch switch--on"></span></div>
+<div class="tool2">  <code>generate_conditions</code>  <span class="desc">生成条件规则</span>  <span class="switch switch--on"></span></div>
+<div class="tool2">  <code>explain_match_result</code>  <span class="desc">解释命中链路</span>  <span class="switch switch--on"></span></div>
+</div>
+<div class="section-divider"></div>
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+  <div><div class="block-title" style="margin:0">访问 Token</div><div class="block-desc" style="margin:2px 0 0">Token 只在创建时显示一次，可随时撤销。</div></div>
+  <button class="btn btn--plain btn--sm"><svg class="icon " viewBox="0 0 24 24"  aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg>新建 Token</button>
+</div>
+<table class="token2">
+  <thead><tr><th>名称</th><th>前缀</th><th>最后使用</th><th>状态</th><th style="width:56px">操作</th></tr></thead>
+  <tbody>
+    <tr><td>Cursor · 张一鸣</td><td class="mono">mhk_7f2a...c91d</td><td>2 分钟前</td><td style="color:#10B981">生效中</td><td style="color:#EF4444">撤销</td></tr>
+    <tr><td>Claude Desktop</td><td class="mono">mhk_b13e...88a0</td><td>昨天 18:24</td><td style="color:#10B981">生效中</td><td style="color:#EF4444">撤销</td></tr>
+  </tbody>
+</table></div>
+  <div class="panel-foot"><button class="btn btn--primary btn--lg">保存 MCP 配置</button></div>
+</section>
+</div></main>
+
+</body>
+</html>
