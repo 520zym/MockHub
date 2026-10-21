@@ -17,6 +17,7 @@ public class McpSettings {
     private boolean toolGetApiDetail = true;
     private boolean toolGetApiStats = true;
     private boolean toolCreateApiDraft = true;
+    private boolean toolUpdateApiDraft = true;
     private boolean toolApplyApiDraft;
     private boolean toolGenerateResponseBody = true;
     private boolean toolGenerateConditions = true;
@@ -39,6 +40,8 @@ public class McpSettings {
     public void setToolGetApiStats(boolean v) { this.toolGetApiStats = v; }
     public boolean isToolCreateApiDraft() { return toolCreateApiDraft; }
     public void setToolCreateApiDraft(boolean v) { this.toolCreateApiDraft = v; }
+    public boolean isToolUpdateApiDraft() { return toolUpdateApiDraft; }
+    public void setToolUpdateApiDraft(boolean v) { this.toolUpdateApiDraft = v; }
     public boolean isToolApplyApiDraft() { return toolApplyApiDraft; }
     public void setToolApplyApiDraft(boolean v) { this.toolApplyApiDraft = v; }
     public boolean isToolGenerateResponseBody() { return toolGenerateResponseBody; }

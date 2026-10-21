@@ -20,7 +20,7 @@ class McpToolRegistryTest {
     @Test
     void defaultSettingsExposeAllButApply() {
         McpSettings settings = new McpSettings();
-        assertEquals(7, registry.listEnabled(settings).size());
+        assertEquals(8, registry.listEnabled(settings).size());
         assertFalse(registry.isEnabled(settings, McpToolRegistry.APPLY_API_DRAFT));
         assertTrue(registry.isEnabled(settings, McpToolRegistry.SEARCH_APIS));
     }
@@ -29,7 +29,7 @@ class McpToolRegistryTest {
     void disabledToolIsExcluded() {
         McpSettings settings = new McpSettings();
         settings.setToolSearchApis(false);
-        assertEquals(6, registry.listEnabled(settings).size());
+        assertEquals(7, registry.listEnabled(settings).size());
         assertNull(registry.get("unknown.tool"));
         assertNotNull(registry.get(McpToolRegistry.CREATE_API_DRAFT).toJson(new ObjectMapper()));
     }

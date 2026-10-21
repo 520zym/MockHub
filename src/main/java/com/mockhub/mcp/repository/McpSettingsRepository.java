@@ -29,10 +29,10 @@ public class McpSettingsRepository {
 
     public void save(McpSettings s) {
         String sql = "INSERT OR REPLACE INTO mcp_settings (id, enabled, write_mode, "
-                + "tool_search_apis, tool_get_api_detail, tool_get_api_stats, tool_create_api_draft, "
+                + "tool_search_apis, tool_get_api_detail, tool_get_api_stats, tool_create_api_draft, tool_update_api_draft, "
                 + "tool_apply_api_draft, tool_generate_response_body, tool_generate_conditions, "
                 + "tool_explain_match_result, updated_at, updated_by) "
-                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         jdbcTemplate.update(sql,
                 s.getId(),
                 s.isEnabled() ? 1 : 0,
@@ -41,6 +41,7 @@ public class McpSettingsRepository {
                 s.isToolGetApiDetail() ? 1 : 0,
                 s.isToolGetApiStats() ? 1 : 0,
                 s.isToolCreateApiDraft() ? 1 : 0,
+                s.isToolUpdateApiDraft() ? 1 : 0,
                 s.isToolApplyApiDraft() ? 1 : 0,
                 s.isToolGenerateResponseBody() ? 1 : 0,
                 s.isToolGenerateConditions() ? 1 : 0,
@@ -60,6 +61,7 @@ public class McpSettingsRepository {
             s.setToolGetApiDetail(rs.getInt("tool_get_api_detail") == 1);
             s.setToolGetApiStats(rs.getInt("tool_get_api_stats") == 1);
             s.setToolCreateApiDraft(rs.getInt("tool_create_api_draft") == 1);
+            s.setToolUpdateApiDraft(rs.getInt("tool_update_api_draft") == 1);
             s.setToolApplyApiDraft(rs.getInt("tool_apply_api_draft") == 1);
             s.setToolGenerateResponseBody(rs.getInt("tool_generate_response_body") == 1);
             s.setToolGenerateConditions(rs.getInt("tool_generate_conditions") == 1);

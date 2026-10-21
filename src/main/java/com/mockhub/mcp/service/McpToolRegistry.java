@@ -22,6 +22,7 @@ public class McpToolRegistry {
     public static final String GET_API_DETAIL = "mockhub.get_api_detail";
     public static final String GET_API_STATS = "mockhub.get_api_stats";
     public static final String CREATE_API_DRAFT = "mockhub.create_api_draft";
+    public static final String UPDATE_API_DRAFT = "mockhub.update_api_draft";
     public static final String APPLY_API_DRAFT = "mockhub.apply_api_draft";
     public static final String GENERATE_RESPONSE = "mockhub.generate_response_body";
     public static final String GENERATE_CONDITIONS = "mockhub.generate_conditions";
@@ -57,10 +58,25 @@ public class McpToolRegistry {
                         + "\"name\":{\"type\":\"string\",\"description\":\"接口名称\"},"
                         + "\"method\":{\"type\":\"string\",\"enum\":[\"GET\",\"POST\",\"PUT\",\"DELETE\",\"PATCH\"]},"
                         + "\"path\":{\"type\":\"string\",\"description\":\"以 / 开头的路径，可含 {id}\"},"
-                        + "\"responseBody\":{\"type\":\"string\",\"description\":\"响应体，默认 JSON\"},"
+                        + "\"responseBody\":{\"type\":\"string\",\"description\":\"单返回体响应体，默认 JSON\"},"
                         + "\"contentType\":{\"type\":\"string\",\"default\":\"application/json\"},"
+                        + "\"responseMode\":{\"type\":\"string\",\"enum\":[\"CONDITION\",\"RANDOM\"],\"default\":\"CONDITION\"},"
+                        + "\"responses\":{\"type\":\"array\",\"description\":\"多返回体；每项支持 name/responseCode/contentType/responseBody/bodyType/active/sortOrder/conditions/delayMs\",\"items\":{\"type\":\"object\"}},"
                         + "\"description\":{\"type\":\"string\",\"description\":\"接口描述\"}},"
                         + "\"required\":[\"teamId\",\"name\",\"method\",\"path\"]}")));
+        register(new Definition(UPDATE_API_DRAFT, "修改接口草稿",
+                "修改已有接口并生成待确认草稿；可整体替换 responses，或用 addResponses 追加返回体。确认后才会写入。",
+                schema("{\"type\":\"object\",\"properties\":{"
+                        + "\"apiId\":{\"type\":\"string\",\"description\":\"接口 ID\"},"
+                        + "\"name\":{\"type\":\"string\"},"
+                        + "\"description\":{\"type\":\"string\"},"
+                        + "\"method\":{\"type\":\"string\"},"
+                        + "\"path\":{\"type\":\"string\"},"
+                        + "\"enabled\":{\"type\":\"boolean\"},"
+                        + "\"responseMode\":{\"type\":\"string\",\"enum\":[\"CONDITION\",\"RANDOM\"]},"
+                        + "\"responses\":{\"type\":\"array\",\"description\":\"多返回体；每项支持 name/responseCode/contentType/responseBody/bodyType/active/sortOrder/conditions/delayMs\",\"items\":{\"type\":\"object\"}},"
+                        + "\"addResponses\":{\"type\":\"array\",\"description\":\"追加返回体，字段同 responses\",\"items\":{\"type\":\"object\"}}},"
+                        + "\"required\":[\"apiId\"]}")));
         register(new Definition(APPLY_API_DRAFT, "应用接口草稿",
                 "确认并写入草稿。仅在写策略为 DIRECT 且本工具开启时可用；默认返回确认链接。",
                 schema("{\"type\":\"object\",\"properties\":{"
@@ -112,6 +128,7 @@ public class McpToolRegistry {
         if (GET_API_DETAIL.equals(name)) return settings.isToolGetApiDetail();
         if (GET_API_STATS.equals(name)) return settings.isToolGetApiStats();
         if (CREATE_API_DRAFT.equals(name)) return settings.isToolCreateApiDraft();
+        if (UPDATE_API_DRAFT.equals(name)) return settings.isToolUpdateApiDraft();
         if (APPLY_API_DRAFT.equals(name)) return settings.isToolApplyApiDraft();
         if (GENERATE_RESPONSE.equals(name)) return settings.isToolGenerateResponseBody();
         if (GENERATE_CONDITIONS.equals(name)) return settings.isToolGenerateConditions();

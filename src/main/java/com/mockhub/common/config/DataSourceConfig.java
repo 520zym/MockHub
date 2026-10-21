@@ -186,8 +186,13 @@ public class DataSourceConfig {
                     recordSchemaVersion(conn, 6,
                             "AI 供应商：ai_settings 增加 vendor 列，并按已有 Base URL 回填");
                 }
+                if (current < 7) {
+                    migrateV7(conn);
+                    recordSchemaVersion(conn, 7,
+                            "MCP 工具：mcp_settings 增加 tool_update_api_draft 开关");
+                }
                 // 后续版本追加：
-                // if (current < 7) { migrateV7(conn); recordSchemaVersion(conn, 7, "..."); }
+                // if (current < 8) { migrateV8(conn); recordSchemaVersion(conn, 8, "..."); }
 
                 conn.commit();
                 log.info("DB 迁移完成");
@@ -341,6 +346,15 @@ public class DataSourceConfig {
                     + "ELSE 'custom' END "
                     + "WHERE vendor IS NULL OR vendor = '' OR upper(vendor) = 'CUSTOM'");
         }
+    }
+
+    /** v7：MCP 增加「修改接口草稿」工具开关。 */
+    private void migrateV7(Connection conn) throws SQLException {
+        if (!tableExists(conn, "mcp_settings")) {
+            log.info("mcp_settings 表不存在，跳过 v7 迁移");
+            return;
+        }
+        addColumnIfNotExists(conn, "mcp_settings", "tool_update_api_draft", "INTEGER NOT NULL DEFAULT 1");
     }
 
     private boolean tableExists(Connection conn, String table) throws SQLException {

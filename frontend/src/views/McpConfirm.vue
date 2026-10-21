@@ -95,7 +95,7 @@ const cancelling = ref(false)
 const action = ref(null)
 const error = ref('')
 
-const isUpdate = computed(() => action.value?.actionType === 'UPDATE_API')
+const isUpdate = computed(() => action.value?.actionType === 'UPDATE_API' || action.value?.actionType === 'UPDATE_API_FULL')
 
 const expired = computed(() => {
   if (!action.value?.expiresAt) return false
@@ -141,6 +141,7 @@ async function handleConfirm() {
   error.value = ''
   try {
     const result = await confirmAiAction(action.value.id)
+    appStore.bumpApiRevision()
     ElMessage.success(isUpdate.value ? '接口已更新' : '接口已创建')
     action.value.status = 'CONFIRMED'
     action.value.resultApiId = result.apiId

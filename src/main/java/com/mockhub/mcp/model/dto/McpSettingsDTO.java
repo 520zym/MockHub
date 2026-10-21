@@ -11,6 +11,7 @@ public class McpSettingsDTO {
     private boolean toolGetApiDetail;
     private boolean toolGetApiStats;
     private boolean toolCreateApiDraft;
+    private boolean toolUpdateApiDraft;
     private boolean toolApplyApiDraft;
     private boolean toolGenerateResponseBody;
     private boolean toolGenerateConditions;
@@ -29,6 +30,8 @@ public class McpSettingsDTO {
     public void setToolGetApiStats(boolean v) { this.toolGetApiStats = v; }
     public boolean isToolCreateApiDraft() { return toolCreateApiDraft; }
     public void setToolCreateApiDraft(boolean v) { this.toolCreateApiDraft = v; }
+    public boolean isToolUpdateApiDraft() { return toolUpdateApiDraft; }
+    public void setToolUpdateApiDraft(boolean v) { this.toolUpdateApiDraft = v; }
     public boolean isToolApplyApiDraft() { return toolApplyApiDraft; }
     public void setToolApplyApiDraft(boolean v) { this.toolApplyApiDraft = v; }
     public boolean isToolGenerateResponseBody() { return toolGenerateResponseBody; }

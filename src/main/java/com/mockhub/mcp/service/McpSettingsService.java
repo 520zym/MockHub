@@ -52,6 +52,7 @@ public class McpSettingsService {
         settings.setToolGetApiDetail(request.isToolGetApiDetail());
         settings.setToolGetApiStats(request.isToolGetApiStats());
         settings.setToolCreateApiDraft(request.isToolCreateApiDraft());
+        settings.setToolUpdateApiDraft(request.isToolUpdateApiDraft());
         settings.setToolApplyApiDraft(request.isToolApplyApiDraft());
         settings.setToolGenerateResponseBody(request.isToolGenerateResponseBody());
         settings.setToolGenerateConditions(request.isToolGenerateConditions());
@@ -74,6 +75,7 @@ public class McpSettingsService {
         if ("mockhub.get_api_detail".equals(name)) return s.isToolGetApiDetail();
         if ("mockhub.get_api_stats".equals(name)) return s.isToolGetApiStats();
         if ("mockhub.create_api_draft".equals(name)) return s.isToolCreateApiDraft();
+        if ("mockhub.update_api_draft".equals(name)) return s.isToolUpdateApiDraft();
         if ("mockhub.apply_api_draft".equals(name)) return s.isToolApplyApiDraft();
         if ("mockhub.generate_response_body".equals(name)) return s.isToolGenerateResponseBody();
         if ("mockhub.generate_conditions".equals(name)) return s.isToolGenerateConditions();
@@ -93,6 +95,7 @@ public class McpSettingsService {
         dto.setToolGetApiDetail(s.isToolGetApiDetail());
         dto.setToolGetApiStats(s.isToolGetApiStats());
         dto.setToolCreateApiDraft(s.isToolCreateApiDraft());
+        dto.setToolUpdateApiDraft(s.isToolUpdateApiDraft());
         dto.setToolApplyApiDraft(s.isToolApplyApiDraft());
         dto.setToolGenerateResponseBody(s.isToolGenerateResponseBody());
         dto.setToolGenerateConditions(s.isToolGenerateConditions());

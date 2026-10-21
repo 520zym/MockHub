@@ -3,6 +3,7 @@ package com.mockhub.ai.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mockhub.ai.model.AiConversation;
 import com.mockhub.ai.model.AiSettings;
 import com.mockhub.ai.model.dto.AiApiUpdateDraft;
 import com.mockhub.ai.model.dto.AiChatMessage;
@@ -62,6 +63,7 @@ public class AiChatService {
     private final ApiService apiService;
     private final StatsService statsService;
     private final PendingActionService pendingActionService;
+    private final AiConversationService conversationService;
     private final ObjectMapper objectMapper;
 
     public AiChatService(AiSettingsService settingsService,
@@ -71,6 +73,7 @@ public class AiChatService {
                          ApiService apiService,
                          StatsService statsService,
                          PendingActionService pendingActionService,
+                         AiConversationService conversationService,
                          ObjectMapper objectMapper) {
         this.settingsService = settingsService;
         this.provider = provider;
@@ -79,6 +82,7 @@ public class AiChatService {
         this.apiService = apiService;
         this.statsService = statsService;
         this.pendingActionService = pendingActionService;
+        this.conversationService = conversationService;
         this.objectMapper = objectMapper;
     }
 
@@ -98,12 +102,18 @@ public class AiChatService {
             request.setTeamId(null);
         }
 
+        log.info("AI 对话请求：teamId={}, conversationId={}, contextApiId={}, messageChars={}",
+                request.getTeamId(), request.getConversationId(), request.getContextApiId(),
+                request.getMessage().length());
+
         ChatPlan plan;
         if (AiSettings.PROVIDER_MOCK.equals(settings.getProvider())) {
             plan = mockPlan(request.getMessage(), request.getContextApiId());
         } else {
             plan = modelPlan(settings, request);
         }
+
+        log.info("AI 对话意图：intent={}, path={}, apiId={}", plan.intent, plan.path, plan.apiId);
 
         AiChatResponse response = new AiChatResponse();
         response.setProvider(settings.getProvider());
@@ -121,6 +131,13 @@ public class AiChatService {
             response.setReply(plan.reply != null && !plan.reply.trim().isEmpty()
                     ? plan.reply : helpText());
         }
+
+        AiConversation conversation = conversationService.appendExchange(
+                request.getConversationId(), SecurityContextUtil.getCurrentUserId(), request.getTeamId(),
+                request.getMessage(), response.getReply(), response.getCards(),
+                response.getProvider(), response.getModel());
+        response.setConversationId(conversation.getId());
+        response.setConversationTitle(conversation.getTitle());
         return response;
     }
 
@@ -251,7 +268,7 @@ public class AiChatService {
         summary.put("name", name);
         summary.put("teamId", request.getTeamId());
         card.put("summary", summary);
-        card.put("preview", body.length() > 1200 ? body.substring(0, 1200) + "…" : body);
+        card.put("preview", body.length() > 8000 ? body.substring(0, 8000) + "…" : body);
 
         try {
             Map<String, Object> created = pendingActionService.createApiDraft(dto, method + " " + path);
