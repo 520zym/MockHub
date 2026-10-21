@@ -217,11 +217,12 @@
         </div>
 
         <div v-if="aiStore.available" class="ai-composer">
-          <div class="ai-composer__box" :class="{ 'ai-composer__box--focus': composerFocus }">
+          <div class="ai-composer__box" :class="{ 'ai-composer__box--focus': composerFocus }" @click="focusComposer">
             <el-input
+              ref="composerInput"
               v-model="input"
               type="textarea"
-              :autosize="{ minRows: 1, maxRows: 4 }"
+              :autosize="{ minRows: 2, maxRows: 5 }"
               resize="none"
               placeholder="继续追问，或描述要创建的接口…"
               :disabled="(!teamId && !userStore.isSuperAdmin) || loading"
@@ -285,6 +286,7 @@ const loading = ref(false)
 const messages = ref([])
 const bodyRef = ref(null)
 const composerFocus = ref(false)
+const composerInput = ref(null)
 const scopeTeamId = ref('__ALL__')
 const assistantTeams = ref([])
 const teamsLoading = ref(false)
@@ -357,6 +359,12 @@ onBeforeUnmount(() => {
 function goSettings() {
   open.value = false
   router.push('/settings')
+}
+
+function focusComposer() {
+  if (!loading.value) {
+    composerInput.value?.focus()
+  }
 }
 
 function openChat() {
@@ -1130,7 +1138,7 @@ watch(() => aiStore.available, (available) => {
 
 .ai-composer {
   flex-shrink: 0;
-  padding: 8px 14px 9px;
+  padding: 11px 14px 10px;
   border-top: 1px solid #F1F5F9;
   background: #fff;
 }
@@ -1138,8 +1146,9 @@ watch(() => aiStore.available, (available) => {
 .ai-composer__box {
   border: 1px solid #E6EAF2;
   border-radius: 12px;
-  padding: 6px 10px 6px 12px;
+  padding: 8px 10px 6px 12px;
   background: #fff;
+  cursor: text;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -1149,18 +1158,20 @@ watch(() => aiStore.available, (available) => {
 }
 
 .ai-composer__box :deep(.el-textarea__inner) {
-  padding: 0;
+  min-height: 44px !important;
+  padding: 2px 0;
   box-shadow: none;
   background: transparent;
   font-size: 13px;
-  line-height: 1.6;
+  line-height: 1.65;
+  cursor: text;
 }
 
 .ai-composer__foot {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 4px;
+  margin-top: 6px;
 }
 
 .ai-composer__scope {
