@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440, initial-scale=1">
+<title>接口编辑 · 订单详情 · MockHub Console 02</title>
+<link rel="stylesheet" href="assets/console.css">
+<style>body{overflow:hidden}
+.editor{flex:1 1 auto;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 218px}
+.editor .code{min-width:0}
+.resp-side{border-left:1px solid var(--line);background:#fcfcfa;overflow:hidden;min-width:0}
+.side-sec{padding:10px 11px;border-bottom:1px solid var(--line)}
+.side-label{display:flex;align-items:center;gap:6px;font-size:9px;font-weight:600;color:var(--text-2);margin-bottom:5px}
+.side-label .mono{font-size:8px;color:#b0b1aa;font-weight:400;letter-spacing:.06em}
+.side-row{display:flex;align-items:center;justify-content:space-between;height:25px;font-size:9.5px;color:var(--text-3);gap:8px}
+.side-row b{font:500 9px var(--mono);color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.var-row{display:flex;align-items:center;justify-content:space-between;gap:6px;border:1px solid var(--line);background:#fff;border-radius:3px;padding:4px 6px}
+.var-row .mono{font-size:9px;color:var(--accent)}
+.var-note{font-size:8.5px;color:var(--text-3)}</style>
+</head>
+<body>
+<div class="app">
+<aside class="rail">
+  <div class="brand"><span class="brand__mark">M</span><span class="brand__name">MockHub</span><span class="brand__ver">1.8</span></div>
+  <div class="rail__label">工作区</div>
+  <nav class="nav">
+    <a class="nav__item nav__item--on" href="#"><svg class="i" viewBox="0 0 24 24"><path d="M8 6 3 12l5 6M16 6l5 6-5 6"/></svg><span>接口管理</span><span class="nav__count">143</span></a>
+    <a class="nav__item" href="#"><svg class="i" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6"/></svg><span>文件服务器</span><span class="nav__count">28</span></a>
+    <a class="nav__item" href="#"><svg class="i" viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M2 14h4M10 8h4M18 16h4"/></svg><span>动态变量</span><span class="nav__count">12</span></a>
+    <a class="nav__item" href="#"><svg class="i" viewBox="0 0 24 24"><path d="M3 3v18h18M18 17V9M13 17V5M8 17v-3"/></svg><span>使用统计</span></a>
+  </nav>
+  <div class="rail__label">管理</div>
+  <nav class="nav">
+    <a class="nav__item" href="#"><svg class="i" viewBox="0 0 24 24"><path d="M4 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18M16 8h2a2 2 0 0 1 2 2v12M9 6h.01M13 6h.01M9 10h.01M13 10h.01M9 14h.01M13 14h.01M9 18h.01M13 18h.01"/></svg><span>团队管理</span><span class="nav__count">4</span></a>
+    <a class="nav__item" href="#"><svg class="i" viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"/></svg><span>用户管理</span><span class="nav__count">26</span></a>
+    <a class="nav__item" href="#"><svg class="i" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7zM14 2v6h6M8 13h8M8 17h5"/></svg><span>请求日志</span></a>
+    <a class="nav__item" href="#"><svg class="i" viewBox="0 0 24 24"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span>全局设置</span></a>
+  </nav>
+  <div class="rail__spacer"></div>
+  <div class="rail__status"><span style="width:5px;height:5px;border-radius:50%;background:#4e8a68"></span>服务运行中<span class="mono">:8080</span></div>
+  <div class="rail__user"><span class="avatar">张</span><div class="who"><b>张一鸣</b><span>超级管理员</span></div><span class="kbd">⌘K</span></div>
+</aside>
+<div class="work">
+<header class="topbar">
+  <div class="crumb"><svg class="i i--12" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg><span>接口管理</span><span class="sep">/</span><span>支付中心</span><span class="sep">/</span><b>订单详情</b></div>
+  <div class="topbar__right">
+    <span style="display:flex;align-items:center;gap:5px;font:9.5px var(--mono);color:var(--text-3);margin-right:8px"><span style="width:5px;height:5px;border-radius:50%;background:var(--ok)"></span>生产内网</span>
+    <div class="searchbtn"><svg class="i i--12" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span>跳转或搜索</span><span class="kbd">⌘K</span></div>
+    <button class="iconbtn"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2.5-3 4M12 17h.01"/></svg></button>
+  </div>
+</header>
+<main class="main">
+  <div class="edit-head">
+    <div style="flex:1;min-width:0">
+      <div class="edit-title">
+        <h1>订单详情</h1>
+        <span class="path-pill">GET /api/pay/order</span>
+        <span class="sw sw--on" style="margin-left:2px"></span>
+        <span class="dirty"><span class="dot"></span>有未保存修改</span>
+      </div>
+    </div>
+    <div class="page-actions">
+      <button class="btn btn--ghost"><svg class="i" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></button>
+      <button class="btn"><svg class="i" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>预览</button>
+      <button class="btn btn--primary"><svg class="i" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>保存</button>
+    </div>
+  </div>
+
+  <div class="edit-body">
+    <aside class="form">
+      <div class="fsection">基础信息 <em>BASIC</em></div>
+      <div class="fgroup">
+        <div class="flabel">接口名称 <span class="req">*</span></div>
+        <div class="input">订单详情</div>
+      </div>
+      <div class="frow">
+        <div class="fgroup">
+          <div class="flabel">所属团队 <span class="req">*</span></div>
+          <div class="input"><span class="tdot tdot--pay"></span>支付中心<svg class="i" style="margin-left:auto" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></div>
+        </div>
+        <div class="fgroup">
+          <div class="flabel">分组</div>
+          <div class="input">交易<svg class="i" style="margin-left:auto" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></div>
+        </div>
+      </div>
+      <div class="frow">
+        <div class="fgroup">
+          <div class="flabel">接口类型</div>
+          <div class="input">REST<svg class="i" style="margin-left:auto" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></div>
+        </div>
+        <div class="fgroup">
+          <div class="flabel">HTTP 方法 <span class="req">*</span></div>
+          <div class="input"><span class="method m-GET">GET</span><svg class="i" style="margin-left:auto" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></div>
+        </div>
+      </div>
+      <div class="fgroup">
+        <div class="flabel">路径 <span class="req">*</span></div>
+        <div class="input input--mono input--focus">/api/pay/order</div>
+        <div class="fhint fhint--ok"><svg class="i" viewBox="0 0 24 24"><path d="m20 6-11 11-5-5"/></svg>路径可用，无冲突</div>
+      </div>
+      <div class="fgroup">
+        <div class="flabel">Mock 地址</div>
+        <div class="input input--read input--mono">/pay/api/pay/order<button class="copy"><svg class="i" viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></div>
+        <div class="fhint">团队前缀 <span class="mono">/pay</span> 由系统自动拼接</div>
+      </div>
+
+      <div class="fsection">说明与归属 <em>META</em></div>
+      <div class="fgroup">
+        <div class="flabel">描述</div>
+        <div class="input input--area">支付成功回跳后查询订单状态。沙箱环境通过 X-Mock-Sandbox 请求头区分。</div>
+      </div>
+      <div class="fgroup">
+        <div class="flabel">标签</div>
+        <div style="display:flex;gap:4px;flex-wrap:wrap">
+          <span style="font:9px var(--mono);border:1px solid var(--line-2);border-radius:2px;padding:2px 5px;color:var(--text-2);background:#fff">交易</span>
+          <span style="font:9px var(--mono);border:1px solid var(--line-2);border-radius:2px;padding:2px 5px;color:var(--text-2);background:#fff">P0</span>
+          <span style="font:9px var(--mono);border:1px dashed var(--line-2);border-radius:2px;padding:2px 5px;color:var(--text-3)">+ 添加</span>
+        </div>
+      </div>
+      <div class="fgroup">
+        <div class="flabel">负责人</div>
+        <div class="input"><span class="avatar" style="width:17px;height:17px;font-size:8px;background:#eeeeE8;color:var(--text-2)">张</span>张一鸣<svg class="i" style="margin-left:auto" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></div>
+      </div>
+
+      <div class="fsection">请求设置 <em>REQUEST</em></div>
+      <div style="display:flex;align-items:center;gap:8px;padding:2px 0 8px">
+        <span style="font-size:10.5px;color:var(--text-2)">允许跨域</span>
+        <span class="sw sw--on" style="margin-left:auto"></span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:10.5px;color:var(--text-2)">全局响应头覆盖</span>
+        <span class="mono" style="font-size:9px;color:var(--text-3)">2 条</span>
+        <button class="btn btn--ghost btn--sm" style="margin-left:auto">编辑</button>
+      </div>
+    </aside>
+
+    <section class="resp">
+      <div class="resp-bar">
+        <a class="rtab rtab--on">返回体 <span class="rtab__n">3</span></a>
+        <a class="rtab">匹配规则 <span class="rtab__n">2</span></a>
+        <a class="rtab">调用记录 <span class="rtab__n">1.2k</span></a>
+        <div class="spacer"></div>
+        <button class="btn btn--ghost btn--sm"><svg class="i" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg>格式化</button>
+        <button class="btn btn--sm"><span style="font:8px var(--mono);color:var(--accent);border:1px solid #e3c8bb;border-radius:2px;padding:0 3px">AI</span>生成示例</button>
+      </div>
+
+      <div style="height:35px;flex:0 0 auto;display:flex;align-items:center;gap:2px;padding:0 9px;border-bottom:1px solid var(--line);background:#fcfcfa">
+        <span class="rtab rtab--on" style="background:#fff;border:1px solid var(--line-2)">默认 <span class="rtab__n">200</span></span>
+        <span class="rtab">支付宝渠道 <span class="rtab__n">200</span></span>
+        <span class="rtab">沙箱 <span class="rtab__n">403</span></span>
+        <button class="rtab" style="color:var(--text-3)"><svg class="i i--12" viewBox="0 0 24 24"><path d="M5 12h14M12 5v14"/></svg>新建返回体</button>
+        <div class="spacer"></div>
+        <span class="resp-meta"><span class="mono">application/json</span><span>·</span><span>UTF-8</span><span>·</span><span>6 KB</span><span>·</span><span class="sw sw--on" style="transform:scale(.85)"></span></span>
+      </div>
+
+      <div class="editor">
+      <div class="code">
+        <div class="ln">1</div><pre><span class="tk-p">{</span></pre><div class="ln">2</div><pre>  <span class="tk-k">"code"</span><span class="tk-p">:</span> <span class="tk-n">0</span><span class="tk-p">,</span></pre><div class="ln">3</div><pre>  <span class="tk-k">"message"</span><span class="tk-p">:</span> <span class="tk-s">"ok"</span><span class="tk-p">,</span></pre><div class="ln">4</div><pre>  <span class="tk-k">"data"</span><span class="tk-p">:</span> <span class="tk-p">{</span></pre><div class="ln">5</div><pre>    <span class="tk-k">"orderId"</span><span class="tk-p">:</span> <span class="tk-s">"202610220001"</span><span class="tk-p">,</span></pre><div class="ln">6</div><pre>    <span class="tk-k">"status"</span><span class="tk-p">:</span> <span class="tk-s">"PAID"</span><span class="tk-p">,</span></pre><div class="ln">7</div><pre>    <span class="tk-k">"amount"</span><span class="tk-p">:</span> <span class="tk-n">12800</span><span class="tk-p">,</span></pre><div class="ln">8</div><pre>    <span class="tk-k">"currency"</span><span class="tk-p">:</span> <span class="tk-s">"CNY"</span><span class="tk-p">,</span></pre><div class="ln">9</div><pre>    <span class="tk-k">"paidAt"</span><span class="tk-p">:</span> <span class="tk-s">"2026-10-22T14:32:08+08:00"</span><span class="tk-p">,</span></pre><div class="ln">10</div><pre>    <span class="tk-k">"buyer"</span><span class="tk-p">:</span> <span class="tk-p">{</span></pre><div class="ln">11</div><pre>      <span class="tk-k">"userId"</span><span class="tk-p">:</span> <span class="tk-s">"U-88213"</span><span class="tk-p">,</span></pre><div class="ln">12</div><pre>      <span class="tk-k">"nickname"</span><span class="tk-p">:</span> <span class="tk-s">"林小满"</span></pre><div class="ln">13</div><pre>    <span class="tk-p">},</span></pre><div class="ln">14</div><pre>    <span class="tk-k">"items"</span><span class="tk-p">:</span> <span class="tk-p">[</span></pre><div class="ln">15</div><pre>      <span class="tk-p">{</span></pre><div class="ln">16</div><pre>        <span class="tk-k">"skuId"</span><span class="tk-p">:</span> <span class="tk-s">"SKU-8841"</span><span class="tk-p">,</span></pre><div class="ln">17</div><pre>        <span class="tk-k">"name"</span><span class="tk-p">:</span> <span class="tk-s">"企业版 · 年付"</span><span class="tk-p">,</span></pre><div class="ln">18</div><pre>        <span class="tk-k">"qty"</span><span class="tk-p">:</span> <span class="tk-n">1</span><span class="tk-p">,</span></pre><div class="ln">19</div><pre>        <span class="tk-k">"price"</span><span class="tk-p">:</span> <span class="tk-n">12800</span></pre><div class="ln">20</div><pre>      <span class="tk-p">}</span></pre><div class="ln">21</div><pre>    <span class="tk-p">],</span></pre><div class="ln">22</div><pre>    <span class="tk-k">"traceId"</span><span class="tk-p">:</span> <span class="tk-s">"{{uuid}}"</span></pre><div class="ln">23</div><pre>  <span class="tk-p">}</span></pre><div class="ln">24</div><pre><span class="tk-p">}</span></pre>
+      </div>
+        <aside class="resp-side">
+          <div class="side-sec">
+            <div class="side-label">响应设置 <span class="mono">RESPONSE</span></div>
+            <div class="side-row"><span>状态码</span><b>200</b></div>
+            <div class="side-row"><span>Content-Type</span><b>application/json</b></div>
+            <div class="side-row"><span>响应延迟</span><b>0 ms</b></div>
+            <div class="side-row" style="margin-top:2px"><span>启用返回体</span><span class="sw sw--on"></span></div>
+          </div>
+          <div class="side-sec">
+            <div class="side-label">动态变量 <span class="mono">1</span></div>
+            <div class="var-row"><span class="mono">{{uuid}}</span><span class="var-note">请求时生成</span></div>
+            <button class="btn btn--ghost btn--sm" style="margin-top:6px;width:100%"><svg class="i" viewBox="0 0 24 24"><path d="M5 12h14M12 5v14"/></svg>插入变量</button>
+          </div>
+          <div class="side-sec" style="border-bottom:0">
+            <div class="side-label">最近 24 小时 <span class="mono">STATS</span></div>
+            <div class="side-row"><span>调用</span><b>842 次</b></div>
+            <div class="side-row"><span>平均耗时</span><b>8 ms</b></div>
+            <div class="side-row"><span>最近</span><b>2 分钟前</b></div>
+          </div>
+        </aside>
+      </div>
+
+      <div class="rules">
+        <div class="rules-head">
+          <b>当前返回体的匹配规则</b><span class="count">2</span>
+          <span style="font-size:9px;color:var(--text-3)">按优先级从上到下，命中即返回</span>
+          <div class="spacer"></div>
+          <button class="btn btn--ghost btn--sm"><svg class="i" viewBox="0 0 24 24"><path d="M5 12h14M12 5v14"/></svg>添加规则</button>
+        </div>
+        <div class="rule rule--on">
+          <span class="orderbox">1</span>
+          <span class="cond">query.channel = "alipay"</span>
+          <span class="out">返回体 · 支付宝渠道</span>
+          <span class="hits">842 次</span>
+          <svg class="i i--12" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>
+        </div>
+        <div class="rule">
+          <span class="orderbox">2</span>
+          <span class="cond">header["X-Mock-Sandbox"] = "1"</span>
+          <span class="out">返回体 · 沙箱</span>
+          <span class="hits">36 次</span>
+          <svg class="i i--12" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>
+        </div>
+        <div style="height:27px;display:flex;align-items:center;padding:0 11px;font-size:9px;color:var(--text-3)">
+          未命中任何规则时返回 <span class="mono" style="margin:0 4px;color:var(--text-2)">默认</span>，按 200 返回
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="statusbar">
+    <span>上次保存 <span class="mono">14:30:12</span> · 张一鸣</span><span style="color:var(--accent)">有未保存修改</span>
+    <span class="ok"><svg class="i" viewBox="0 0 24 24"><path d="m20 6-11 11-5-5"/></svg>路径检查通过</span>
+    <span class="right"><span>UTF-8</span><span>响应上限 6 MB</span><span class="mono">⌘S 保存</span></span>
+  </div>
+</main>
+</div>
+</div>
+</body>
+</html>
