@@ -118,6 +118,25 @@ public class ApiServiceImpl implements ApiService {
         }
     }
 
+    private void validateTeamReferences(String teamId, String groupId, List<String> tagIds) {
+        if (groupId != null && !groupId.isEmpty()) {
+            com.mockhub.mock.model.entity.ApiGroup group = groupRepository.findById(groupId);
+            if (group == null || !teamId.equals(group.getTeamId())) {
+                throw new BizException(40102, "分组不属于当前团队或已被删除");
+            }
+        }
+        if (tagIds != null && !tagIds.isEmpty()) {
+            Set<String> expected = new HashSet<String>(tagIds);
+            List<Tag> tags = tagRepository.findByIds(new ArrayList<String>(expected));
+            if (tags.size() != expected.size()) throw new BizException(40102, "标签不存在或不属于当前团队");
+            for (Tag tag : tags) {
+                if (!teamId.equals(tag.getTeamId()) || !expected.contains(tag.getId())) {
+                    throw new BizException(40102, "标签不属于当前团队");
+                }
+            }
+        }
+    }
+
     // ==================== 路径匹配算法 ====================
 
     /**
@@ -310,8 +329,9 @@ public class ApiServiceImpl implements ApiService {
     @Override
     public ApiDefinition create(ApiDefinitionDTO dto) {
         // 校验团队访问权限
-        permissionChecker.checkTeamAccess(dto.getTeamId());
+        permissionChecker.checkTeamWrite(dto.getTeamId());
 
+        validateTeamReferences(dto.getTeamId(), dto.getGroupId(), dto.getTagIds());
         String normalizedPath = normalizeApiPath(dto.getPath());
 
         // 校验同团队内 path+method 唯一性
@@ -375,7 +395,11 @@ public class ApiServiceImpl implements ApiService {
         }
 
         // 校验团队访问权限
-        permissionChecker.checkTeamAccess(existing.getTeamId());
+        permissionChecker.checkTeamWrite(existing.getTeamId());
+        if (dto.getTeamId() != null && !existing.getTeamId().equals(dto.getTeamId())) {
+            throw new BizException(40102, "不能通过编辑接口变更所属团队");
+        }
+        validateTeamReferences(existing.getTeamId(), dto.getGroupId(), dto.getTagIds());
 
         // 如果修改了 path 或 method，校验唯一性
         String newPath = dto.getPath() != null ? normalizeApiPath(dto.getPath()) : existing.getPath();
@@ -438,7 +462,7 @@ public class ApiServiceImpl implements ApiService {
         if (api == null) {
             throw new BizException(40402, "接口不存在");
         }
-        permissionChecker.checkTeamAccess(api.getTeamId());
+        permissionChecker.checkTeamWrite(api.getTeamId());
 
         List<ApiResponse> responses = apiResponseRepository.findByApiId(apiId);
         ApiResponse target = null;
@@ -486,7 +510,7 @@ public class ApiServiceImpl implements ApiService {
         }
 
         // 校验团队访问权限
-        permissionChecker.checkTeamAccess(api.getTeamId());
+        permissionChecker.checkTeamWrite(api.getTeamId());
 
         // 删除标签关联
         apiTagRepository.deleteByApiId(id);
@@ -508,7 +532,7 @@ public class ApiServiceImpl implements ApiService {
         }
 
         // 校验团队访问权限
-        permissionChecker.checkTeamAccess(source.getTeamId());
+        permissionChecker.checkTeamWrite(source.getTeamId());
 
         String now = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss").format(new Date());
         String userId = SecurityContextUtil.getCurrentUserId();
@@ -580,7 +604,7 @@ public class ApiServiceImpl implements ApiService {
         }
 
         // 校验团队访问权限
-        permissionChecker.checkTeamAccess(api.getTeamId());
+        permissionChecker.checkTeamWrite(api.getTeamId());
 
         boolean newEnabled = !api.isEnabled();
         String now = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss").format(new Date());
@@ -612,7 +636,12 @@ public class ApiServiceImpl implements ApiService {
             teamIds.add(api.getTeamId());
         }
         for (String tid : teamIds) {
-            permissionChecker.checkTeamAccess(tid);
+            if ("delete".equals(action)) permissionChecker.checkTeamAdmin(tid);
+            else permissionChecker.checkTeamWrite(tid);
+        }
+
+        if ("move-group".equals(action)) {
+            for (String teamId : teamIds) validateTeamReferences(teamId, targetGroupId, null);
         }
 
         // 3. 收集 targets 实际命中的 id 列表（已存在的，用于 SQL 批处理）

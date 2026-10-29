@@ -199,7 +199,8 @@ public class ImportExportService {
 
     public ImportResult importApis(String teamId, ImportExportData data, String mode,
                                    Map<String, FileBundleEntry> bundledFiles) {
-        permissionChecker.checkTeamAccess(teamId);
+        if ("override".equalsIgnoreCase(mode)) permissionChecker.checkTeamAdmin(teamId);
+        else permissionChecker.checkTeamWrite(teamId);
 
         String now = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss").format(new Date());
         String userId = SecurityContextUtil.getCurrentUserId();

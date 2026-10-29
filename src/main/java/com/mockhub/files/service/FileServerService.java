@@ -51,7 +51,7 @@ public class FileServerService {
     }
 
     public StoredFile uploadManaged(String teamId, MultipartFile file) {
-        permission.checkTeamAccess(teamId);
+        permission.checkTeamWrite(teamId);
         if (teams.findById(teamId) == null) throw new BizException(40404, "团队不存在");
         return store(teamId, file);
     }
@@ -121,7 +121,7 @@ public class FileServerService {
 
     public synchronized StoredFile update(String id, String alias, List<String> tags) {
         StoredFile file = detail(id);
-        permission.checkTeamAdmin(file.getTeamId());
+        permission.checkTeamWrite(file.getTeamId());
         alias = alias == null ? "" : alias.trim();
         if (alias.length() > 200) throw new BizException(40000, "别名不能超过 200 个字符");
         LinkedHashSet<String> normalized = new LinkedHashSet<>();

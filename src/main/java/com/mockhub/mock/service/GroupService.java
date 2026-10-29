@@ -66,7 +66,7 @@ public class GroupService {
      */
     public ApiGroup create(ApiGroup group) {
         // 写操作（创建/更新/删除）按 CLAUDE.md 权限模型对齐"修改/删除标签"——仅团队管理员/超管可执行
-        permissionChecker.checkTeamAdmin(group.getTeamId());
+        permissionChecker.checkTeamWrite(group.getTeamId());
 
         group.setId(UUID.randomUUID().toString());
         group.setCreatedAt(new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss").format(new Date()));
@@ -90,7 +90,7 @@ public class GroupService {
             throw new BizException(40501, "分组不存在");
         }
 
-        permissionChecker.checkTeamAdmin(existing.getTeamId());
+        permissionChecker.checkTeamWrite(existing.getTeamId());
 
         existing.setName(group.getName());
         existing.setSortOrder(group.getSortOrder());
@@ -114,7 +114,7 @@ public class GroupService {
             throw new BizException(40501, "分组不存在");
         }
 
-        permissionChecker.checkTeamAdmin(group.getTeamId());
+        permissionChecker.checkTeamWrite(group.getTeamId());
 
         // 将关联接口的 groupId 置为 null
         apiRepository.clearGroupId(id);

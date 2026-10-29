@@ -190,7 +190,7 @@ public class McpToolsService {
 
     private Object createDraft(JsonNode args) {
         String teamId = required(args, "teamId");
-        permissionChecker.checkTeamAccess(teamId);
+        permissionChecker.checkTeamWrite(teamId);
         String method = required(args, "method").toUpperCase();
         if (!method.matches("GET|POST|PUT|DELETE|PATCH")) {
             throw new BizException(40001, "不支持的 HTTP 方法：" + method);
@@ -246,7 +246,7 @@ public class McpToolsService {
     private Object updateDraft(JsonNode args) {
         String apiId = required(args, "apiId");
         ApiDefinitionDetailVO detail = apiService.getById(apiId);
-        permissionChecker.checkTeamAccess(detail.getTeamId());
+        permissionChecker.checkTeamWrite(detail.getTeamId());
 
         ApiDefinitionDTO dto = new ApiDefinitionDTO();
         dto.setTeamId(detail.getTeamId());

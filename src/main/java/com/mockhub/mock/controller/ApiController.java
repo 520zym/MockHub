@@ -195,7 +195,7 @@ public class ApiController {
     public Result<Map<String, Object>> uploadResponseFile(
             @RequestParam String teamId,
             @RequestParam("file") MultipartFile file) {
-        permissionChecker.checkTeamAccess(teamId);
+        permissionChecker.checkTeamWrite(teamId);
         MockFileStorageService.StoredMockFile stored = fileStorageService.store(teamId, file);
         Map<String, Object> data = new java.util.HashMap<String, Object>();
         data.put("bodyType", "FILE");

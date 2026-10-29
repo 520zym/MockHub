@@ -1,6 +1,7 @@
 package com.mockhub.system.service;
 
 import com.mockhub.common.model.BizException;
+import com.mockhub.common.model.enums.TeamRoleType;
 import com.mockhub.common.util.PermissionChecker;
 import com.mockhub.common.util.SecurityContextUtil;
 import com.mockhub.system.repository.UserRepository;
@@ -39,11 +40,25 @@ public class PermissionCheckerImpl implements PermissionChecker {
         }
 
         String userId = SecurityContextUtil.getCurrentUserId();
-        boolean exists = userRepository.existsUserTeam(userId, teamId);
-        if (!exists) {
+        TeamRoleType role = TeamRoleType.fromStored(userRepository.findUserTeamRole(userId, teamId));
+        if (role == null) {
             log.warn("用户无权访问团队：userId={}, teamId={}", userId, teamId);
             throw new BizException(40102, "不能访问其他团队数据");
         }
+    }
+
+    @Override
+    public void checkTeamWrite(String teamId) {
+        if (SecurityContextUtil.isSuperAdmin()) return;
+        String userId = SecurityContextUtil.getCurrentUserId();
+        TeamRoleType role = TeamRoleType.fromStored(userRepository.findUserTeamRole(userId, teamId));
+        if (role == null) throw new BizException(40102, "不能访问其他团队数据");
+        if (!role.canWrite()) throw new BizException(40104, "当前团队角色为只读，无法修改资源");
+    }
+
+    @Override
+    public void checkSystemAdmin() {
+        if (!SecurityContextUtil.isSuperAdmin()) throw new BizException(40101, "仅超级管理员可执行此操作");
     }
 
     /**
@@ -63,8 +78,8 @@ public class PermissionCheckerImpl implements PermissionChecker {
         }
 
         String userId = SecurityContextUtil.getCurrentUserId();
-        String role = userRepository.findUserTeamRole(userId, teamId);
-        if (!"TEAM_ADMIN".equals(role)) {
+        TeamRoleType role = TeamRoleType.fromStored(userRepository.findUserTeamRole(userId, teamId));
+        if (role == null || !role.canAdminister()) {
             log.warn("用户非团队管理员：userId={}, teamId={}, role={}", userId, teamId, role);
             throw new BizException(40101, "无操作权限");
         }

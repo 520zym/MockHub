@@ -119,7 +119,7 @@ class FileServerTest {
         assertEquals(0, service.list(null, null, null, 1, 20).getTotal());
         jdbc.update("INSERT INTO user_team(user_id,team_id) VALUES('u1','t1')");
         assertEquals(1, service.list(null, null, null, 1, 20).getTotal());
-        verify(permission).checkTeamAdmin("t1");
+        verify(permission).checkTeamWrite("t1");
     }
 
     @Test void batchDeleteChecksEveryTeamBeforeDeletingAnyFile() throws Exception {

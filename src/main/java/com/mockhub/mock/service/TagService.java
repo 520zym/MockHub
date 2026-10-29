@@ -60,7 +60,7 @@ public class TagService {
      * @return 创建后的标签对象（含生成的 ID）
      */
     public Tag create(Tag tag) {
-        permissionChecker.checkTeamAccess(tag.getTeamId());
+        permissionChecker.checkTeamWrite(tag.getTeamId());
 
         tag.setId(UUID.randomUUID().toString());
 
@@ -86,7 +86,7 @@ public class TagService {
         }
 
         // 修改标签需要团队管理员权限
-        permissionChecker.checkTeamAdmin(existing.getTeamId());
+        permissionChecker.checkTeamWrite(existing.getTeamId());
 
         existing.setName(tag.getName());
         existing.setColor(tag.getColor());
@@ -111,7 +111,7 @@ public class TagService {
         }
 
         // 删除标签需要团队管理员权限
-        permissionChecker.checkTeamAdmin(tag.getTeamId());
+        permissionChecker.checkTeamWrite(tag.getTeamId());
 
         // 清理 api_tag 关联记录
         apiTagRepository.deleteByTagId(id);

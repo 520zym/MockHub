@@ -20,6 +20,12 @@ public interface PermissionChecker {
      */
     void checkTeamAccess(String teamId);
 
+    /** 校验团队日常写能力：EDITOR / TEAM_ADMIN（或显式系统超管）。 */
+    void checkTeamWrite(String teamId);
+
+    /** 校验实例级管理能力，团队管理员不具备。 */
+    void checkSystemAdmin();
+
     /**
      * 校验当前用户是否为目标团队的管理员（或超级管理员）
      *

@@ -141,7 +141,7 @@ public class CustomVariableService {
      * 创建变量（团队管理员或超管）
      */
     public CustomVariableDTO createVariable(String teamId, String name, String description) {
-        permissionChecker.checkTeamAdmin(teamId);
+        permissionChecker.checkTeamWrite(teamId);
         validateVariableName(name);
         if (repository.findByTeamIdAndName(teamId, name) != null) {
             throw new BizException(40201, "变量名已存在：" + name);
@@ -169,7 +169,7 @@ public class CustomVariableService {
      * 更新变量（改名、改描述）
      */
     public void updateVariable(String teamId, String id, String name, String description) {
-        permissionChecker.checkTeamAdmin(teamId);
+        permissionChecker.checkTeamWrite(teamId);
         CustomVariable v = loadAndCheck(teamId, id);
         validateVariableName(name);
         // 改名时需再次唯一性校验
@@ -189,7 +189,7 @@ public class CustomVariableService {
      * 删除变量（级联清理值、分组、关联）
      */
     public void deleteVariable(String teamId, String id) {
-        permissionChecker.checkTeamAdmin(teamId);
+        permissionChecker.checkTeamWrite(teamId);
         loadAndCheck(teamId, id);
         repository.deleteVariableCascade(id);
         invalidateCache(teamId);
@@ -207,7 +207,7 @@ public class CustomVariableService {
      * @return int[2]：[0]=插入数，[1]=跳过数
      */
     public int[] batchInsertValues(String teamId, String variableId, List<ValuePair> pairs) {
-        permissionChecker.checkTeamAdmin(teamId);
+        permissionChecker.checkTeamWrite(teamId);
         loadAndCheck(teamId, variableId);
         if (pairs == null || pairs.isEmpty()) {
             return new int[]{0, 0};
@@ -260,7 +260,7 @@ public class CustomVariableService {
      * 单条新增候选值
      */
     public void addValue(String teamId, String variableId, String value, String description) {
-        permissionChecker.checkTeamAdmin(teamId);
+        permissionChecker.checkTeamWrite(teamId);
         loadAndCheck(teamId, variableId);
         validateValueLength(value);
         if (description != null) {
@@ -287,7 +287,7 @@ public class CustomVariableService {
      */
     public void updateValue(String teamId, String variableId, String valueId,
                             String value, String description, Integer sortOrder) {
-        permissionChecker.checkTeamAdmin(teamId);
+        permissionChecker.checkTeamWrite(teamId);
         loadAndCheck(teamId, variableId);
         CustomVariableValue existing = repository.findValueById(valueId);
         if (existing == null || !variableId.equals(existing.getVariableId())) {
@@ -317,7 +317,7 @@ public class CustomVariableService {
      * 删除候选值
      */
     public void deleteValue(String teamId, String variableId, String valueId) {
-        permissionChecker.checkTeamAdmin(teamId);
+        permissionChecker.checkTeamWrite(teamId);
         loadAndCheck(teamId, variableId);
         CustomVariableValue existing = repository.findValueById(valueId);
         if (existing == null || !variableId.equals(existing.getVariableId())) {
@@ -335,7 +335,7 @@ public class CustomVariableService {
     public CustomVariableDTO.GroupView createGroup(String teamId, String variableId,
                                                     String name, String description,
                                                     List<String> valueIds) {
-        permissionChecker.checkTeamAdmin(teamId);
+        permissionChecker.checkTeamWrite(teamId);
         loadAndCheck(teamId, variableId);
         validateGroupName(name);
         if (repository.findGroupByVariableIdAndName(variableId, name) != null) {
@@ -370,7 +370,7 @@ public class CustomVariableService {
      */
     public void updateGroup(String teamId, String variableId, String groupId,
                             String name, String description, List<String> valueIds) {
-        permissionChecker.checkTeamAdmin(teamId);
+        permissionChecker.checkTeamWrite(teamId);
         loadAndCheck(teamId, variableId);
         CustomVariableGroup g = repository.findGroupById(groupId);
         if (g == null || !variableId.equals(g.getVariableId())) {
@@ -396,7 +396,7 @@ public class CustomVariableService {
      * 删除分组
      */
     public void deleteGroup(String teamId, String variableId, String groupId) {
-        permissionChecker.checkTeamAdmin(teamId);
+        permissionChecker.checkTeamWrite(teamId);
         loadAndCheck(teamId, variableId);
         CustomVariableGroup g = repository.findGroupById(groupId);
         if (g == null || !variableId.equals(g.getVariableId())) {

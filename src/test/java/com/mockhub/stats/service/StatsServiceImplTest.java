@@ -8,6 +8,8 @@ import com.mockhub.system.repository.UserRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
@@ -139,14 +141,13 @@ class StatsServiceImplTest {
 
     // ============ 权限：普通成员 ============
 
-    @Test
-    void getOverview_member_anyTeamId_shouldReject() {
+    @ParameterizedTest
+    @ValueSource(strings = {"VIEWER", "EDITOR", "TEAM_ADMIN", "MEMBER"})
+    void getOverview_member_canReadOwnTeam(String role) {
         loginAsRegularUser(MEMBER_ID);
-        when(userRepository.findUserTeamRole(MEMBER_ID, TEAM_A)).thenReturn("MEMBER");
-
-        BizException e = assertThrows(BizException.class,
-                () -> statsService.getOverview(TEAM_A, 7));
-        assertEquals(40101, e.getCode());
+        when(userRepository.findUserTeamRole(MEMBER_ID, TEAM_A)).thenReturn(role);
+        assertNotNull(statsService.getOverview(TEAM_A, 7));
+        verify(statsRepository).countEnabledApis(TEAM_A);
     }
 
     @Test
@@ -159,13 +160,11 @@ class StatsServiceImplTest {
     }
 
     @Test
-    void getZombies_member_shouldReject() {
+    void getZombies_viewer_canReadOwnTeam() {
         loginAsRegularUser(MEMBER_ID);
-        when(userRepository.findUserTeamRole(MEMBER_ID, TEAM_A)).thenReturn("MEMBER");
-
-        assertThrows(BizException.class,
-                () -> statsService.getZombies(TEAM_A, 30, 20));
-        verify(statsRepository, never()).zombieApis(any(), any(), anyInt());
+        when(userRepository.findUserTeamRole(MEMBER_ID, TEAM_A)).thenReturn("VIEWER");
+        assertNotNull(statsService.getZombies(TEAM_A, 30, 20));
+        verify(statsRepository).zombieApis(eq(TEAM_A), anyString(), eq(20));
     }
 
     // ============ 参数兜底：days / limit ============

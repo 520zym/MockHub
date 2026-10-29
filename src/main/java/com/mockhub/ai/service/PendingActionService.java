@@ -62,6 +62,7 @@ public class PendingActionService {
      * 保存一个创建接口草稿，返回给前端渲染确认卡片的字段。
      */
     public Map<String, Object> createApiDraft(ApiDefinitionDTO dto, String summary) {
+        permissionChecker.checkTeamWrite(dto.getTeamId());
         AiPendingAction action = new AiPendingAction();
         action.setId(UUID.randomUUID().toString());
         action.setUserId(SecurityContextUtil.getCurrentUserId());
@@ -85,6 +86,7 @@ public class PendingActionService {
      * 保存一个「修改已有接口」草稿。
      */
     public Map<String, Object> createApiUpdateDraft(AiApiUpdateDraft draft, String summary) {
+        permissionChecker.checkTeamWrite(draft.getTeamId());
         AiPendingAction action = new AiPendingAction();
         action.setId(UUID.randomUUID().toString());
         action.setUserId(SecurityContextUtil.getCurrentUserId());
@@ -109,6 +111,7 @@ public class PendingActionService {
      * 保存一个「整体修改已有接口」草稿（MCP 多返回体）。
      */
     public Map<String, Object> createApiFullUpdateDraft(AiApiFullUpdateDraft draft, String summary) {
+        permissionChecker.checkTeamWrite(draft.getTeamId());
         AiPendingAction action = new AiPendingAction();
         action.setId(UUID.randomUUID().toString());
         action.setUserId(SecurityContextUtil.getCurrentUserId());
@@ -163,7 +166,7 @@ public class PendingActionService {
         }
 
         try {
-            permissionChecker.checkTeamAccess(dto.getTeamId());
+            permissionChecker.checkTeamWrite(dto.getTeamId());
             ApiDefinition created = apiService.create(dto);
             repository.complete(id, created.getId(), now());
             recordAudit(action, created, "CONFIRM");
@@ -193,7 +196,7 @@ public class PendingActionService {
             throw new BizException(50001, "草稿内容损坏，无法更新");
         }
         try {
-            permissionChecker.checkTeamAccess(draft.getTeamId());
+            permissionChecker.checkTeamWrite(draft.getTeamId());
             ApiDefinition updated = apiService.updateResponseBody(
                     draft.getApiId(), draft.getResponseId(), draft.getNewBody());
             repository.complete(action.getId(), updated.getId(), now);
@@ -224,7 +227,7 @@ public class PendingActionService {
             throw new BizException(50001, "草稿内容损坏，无法更新");
         }
         try {
-            permissionChecker.checkTeamAccess(draft.getTeamId());
+            permissionChecker.checkTeamWrite(draft.getTeamId());
             ApiDefinition updated = apiService.update(draft.getApiId(), draft.getDto());
             repository.complete(action.getId(), updated.getId(), now);
             recordAudit(action, updated, "CONFIRM");
@@ -269,6 +272,7 @@ public class PendingActionService {
     public Map<String, Object> get(String id) {
         AiPendingAction action = requireAction(id);
         checkOwner(action);
+        permissionChecker.checkTeamAccess(action.getTeamId());
         if ("PENDING".equals(action.getStatus()) && now().compareTo(action.getExpiresAt()) > 0) {
             repository.expire(id, now());
             action.setStatus("EXPIRED");
