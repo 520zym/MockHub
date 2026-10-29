@@ -4,7 +4,7 @@
 -->
 <template>
   <div class="page-settings">
-    <div class="settings-layout" v-loading="loading || aiLoading">
+    <div v-if="userStore.isSuperAdmin" class="settings-layout" v-loading="loading || aiLoading">
       <aside class="settings-nav">
         <div v-for="group in navGroups" :key="group.label" class="nav-group">
           <div class="nav-group__title">{{ group.label }}</div>
@@ -16,7 +16,7 @@
             :class="{ 'nav-item--on': activeSection === item.key }"
             @click="activeSection = item.key"
           >
-            <el-icon><component :is="item.icon" /></el-icon>
+            <FilledIcon :name="item.icon" :size="17" />
             <span>{{ item.label }}</span>
             <span v-if="item.badge" class="nav-badge">{{ item.badge }}</span>
           </button>
@@ -58,7 +58,7 @@
                     </span>
                     <span class="provider-host">{{ hostOf(p.baseUrl) }}</span>
                   </span>
-                  <el-icon v-if="aiForm.vendor === p.key" class="provider-check"><Check /></el-icon>
+                  <FilledIcon v-if="aiForm.vendor === p.key" class="provider-check" name="shield" :size="17" />
                 </button>
               </div>
               <div class="input-hint provider-hint">选择供应商会自动填入默认地址与模型，仍可手动修改；自定义用于任意 OpenAI 兼容服务。</div>
@@ -102,11 +102,11 @@
               <el-form-item label="连接测试">
                 <div class="ai-test-row">
                   <el-button :loading="aiTesting" :disabled="aiFormDirty" @click="handleTestAi">
-                    <el-icon><Connection /></el-icon>
+                    <FilledIcon name="api" :size="16" />
                     测试连接
                   </el-button>
                   <span v-if="aiTestResult" class="ai-test-ok">
-                    <el-icon><CircleCheck /></el-icon>
+                    <FilledIcon name="shield" :size="16" />
                     连接正常 · {{ aiTestResult.latencyMs }} ms
                     <span class="ai-test-model">{{ aiTestResult.model }}</span>
                   </span>
@@ -145,7 +145,7 @@
               <span class="ai-provider-summary__state" :class="{ 'is-on': providerSummary.on }">{{ providerSummary.state }}</span>
               <el-button text class="ai-provider-summary__link" @click="activeSection = 'provider'">
                 更换供应商
-                <el-icon><ArrowRight /></el-icon>
+                <FilledIcon name="api" :size="16" />
               </el-button>
             </div>
 
@@ -205,85 +205,18 @@
             </div>
           </section>
 
-          <!-- MCP Server -->
-          <section v-show="activeSection === 'mcp'" class="settings-section">
-            <h3 class="section-title">MCP Server</h3>
-            <p class="section-desc">把 MockHub 的检索、统计与生成能力开放给 Claude、Cursor、Codex 等外部 AI 工具。</p>
-
-            <div class="ai-switch-row">
-              <div>
-                <div class="ai-switch-title">启用 MCP Server</div>
-                <div class="ai-switch-desc">外部客户端通过 Bearer Token 调用，权限与 Token 所属用户一致</div>
-              </div>
-              <div class="ai-switch-actions">
-                <span class="ai-state" :class="{ 'ai-state--on': mcpForm.enabled }">{{ mcpForm.enabled ? '已启用' : '已停用' }}</span>
-                <el-switch v-model="mcpForm.enabled" />
-              </div>
-            </div>
-
-            <el-form-item label="服务地址">
-              <div class="mcp-endpoint">
-                <code>{{ mcpEndpoint }}</code>
-                <el-button text size="small" @click="copyText(mcpEndpoint)">
-                  <el-icon><DocumentCopy /></el-icon>
-                  复制
-                </el-button>
-              </div>
-              <div class="input-hint">客户端使用 Streamable HTTP（POST /mcp）连接；返回 JSON 响应，不支持 SSE 流。</div>
-            </el-form-item>
-
-            <el-form-item label="写操作策略">
-              <el-radio-group v-model="mcpForm.writeMode" class="ai-scope">
-                <el-radio value="DRAFT_ONLY">草稿 + Web 确认（推荐）</el-radio>
-                <el-radio value="DIRECT">允许直接写入</el-radio>
-              </el-radio-group>
-              <div class="input-hint" style="margin-left: 0">草稿模式会返回确认链接，用户在 MockHub 页面确认后才落库。</div>
-            </el-form-item>
-
-            <el-form-item label="可用工具">
-              <div class="ai-cap-list">
-                <div v-for="tool in mcpToolOptions" :key="tool.key" class="ai-cap-row">
-                  <div>
-                    <div class="ai-cap-title"><code>{{ tool.name }}</code></div>
-                    <div class="ai-cap-desc">{{ tool.desc }}</div>
-                  </div>
-                  <el-switch v-model="mcpForm[tool.key]" />
-                </div>
-              </div>
-            </el-form-item>
-
-            <div class="mcp-token-head">
-              <div>
-                <div class="ai-switch-title">访问 Token</div>
-                <div class="ai-switch-desc">Token 只在创建时显示一次，可随时撤销</div>
-              </div>
-              <el-button type="primary" plain @click="openTokenDialog">+ 新建 Token</el-button>
-            </div>
-
-            <el-table :data="mcpTokens" size="small" class="mcp-token-table" empty-text="还没有 Token">
-              <el-table-column prop="name" label="名称" min-width="100" show-overflow-tooltip>
-                <template #default="{ row }">
-                  <span>{{ row.name }}</span>
-                  <span class="mcp-token-owner">{{ row.ownerName }}</span>
-                </template>
-              </el-table-column>
-              <el-table-column prop="tokenPrefix" label="前缀" width="120" />
-              <el-table-column label="最后使用" width="150">
-                <template #default="{ row }">{{ row.lastUsedAt ? formatTime(row.lastUsedAt) : '从未' }}</template>
-              </el-table-column>
-              <el-table-column label="状态" width="70">
-                <template #default="{ row }"><span :class="tokenStatusClass(row)">{{ tokenStatus(row) }}</span></template>
-              </el-table-column>
-              <el-table-column label="操作" width="72">
-                <template #default="{ row }">
-                  <el-button v-if="!row.revoked" text type="danger" size="small" @click="revokeToken(row)">撤销</el-button>
-                </template>
-              </el-table-column>
-            </el-table>
-
-            <div class="ai-save-row">
-              <el-button type="primary" :loading="mcpSaving" @click="handleSaveMcp">保存 MCP 配置</el-button>
-            </div>
+          <!-- Instance policy only. Personal credentials live in /account/tokens. -->
+          <section v-show="activeSection === 'mcp'" class="settings-section mcp-policy">
+            <div class="policy-heading"><div><h3 class="section-title">MCP 实例策略</h3><p class="section-desc">控制全实例 MCP 接入与工具，个人凭证仍须逐队显式授权。</p></div><span class="policy-badge">仅超级管理员</span></div>
+            <div class="policy-notice"><FilledIcon name="key" :size="19" /><span><b>个人凭证已移到个人账号</b><br>此处不创建或显示个人 Token。<router-link to="/account/tokens">管理我的个人凭证</router-link>，能力始终按凭证范围 ∩ 本人当前权限 ∩ 实例策略求交。</span></div>
+            <div v-if="mcpError" class="policy-error" role="alert">{{ mcpError }} <el-button text :disabled="mcpSaving" @click="loadMcpSettings">重新加载</el-button></div>
+            <div class="mcp-endpoint"><span class="policy-http">POST</span><code>{{ mcpEndpoint }}</code><el-button text size="small" @click="copyText(mcpEndpoint)">复制地址</el-button></div>
+            <div class="input-hint">Streamable HTTP · POST /mcp · JSON 响应，非 SSE。地址不包含凭证。</div>
+            <div class="ai-switch-row"><div><div class="ai-switch-title">启用 MCP Server</div><div class="ai-switch-desc">停用后所有 MCP 客户端停止接入，关联 MCP 草稿也不能继续确认。</div></div><div class="ai-switch-actions"><span class="ai-state" :class="{ 'ai-state--on': mcpSaved?.enabled }">{{ mcpReady ? (mcpSaved?.enabled ? '已保存：启用' : '已保存：停用') : '状态待加载' }}</span><el-switch v-model="mcpForm.enabled" :disabled="!mcpReady || mcpSaving" /></div></div>
+            <el-form-item label="实例写入策略"><el-radio-group v-model="mcpForm.writeMode" class="ai-scope" :disabled="!mcpReady || mcpSaving"><el-radio value="DRAFT_ONLY">草稿 + Web 明确确认（推荐）</el-radio><el-radio value="DIRECT">允许 MCP 应用来源草稿</el-radio></el-radio-group><div class="input-hint" style="margin-left: 0">DIRECT 不是绕过权限直接写库：还需要来源快照、当前凭证的 DRAFT_APPLY、当前角色与应用工具开关同时允许。网页确认也会复核来源凭证。</div></el-form-item>
+            <div class="policy-tools"><table><thead><tr><th>工具</th><th>对应个人能力</th><th>实例允许</th></tr></thead><tbody><tr v-for="tool in mcpToolOptions" :key="tool.key"><td><code>{{ tool.name }}</code><p>{{ tool.desc }}</p></td><td><span class="policy-scope">{{ tool.scope }}</span><small v-if="tool.key === 'toolApplyApiDraft' && mcpForm.writeMode !== 'DIRECT'">DRAFT_ONLY 下不可用</small></td><td><el-switch v-model="mcpForm[tool.key]" :disabled="!mcpReady || mcpSaving || (tool.key === 'toolApplyApiDraft' && mcpForm.writeMode !== 'DIRECT')" :aria-label="tool.name + ' 实例开关'" /></td></tr></tbody></table></div>
+            <p class="policy-foot">禁用工具会同时从 tools/list 隐藏，并拒绝直接工具调用。这里的系统策略不授予团队、成员管理或平台账号管理能力。</p>
+            <div class="ai-save-row"><span v-if="mcpDirty" class="unsaved-note">有未保存修改，尚未影响实例</span><el-button type="primary" :loading="mcpSaving" :disabled="!mcpReady || !mcpDirty || !userStore.isSuperAdmin" @click="handleSaveMcp">保存实例 MCP 策略</el-button></div>
           </section>
 
           <!-- 基础设置 -->
@@ -369,49 +302,23 @@
       </div>
     </div>
 
-    <el-dialog v-model="tokenDialogVisible" title="新建 MCP Token" width="440px">
-      <el-form label-position="top">
-        <el-form-item label="名称"><el-input v-model="tokenForm.name" maxlength="60" placeholder="如：Cursor 本地" /></el-form-item>
-        <el-form-item label="有效期">
-          <el-select v-model="tokenForm.expiresInDays" style="width: 100%">
-            <el-option label="90 天" :value="90" />
-            <el-option label="30 天" :value="30" />
-            <el-option label="7 天" :value="7" />
-            <el-option label="永不过期" :value="0" />
-          </el-select>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="tokenDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="tokenCreating" @click="handleCreateToken">创建</el-button>
-      </template>
-    </el-dialog>
-
-    <el-dialog v-model="createdTokenVisible" title="Token 已创建" width="500px" :close-on-click-modal="false">
-      <el-alert type="warning" :closable="false" show-icon title="请立即复制保存，关闭后无法再次查看" />
-      <div class="mcp-token-value">
-        <code>{{ createdToken.token }}</code>
-        <el-button text @click="copyText(createdToken.token)">复制</el-button>
-      </div>
-      <template #footer><el-button type="primary" @click="createdTokenVisible = false">我已保存</el-button></template>
-    </el-dialog>
+    <div v-if="!userStore.isSuperAdmin" class="policy-access-denied"><FilledIcon name="shield" :size="30" /><h2>仅超级管理员可配置实例策略</h2><p>个人访问凭证请前往个人账号；团队管理员无权改变全局设置。</p></div>
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import {
-  ArrowRight, Check, CircleCheck, Connection, Cpu, Document, DocumentCopy,
-  Folder, MagicStick, Setting
-} from '@element-plus/icons-vue'
+import FilledIcon from '@/components/FilledIcon.vue'
+import { useUserStore } from '@/stores/user'
 import AiModelPicker from '@/components/ai/AiModelPicker.vue'
 import { cleanOrphanFiles, getFileStorageStats, getSettings, saveSettings, scanOrphanFiles } from '@/api/settings'
 import { getAiProviders, getAiSettings, saveAiSettings, testAiConnection } from '@/api/ai'
-import { getMcpSettings, saveMcpSettings, getMcpTokens, createMcpToken, revokeMcpToken } from '@/api/mcp'
+import { getMcpSettings, saveMcpSettings } from '@/api/mcp'
 import { useAiStore } from '@/stores/ai'
 
 const aiStore = useAiStore()
+const userStore = useUserStore()
 const loading = ref(false)
 const saving = ref(false)
 const aiLoading = ref(false)
@@ -423,14 +330,14 @@ const storageStats = ref(null)
 const activeSection = ref('provider')
 const navGroups = [
   { label: 'AI 能力', items: [
-    { key: 'provider', label: 'AI 供应商', icon: Connection, badge: '新' },
-    { key: 'assistant', label: '助手与能力', icon: MagicStick },
-    { key: 'mcp', label: 'MCP Server', icon: Cpu }
+    { key: 'provider', label: 'AI 供应商', icon: 'api', badge: '新' },
+    { key: 'assistant', label: '助手与能力', icon: 'assistant' },
+    { key: 'mcp', label: 'MCP Server', icon: 'shield' }
   ] },
   { label: '系统', items: [
-    { key: 'basic', label: '基础设置', icon: Setting },
-    { key: 'logs', label: '日志与保留', icon: Document },
-    { key: 'files', label: '文件存储', icon: Folder }
+    { key: 'basic', label: '基础设置', icon: 'settings' },
+    { key: 'logs', label: '日志与保留', icon: 'logs' },
+    { key: 'files', label: '文件存储', icon: 'files' }
   ] }
 ]
 
@@ -453,7 +360,7 @@ const aiTestResult = ref(null)
 const aiSettingsUpdatedAt = ref('')
 
 const providerColors = {
-  deepseek: { background: '#EEF0FF', color: '#4F46E5' },
+  deepseek: { background: '#EEF0FF', color: '#3568d4' },
   kimi: { background: '#F3F4F6', color: '#111827' },
   minimax: { background: '#FFF7ED', color: '#C2410C' },
   glm: { background: '#EFF6FF', color: '#2563EB' },
@@ -503,27 +410,22 @@ const providerSummary = computed(() => {
 
 const mcpForm = reactive({
   enabled: false, writeMode: 'DRAFT_ONLY',
-  toolSearchApis: true, toolGetApiDetail: true, toolGetApiStats: true, toolCreateApiDraft: true,
+  toolSearchApis: true, toolGetApiDetail: true, toolGetApiStats: true, toolCreateApiDraft: true, toolUpdateApiDraft: true,
   toolApplyApiDraft: false, toolGenerateResponseBody: true, toolGenerateConditions: true, toolExplainMatchResult: true
 })
-const mcpTokens = ref([])
-const mcpSaving = ref(false)
-const tokenDialogVisible = ref(false)
-const tokenCreating = ref(false)
-const tokenForm = reactive({ name: '', expiresInDays: 90 })
-const createdTokenVisible = ref(false)
-const createdToken = ref({ token: '' })
+const mcpSaving = ref(false), mcpReady = ref(false), mcpError = ref(''), mcpSaved = ref(null)
+const mcpDirty = computed(() => !!mcpSaved.value && Object.keys(mcpForm).some(key => mcpForm[key] !== mcpSaved.value[key]))
 
 const mcpToolOptions = [
-  { key: 'toolSearchApis', name: 'mockhub.search_apis', desc: '按关键字搜索接口' },
-  { key: 'toolGetApiDetail', name: 'mockhub.get_api_detail', desc: '读取接口与返回体配置' },
-  { key: 'toolGetApiStats', name: 'mockhub.get_api_stats', desc: '查询调用次数与热门接口' },
-  { key: 'toolCreateApiDraft', name: 'mockhub.create_api_draft', desc: '根据参数创建接口草稿（支持多返回体）' },
-  { key: 'toolUpdateApiDraft', name: 'mockhub.update_api_draft', desc: '修改接口、替换或追加返回体' },
-  { key: 'toolApplyApiDraft', name: 'mockhub.apply_api_draft', desc: '应用草稿（默认需 Web 确认）' },
-  { key: 'toolGenerateResponseBody', name: 'mockhub.generate_response_body', desc: '生成 JSON / XML 响应体' },
-  { key: 'toolGenerateConditions', name: 'mockhub.generate_conditions', desc: '自然语言转条件规则' },
-  { key: 'toolExplainMatchResult', name: 'mockhub.explain_match_result', desc: '解释一次请求的命中链路' }
+  { key: 'toolSearchApis', scope: 'API_READ', name: 'mockhub.search_apis', desc: '按关键字搜索接口' },
+  { key: 'toolGetApiDetail', scope: 'API_READ', name: 'mockhub.get_api_detail', desc: '读取接口与返回体配置' },
+  { key: 'toolGetApiStats', scope: 'STATS_READ', name: 'mockhub.get_api_stats', desc: '查询调用次数与热门接口' },
+  { key: 'toolCreateApiDraft', scope: 'DRAFT_CREATE', name: 'mockhub.create_api_draft', desc: '根据参数创建接口草稿（支持多返回体）' },
+  { key: 'toolUpdateApiDraft', scope: 'DRAFT_UPDATE', name: 'mockhub.update_api_draft', desc: '修改接口、替换或追加返回体' },
+  { key: 'toolApplyApiDraft', scope: 'DRAFT_APPLY', name: 'mockhub.apply_api_draft', desc: '应用草稿（默认需 Web 确认）' },
+  { key: 'toolGenerateResponseBody', scope: 'AI_GENERATE', name: 'mockhub.generate_response_body', desc: '生成 JSON / XML 响应体' },
+  { key: 'toolGenerateConditions', scope: 'AI_GENERATE', name: 'mockhub.generate_conditions', desc: '自然语言转条件规则' },
+  { key: 'toolExplainMatchResult', scope: 'AI_GENERATE', name: 'mockhub.explain_match_result', desc: '解释一次请求的命中链路' }
 ]
 
 const form = reactive({ logRetainMode: 'count', logRetainCount: 1000, logRetainDays: 30, mockCorsEnabled: true, serverAddress: '' })
@@ -690,6 +592,8 @@ function clearAiKey() { aiClearKey.value = true; clearKeySource.value = 'user'; 
 function undoClearKey() { aiClearKey.value = false; clearKeySource.value = '' }
 
 async function loadMcpSettings() {
+  if (!userStore.isSuperAdmin || mcpSaving.value) return
+  mcpReady.value = false; mcpError.value = ''
   try {
     const data = await getMcpSettings()
     mcpForm.enabled = !!data.enabled
@@ -703,57 +607,27 @@ async function loadMcpSettings() {
     mcpForm.toolGenerateResponseBody = !!data.toolGenerateResponseBody
     mcpForm.toolGenerateConditions = !!data.toolGenerateConditions
     mcpForm.toolExplainMatchResult = !!data.toolExplainMatchResult
-  } catch (e) { /* 拦截器已处理 */ }
-}
-
-async function loadMcpTokens() {
-  try { mcpTokens.value = await getMcpTokens() } catch (e) { mcpTokens.value = [] }
+    mcpSaved.value = { ...mcpForm }; mcpReady.value = true
+  } catch (err) { mcpError.value = err?.msg || err?.response?.data?.msg || err?.message || '加载实例策略失败' }
 }
 
 async function handleSaveMcp() {
-  mcpSaving.value = true
+  if (!userStore.isSuperAdmin || !mcpReady.value || !mcpDirty.value || mcpSaving.value) return
+  const payload = { ...mcpForm }; mcpSaving.value = true; mcpError.value = ''
   try {
-    await saveMcpSettings({ ...mcpForm })
-    ElMessage.success('MCP 配置已保存')
-  } catch (e) { /* 拦截器已处理 */ }
+    const previous = mcpSaved.value
+    const danger = payload.enabled && ((!previous.enabled) || (payload.writeMode === 'DIRECT' && previous.writeMode !== 'DIRECT') || (payload.toolApplyApiDraft && !previous.toolApplyApiDraft))
+    if (danger) {
+      try { await ElMessageBox.confirm('此实例策略可能启用外部 MCP 接入或自动应用草稿。具备显式能力的个人凭证可在当前团队权限内执行。确认已评估所有团队影响？DIRECT 仍受来源快照、凭证范围与工具开关约束。', '确认高风险实例策略', { type: 'warning', confirmButtonText: '确认保存实例策略', cancelButtonText: '取消' }) } catch { return }
+    } else if (previous.enabled && !payload.enabled) {
+      try { await ElMessageBox.confirm('停用后所有 MCP 客户端将无法接入；来源 MCP 的待确认草稿也会被拒绝确认。不会停用 Mock 运行服务。', '停用实例 MCP', { type: 'warning', confirmButtonText: '确认停用 MCP', cancelButtonText: '取消' }) } catch { return }
+    }
+    if (!userStore.isSuperAdmin) return
+    const saved = await saveMcpSettings(payload)
+    for (const key of Object.keys(mcpForm)) mcpForm[key] = saved?.[key] ?? payload[key]
+    mcpSaved.value = { ...mcpForm }; ElMessage.success('实例 MCP 策略已保存')
+  } catch (err) { mcpError.value = err?.msg || err?.response?.data?.msg || err?.message || '保存失败' }
   finally { mcpSaving.value = false }
-}
-
-function openTokenDialog() {
-  tokenForm.name = ''
-  tokenForm.expiresInDays = 90
-  tokenDialogVisible.value = true
-}
-
-async function handleCreateToken() {
-  if (!tokenForm.name.trim()) { ElMessage.warning('请填写 Token 名称'); return }
-  tokenCreating.value = true
-  try {
-    createdToken.value = await createMcpToken({ name: tokenForm.name.trim(), expiresInDays: tokenForm.expiresInDays })
-    tokenDialogVisible.value = false
-    createdTokenVisible.value = true
-    await loadMcpTokens()
-  } catch (e) { /* 拦截器已处理 */ }
-  finally { tokenCreating.value = false }
-}
-
-async function revokeToken(row) {
-  try {
-    await ElMessageBox.confirm('撤销后使用该 Token 的客户端会立即失效，是否继续？', '撤销 Token', { type: 'warning', confirmButtonText: '撤销', cancelButtonText: '取消' })
-    await revokeMcpToken(row.id)
-    ElMessage.success('Token 已撤销')
-    await loadMcpTokens()
-  } catch (e) { /* 取消或拦截器已处理 */ }
-}
-
-function tokenStatus(row) {
-  if (row.revoked) return '已撤销'
-  if (row.expiresAt && new Date(row.expiresAt).getTime() < Date.now()) return '已过期'
-  return '生效中'
-}
-
-function tokenStatusClass(row) {
-  return tokenStatus(row) === '生效中' ? 'mcp-token-status mcp-token-status--on' : 'mcp-token-status mcp-token-status--off'
 }
 
 async function copyText(text) {
@@ -813,12 +687,12 @@ function formatTime(timestamp) {
 }
 
 onMounted(() => {
+  if (!userStore.isSuperAdmin) return
   loadSettings()
   loadStorageStats()
   loadProviders()
   loadAiSettings()
   loadMcpSettings()
-  loadMcpTokens()
 })
 </script>
 
@@ -830,16 +704,16 @@ onMounted(() => {
 .nav-group__title { padding: 6px 10px; font-size: 10.5px; font-weight: 700; letter-spacing: .6px; color: #A3AED0; text-transform: uppercase; }
 .nav-item { position: relative; display: flex; align-items: center; gap: 9px; width: 100%; height: 38px; padding: 0 10px; border: none; border-radius: 8px; background: transparent; font-size: 13px; color: #4A5568; text-align: left; cursor: pointer; }
 .nav-item:hover { background: #F7F8FA; }
-.nav-item--on { background: #EEF0FF; color: #4F46E5; font-weight: 600; }
-.nav-item--on::before { content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 2px; background: #6366F1; }
+.nav-item--on { background: #EEF0FF; color: #3568d4; font-weight: 600; }
+.nav-item--on::before { content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 2px; background: #3568d4; }
 .nav-item .el-icon { color: #8A93A8; }
-.nav-item--on .el-icon { color: #4F46E5; }
+.nav-item--on .el-icon { color: #3568d4; }
 .nav-badge { margin-left: auto; padding: 0 5px; border-radius: 5px; background: #F5F3FF; border: 1px solid #E7E3FD; color: #8B5CF6; font-size: 9.5px; font-weight: 600; line-height: 16px; }
 .settings-nav__hint { margin-top: 14px; padding: 10px; border-radius: 8px; background: #FAFBFC; color: #A3AED0; font-size: 11px; line-height: 1.65; }
 .settings-card { min-height: 640px; padding: 26px 30px; background: #fff; border-radius: 12px; }
 .settings-section .section-title { margin: 0 0 4px; font-size: 20px; font-weight: 700; color: #1B2559; letter-spacing: -.2px; }
 .settings-section .section-desc { margin: 0 0 20px; font-size: 12.5px; color: #A3AED0; line-height: 1.75; }
-.api-chip { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; margin-left: 6px; border-radius: 6px; background: #EEF0FF; color: #4F46E5; font-size: 11px; font-weight: 600; vertical-align: middle; }
+.api-chip { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; margin-left: 6px; border-radius: 6px; background: #EEF0FF; color: #3568d4; font-size: 11px; font-weight: 600; vertical-align: middle; }
 .settings-form :deep(.el-form-item__label) { font-size: 13px; font-weight: 600; color: #4A5568; }
 .settings-form :deep(.el-radio__label) { color: #4A5568; }
 .settings-form :deep(.el-input-number) { width: 200px; }
@@ -848,29 +722,29 @@ onMounted(() => {
 .provider-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
 .provider-card { position: relative; display: flex; align-items: center; gap: 10px; height: 74px; padding: 0 12px; border: 1px solid #EDF0F5; border-radius: 10px; background: #fff; text-align: left; cursor: pointer; }
 .provider-card:hover { border-color: #DDE2EE; }
-.provider-card--on { border-color: #C7D2FE; background: #FBFCFF; box-shadow: 0 0 0 2px rgba(99, 102, 241, .08); }
+.provider-card--on { border-color: #C7D2FE; background: #FBFCFF; box-shadow: none; }
 .provider-logo { display: grid; place-items: center; flex-shrink: 0; width: 32px; height: 32px; border-radius: 9px; font-size: 14px; font-weight: 700; }
 .provider-body { min-width: 0; }
 .provider-name { display: flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 600; color: #1B2559; white-space: nowrap; }
 .provider-local { padding: 0 4px; border-radius: 4px; background: #F1F5F9; color: #64748B; font-size: 9px; font-weight: 600; line-height: 16px; }
 .provider-host { display: block; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #A3AED0; font-size: 10.5px; }
-.provider-check { position: absolute; top: 8px; right: 8px; color: #6366F1; }
+.provider-check { position: absolute; top: 8px; right: 8px; color: #3568d4; }
 .provider-hint { margin: 8px 0 18px; }
 .mock-banner { display: flex; align-items: center; gap: 12px; padding: 14px; border: 1px solid #F1F5F9; border-radius: 10px; background: #FBFBFE; }
-.mock-banner__logo { display: grid; place-items: center; flex-shrink: 0; width: 34px; height: 34px; border-radius: 10px; background: #EEF0FF; color: #4F46E5; font-size: 15px; font-weight: 700; }
+.mock-banner__logo { display: grid; place-items: center; flex-shrink: 0; width: 34px; height: 34px; border-radius: 10px; background: #EEF0FF; color: #3568d4; font-size: 15px; font-weight: 700; }
 .mock-banner__main { flex: 1; }
 .mock-banner__title { font-size: 13px; font-weight: 600; color: #1B2559; }
 .mock-banner__desc { margin-top: 2px; font-size: 11.5px; color: #A3AED0; }
 .ai-badge { display: inline-flex; align-items: center; margin-left: 6px; padding: 0 6px; height: 18px; border-radius: 6px; font-size: 10.5px; font-weight: 700; color: #8B5CF6; background: #F5F3FF; border: 1px solid #E7E3FD; vertical-align: middle; }
 .ai-provider-summary { display: flex; align-items: center; gap: 12px; margin: 0 0 18px; padding: 12px 14px; border: 1px solid #F1F5F9; border-radius: 10px; background: #FBFBFE; }
-.ai-provider-summary__logo { display: grid; place-items: center; flex-shrink: 0; width: 34px; height: 34px; border-radius: 10px; background: #EEF0FF; color: #4F46E5; font-size: 15px; font-weight: 700; }
+.ai-provider-summary__logo { display: grid; place-items: center; flex-shrink: 0; width: 34px; height: 34px; border-radius: 10px; background: #EEF0FF; color: #3568d4; font-size: 15px; font-weight: 700; }
 .ai-provider-summary__body { flex: 1; }
 .ai-provider-summary__name { font-size: 13px; font-weight: 600; color: #1B2559; }
 .ai-provider-summary__meta { margin-top: 1px; font-size: 11.5px; color: #A3AED0; }
 .ai-provider-summary__state { font-size: 11.5px; color: #A3AED0; }
 .ai-provider-summary__state.is-on { color: #10B981; }
 .ai-provider-summary__state.is-on::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 5px; border-radius: 50%; background: #10B981; }
-.ai-provider-summary__link { color: #6366F1; }
+.ai-provider-summary__link { color: #3568d4; }
 .ai-switch-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 4px 0 16px; }
 .ai-switch-title { font-size: 14px; font-weight: 500; color: #1B2559; }
 .ai-switch-desc { margin-top: 2px; font-size: 12px; color: #A3AED0; }
@@ -901,13 +775,35 @@ onMounted(() => {
 .orphan-table { width: 100%; margin-top: 14px; }
 .mcp-endpoint { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 12px; border-radius: 10px; background: #F7F8FA; }
 .mcp-endpoint code { flex: 1; font-family: 'SF Mono', Menlo, Monaco, Consolas, monospace; font-size: 12.5px; color: #4A5568; overflow-wrap: anywhere; }
-.mcp-token-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 8px 0 10px; }
-.mcp-token-table { width: 100%; }
-.mcp-token-owner { display: block; margin-top: 1px; font-size: 11px; color: #A3AED0; }
-.mcp-token-status { font-size: 12px; }
-.mcp-token-status--on { color: #10B981; }
-.mcp-token-status--off { color: #A3AED0; }
-.mcp-token-value { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding: 10px 12px; border-radius: 10px; background: #F7F8FA; }
-.mcp-token-value code { flex: 1; font-family: 'SF Mono', Menlo, Monaco, Consolas, monospace; font-size: 12.5px; color: #1B2559; overflow-wrap: anywhere; }
 @media (max-width: 1200px) { .settings-layout { grid-template-columns: 180px minmax(0, 1fr); } .provider-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.page-settings { max-width:none; height:100%; min-height:0; color:#303844; }
+.settings-layout { height:100%; min-height:0; grid-template-columns:190px minmax(0,1fr); align-items:stretch; }
+.settings-nav { overflow:auto; min-height:0; position:static; }
+.settings-card { overflow:auto; min-height:0; box-shadow:none; border-radius:16px; }
+.settings-nav__hint { color:#929dac; font-weight:400; }
+.nav-item--on { background:#edf2fc; color:#3568d4; }
+.policy-heading { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; }
+.policy-badge { background:#f2f4f8; color:#8896a9; padding:6px 9px; border-radius:7px; font-size:11px; white-space:nowrap; }
+.policy-notice { display:flex; align-items:flex-start; gap:12px; padding:14px; background:#eaf0fb; color:#607da6; border-radius:11px; font-size:12px; line-height:1.9; margin-bottom:22px; }
+.policy-notice a { color:#3568d4; text-decoration:none; }
+.policy-error { padding:12px 14px; background:#fff0eb; color:#a64836; border-radius:9px; line-height:1.8; font-size:12px; margin:14px 0; }
+.policy-http { font:600 11px ui-monospace,monospace; color:#3568d4; }
+.policy-tools { overflow:auto; margin:22px 0; }
+.policy-tools table { border-collapse:collapse; width:100%; min-width:550px; text-align:left; }
+.policy-tools th { font-size:11px; color:#94a0b1; font-weight:400; }
+.policy-tools td,.policy-tools th { padding:13px 10px; border:0; }
+.policy-tools code { font:11px ui-monospace,monospace; color:#546d91; }
+.policy-tools p { font-size:11px; color:#9ba5b4; margin:5px 0 0; line-height:1.7; }
+.policy-scope { font:10px ui-monospace,monospace; color:#6c88b3; background:#f1f5fc; padding:5px 7px; border-radius:6px; white-space:nowrap; }
+.policy-tools small { display:block; font-size:10px; color:#a1a9b5; margin-top:8px; }
+.policy-foot,.unsaved-note { font-size:11px; line-height:1.8; color:#8d9aac; }
+.ai-save-row { display:flex; align-items:center; gap:12px; }
+.page-settings :deep(.el-button--primary) { background:#1d2025; border-color:#1d2025; box-shadow:none; }
+.page-settings :deep(.el-button--primary.is-plain) { background:#edf2fc; border-color:transparent; color:#3568d4; }
+.page-settings :deep(.el-switch) { --el-switch-on-color:#3568d4; }
+.page-settings :deep(.el-input__wrapper),.page-settings :deep(.el-select__wrapper) { box-shadow:none; background:#f5f7fa; }
+.policy-access-denied { min-height:280px; display:grid; place-content:center; justify-items:center; gap:12px; background:white; border-radius:16px; color:#8797ae; }
+.policy-access-denied h2 { font-size:17px; color:#60738f; }
+@media(max-width:850px) { .settings-layout { grid-template-columns:150px minmax(0,1fr); gap:12px; }.settings-card { padding:18px; }.policy-heading { flex-wrap:wrap; } }
+@media(max-width:620px) { .page-settings { height:auto; }.settings-layout { display:flex; flex-direction:column; }.settings-nav { display:flex; flex-wrap:wrap; gap:10px; }.nav-group { flex:1; min-width:135px; }.settings-nav__hint { display:none; }.settings-card { overflow:visible; } }
 </style>
