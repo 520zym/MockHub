@@ -52,9 +52,9 @@ class UserServiceImplResetPasswordTransactionTest {
         dataSource.setUrl("jdbc:sqlite:" + tempDir.resolve("reset-password.db").toString());
         jdbcTemplate = new JdbcTemplate(dataSource);
         jdbcTemplate.execute("CREATE TABLE user (id TEXT PRIMARY KEY, username TEXT, password_hash TEXT, "
-                + "display_name TEXT, global_role TEXT, first_login INTEGER, created_at TEXT, updated_at TEXT)");
+                + "display_name TEXT, global_role TEXT, first_login INTEGER, status TEXT DEFAULT 'ACTIVE', auth_version INTEGER DEFAULT 0, created_at TEXT, updated_at TEXT)");
         oldHash = PasswordUtil.hash("old-password");
-        jdbcTemplate.update("INSERT INTO user VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        jdbcTemplate.update("INSERT INTO user (id,username,password_hash,display_name,global_role,first_login,created_at,updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 "target", "target-user", oldHash, "Target", "USER", 0, "before", "before");
         repository = new UserRepository();
         ReflectionTestUtils.setField(repository, "jdbcTemplate", jdbcTemplate);

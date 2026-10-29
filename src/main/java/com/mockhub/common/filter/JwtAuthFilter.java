@@ -87,7 +87,18 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 writeUnauthorized(response, "Token 无效或已过期");
                 return;
             }
-            CurrentUser user = currentUserProvider.findById(userId);
+            Object versionClaim = claims.get("auth_version");
+            Object sidClaim = claims.get("sid");
+            // No silent upgrade of pre-V8 tokens or malformed claim types.
+            if (!(versionClaim instanceof Integer || versionClaim instanceof Long)
+                    || ((Number) versionClaim).longValue() < 0
+                    || !(sidClaim instanceof String) || ((String) sidClaim).trim().isEmpty()) {
+                writeUnauthorized(response, "登录凭证已升级，请重新登录");
+                return;
+            }
+            long authVersion = ((Number) versionClaim).longValue();
+            String sessionId = (String) sidClaim;
+            CurrentUser user = currentUserProvider.findBySession(userId, authVersion, sessionId);
             if (user == null) {
                 writeUnauthorized(response, "账号不存在或身份无效，请重新登录");
                 return;
@@ -98,6 +109,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             userInfo.put("username", user.getUsername());
             userInfo.put("globalRole", user.getGlobalRole());
             userInfo.put("teamIds", user.getTeamIds());
+            userInfo.put("authVersion", user.getAuthVersion());
+            userInfo.put("sid", sessionId);
 
             List<SimpleGrantedAuthority> authorities = new ArrayList<SimpleGrantedAuthority>();
             authorities.add(new SimpleGrantedAuthority("ROLE_" + user.getGlobalRole()));

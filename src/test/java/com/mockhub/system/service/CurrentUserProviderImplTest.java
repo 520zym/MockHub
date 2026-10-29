@@ -1,6 +1,7 @@
 package com.mockhub.system.service;
 
 import com.mockhub.common.model.CurrentUser;
+import com.mockhub.auth.repository.AuthSessionRepository;
 import com.mockhub.system.model.entity.User;
 import com.mockhub.system.model.entity.UserTeam;
 import com.mockhub.system.repository.UserRepository;
@@ -27,7 +28,7 @@ class CurrentUserProviderImplTest {
     @BeforeEach
     void setUp() {
         repository = mock(UserRepository.class);
-        provider = new CurrentUserProviderImpl(repository);
+        provider = new CurrentUserProviderImpl(repository, mock(AuthSessionRepository.class));
     }
 
     @Test
@@ -74,6 +75,14 @@ class CurrentUserProviderImplTest {
     @ValueSource(strings = {"UNKNOWN", "super_admin", " SUPER_ADMIN"})
     void invalidRoleCannotAuthenticateOrFallBackToOldClaims(String role) {
         when(repository.findById("u")).thenReturn(user(role));
+        assertNull(provider.findById("u"));
+        verify(repository, never()).findTeamRolesByUserId(anyString());
+    }
+
+    @Test
+    void disabledAccountNeverLoadsMemberships() {
+        User disabled = user("SUPER_ADMIN"); disabled.setStatus("DISABLED");
+        when(repository.findById("u")).thenReturn(disabled);
         assertNull(provider.findById("u"));
         verify(repository, never()).findTeamRolesByUserId(anyString());
     }

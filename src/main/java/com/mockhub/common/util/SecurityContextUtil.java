@@ -30,6 +30,14 @@ public final class SecurityContextUtil {
         return getUserInfo().get("userId").toString();
     }
 
+    public static String getCurrentSessionId() {
+        Object sid = getUserInfo().get("sid");
+        if (!(sid instanceof String) || ((String) sid).trim().isEmpty()) {
+            throw new BizException(40002, "登录凭证已升级，请重新登录");
+        }
+        return (String) sid;
+    }
+
     /**
      * 获取当前登录用户名
      *

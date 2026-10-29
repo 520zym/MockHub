@@ -1,123 +1,110 @@
 package com.mockhub.auth.service;
 
-import com.mockhub.auth.model.ChangePasswordRequest;
-import com.mockhub.auth.model.LoginRequest;
-import com.mockhub.auth.model.LoginResponse;
-import com.mockhub.auth.model.TeamRole;
-import com.mockhub.auth.model.UserInfo;
+import com.mockhub.auth.model.*;
+import com.mockhub.auth.repository.AuthSessionRepository;
 import com.mockhub.common.model.BizException;
 import com.mockhub.common.util.JwtUtil;
 import com.mockhub.common.util.PasswordUtil;
 import com.mockhub.common.util.SecurityContextUtil;
 import com.mockhub.system.model.entity.Team;
 import com.mockhub.system.model.entity.User;
-import com.mockhub.system.service.TeamService;
+import com.mockhub.system.model.entity.UserTeam;
+import com.mockhub.system.repository.TeamRepository;
+import com.mockhub.system.repository.UserRepository;
 import com.mockhub.system.service.UserService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.time.Instant;
+import java.util.*;
 
-/**
- * 认证服务：处理登录、登出、修改密码等认证相关业务逻辑
- * <p>
- * 面向接口编码，依赖 system 模块的 UserService 和 TeamService。
- * 这两个接口由 system 模块实现并注册为 Spring Bean，此处通过 @Autowired 注入。
- */
+/** Current database identity and revocable web sessions, not JWT authorization snapshots. */
 @Service
 public class AuthService {
-
     private static final Logger log = LoggerFactory.getLogger(AuthService.class);
+    @Autowired private UserService userService;
+    @Autowired private UserRepository userRepository;
+    @Autowired private TeamRepository teamRepository;
+    @Autowired private AuthSessionRepository sessions;
+    @Autowired private JwtUtil jwtUtil;
 
-    @Autowired
-    private UserService userService;
+    public LoginResponse login(LoginRequest req) { return login(req, null, null); }
 
-    @Autowired
-    private TeamService teamService;
-
-    @Autowired
-    private JwtUtil jwtUtil;
-
-    /**
-     * 用户登录
-     * <p>
-     * 流程：
-     * 1. 通过用户名查找用户
-     * 2. 校验密码（BCrypt）
-     * 3. 查询用户所属团队列表
-     * 4. 生成 JWT Token
-     * 5. 组装 LoginResponse 返回
-     *
-     * @param req 登录请求（包含用户名和密码）
-     * @return 登录响应（包含 Token 和用户信息）
-     * @throws BizException code=40001，用户名或密码错误
-     */
-    public LoginResponse login(LoginRequest req) {
-        String username = req.getUsername();
-
-        // 1. 查找用户
-        User user = userService.findByUsername(username);
-        if (user == null) {
-            log.warn("登录失败：用户不存在 [username={}]", username);
+    @Transactional
+    public LoginResponse login(LoginRequest req, String userAgent, String ipAddress) {
+        if (req == null || req.getUsername() == null || req.getPassword() == null) {
             throw new BizException(40001, "用户名或密码错误");
         }
-
-        // 2. 校验密码
-        if (!PasswordUtil.verify(req.getPassword(), user.getPasswordHash())) {
-            log.warn("登录失败：密码错误 [username={}]", username);
-            throw new BizException(40001, "用户名或密码错误");
+        User user = userRepository.findByUsername(req.getUsername());
+        if (user == null || !user.isActive() || user.getAuthVersion() < 0
+                || !PasswordUtil.verify(req.getPassword(), user.getPasswordHash())) {
+            throw new BizException(40001, "用户名或密码错误或账号已停用");
         }
-
-        // 3. 查询用户所属团队列表
-        List<Team> teams = teamService.findTeamsByUserId(user.getId());
-        List<TeamRole> teamRoles = buildTeamRoles(user, teams);
-
-        // 4. 提取团队 ID 列表，用于写入 JWT
+        UserInfo info = buildUserInfo(user);
+        long now = System.currentTimeMillis();
+        AuthSession session = new AuthSession();
+        session.setId(UUID.randomUUID().toString()); session.setUserId(user.getId());
+        session.setAuthVersion(user.getAuthVersion()); session.setCreatedAt(Instant.ofEpochMilli(now).toString());
+        session.setExpiresAt(now + JwtUtil.EXPIRATION_MS);
+        session.setUserAgent(truncate(userAgent, 512)); session.setIpAddress(truncate(ipAddress, 64));
+        if (!sessions.insertIfCurrent(session)) {
+            throw new BizException(40002, "账号凭证已改变，请重新登录");
+        }
         List<String> teamIds = new ArrayList<String>();
-        for (Team team : teams) {
-            teamIds.add(team.getId());
-        }
-
-        // 5. 生成 JWT Token
-        String token = jwtUtil.generateToken(
-                user.getId(),
-                user.getUsername(),
-                user.getGlobalRole(),
-                teamIds
-        );
-
-        // 6. 组装用户信息
-        UserInfo userInfo = new UserInfo();
-        userInfo.setId(user.getId());
-        userInfo.setUsername(user.getUsername());
-        userInfo.setDisplayName(user.getDisplayName());
-        userInfo.setGlobalRole(user.getGlobalRole());
-        userInfo.setFirstLogin(user.isFirstLogin());
-        userInfo.setTeams(teamRoles);
-
-        log.info("登录成功 [username={}, userId={}, firstLogin={}]",
-                username, user.getId(), user.isFirstLogin());
-
-        return new LoginResponse(token, userInfo);
+        for (TeamRole team : info.getTeams()) teamIds.add(team.getTeamId());
+        String token = jwtUtil.generateToken(user.getId(), user.getUsername(), info.getGlobalRole(),
+                teamIds, user.getAuthVersion(), session.getId());
+        return new LoginResponse(token, info);
     }
 
-    /**
-     * 修改密码
-     * <p>
-     * 流程：
-     * 1. 从 SecurityContext 获取当前用户 ID
-     * 2. 查询用户信息
-     * 3. 校验旧密码
-     * 4. 用 BCrypt 加密新密码并更新
-     * 5. 如果是首次登录，将 firstLogin 置为 false
-     *
-     * @param req 修改密码请求（包含旧密码和新密码）
-     * @throws BizException code=40004，原密码错误
-     */
+    public UserInfo me() { return buildUserInfo(requireActiveUser()); }
+
+    @Transactional
+    public UserInfo updateProfile(UpdateProfileRequest req) {
+        String name = req == null ? null : req.getDisplayName();
+        if (name == null || name.trim().isEmpty() || name.trim().length() > 64) {
+            throw new BizException(40000, "显示名须为1至64个字符");
+        }
+        User user = requireActiveUser();
+        userRepository.updateDisplayName(user.getId(), name.trim(), Instant.now().toString());
+        return me();
+    }
+
+    public List<WebSessionInfo> listSessions() {
+        String userId = requireActiveUser().getId();
+        String currentSid = SecurityContextUtil.getCurrentSessionId();
+        List<WebSessionInfo> result = new ArrayList<WebSessionInfo>();
+        for (AuthSession session : sessions.findActiveByUser(userId, System.currentTimeMillis())) {
+            result.add(new WebSessionInfo(session, currentSid));
+        }
+        return result;
+    }
+
+    public void logout() {
+        sessions.revoke(SecurityContextUtil.getCurrentSessionId(), SecurityContextUtil.getCurrentUserId(),
+                Instant.now().toString());
+    }
+
+    public void revokeSession(String id) {
+        if (sessions.revoke(id, SecurityContextUtil.getCurrentUserId(), Instant.now().toString()) == 0) {
+            throw new BizException(40401, "会话不存在或已撤销");
+        }
+    }
+
+    /** All web logins only: deliberately leaves external MCP tokens valid. */
+    @Transactional
+    public void revokeWebSessions() {
+        String userId = requireActiveUser().getId();
+        String now = Instant.now().toString();
+        if (userRepository.incrementAuthVersion(userId, now) != 1) {
+            throw new BizException(40002, "账号不存在，请重新登录");
+        }
+        sessions.revokeAllByUser(userId, now);
+    }
+
     public void changePassword(ChangePasswordRequest req) {
         // 1. 获取当前登录用户 ID
         String userId = SecurityContextUtil.getCurrentUserId();
@@ -150,34 +137,52 @@ public class AuthService {
         log.info("密码修改成功 [userId={}, username={}]", userId, user.getUsername());
     }
 
-    /**
-     * 构建用户的团队角色列表
-     * <p>
-     * 将 Team 实体列表与用户的 teamRoles Map 合并，
-     * 组装前端所需的 TeamRole DTO 列表。
-     *
-     * @param user  用户实体（包含 teamRoles Map：teamId → 角色）
-     * @param teams 用户所属团队列表
-     * @return 团队角色 DTO 列表
-     */
-    private List<TeamRole> buildTeamRoles(User user, List<Team> teams) {
-        List<TeamRole> result = new ArrayList<TeamRole>();
-        // 获取用户在各团队中的角色映射
-        Map<String, String> userTeamRoles = user.getTeamRoles();
 
-        for (Team team : teams) {
-            String role = "";
-            // 从用户的 teamRoles Map 中获取该团队的角色
-            if (userTeamRoles != null && userTeamRoles.containsKey(team.getId())) {
-                role = userTeamRoles.get(team.getId());
-            }
-            result.add(new TeamRole(
-                    team.getId(),
-                    team.getName(),
-                    team.getIdentifier(),
-                    role
-            ));
+    private User requireActiveUser() {
+        User user = userRepository.findById(SecurityContextUtil.getCurrentUserId());
+        if (user == null || !user.isActive()) throw new BizException(40002, "账号不存在或已停用，请重新登录");
+        return user;
+    }
+
+    private UserInfo buildUserInfo(User user) {
+        String globalRole = user.getGlobalRole();
+        if ("MEMBER".equals(globalRole) || "TEAM_ADMIN".equals(globalRole)) globalRole = "USER";
+        if (!("USER".equals(globalRole) || "SUPER_ADMIN".equals(globalRole))) {
+            throw new BizException(40002, "账号身份无效，请重新登录");
         }
-        return result;
+        boolean systemAdmin = "SUPER_ADMIN".equals(globalRole);
+        Map<String, String> membership = new HashMap<String, String>();
+        for (UserTeam relation : userRepository.findTeamRolesByUserId(user.getId())) {
+            String role = "MEMBER".equals(relation.getRole()) ? "EDITOR" : relation.getRole();
+            if ("VIEWER".equals(role) || "EDITOR".equals(role) || "TEAM_ADMIN".equals(role)) {
+                membership.put(relation.getTeamId(), role);
+            }
+        }
+        List<Team> teams = systemAdmin ? teamRepository.findAll() : teamRepository.findByUserId(user.getId());
+        List<TeamRole> teamRoles = new ArrayList<TeamRole>();
+        for (Team team : teams) {
+            String role = membership.get(team.getId());
+            if (role == null && !systemAdmin) continue; // Unknown membership roles never gain access.
+            TeamRole item = new TeamRole(team.getId(), team.getName(), team.getIdentifier(), role);
+            item.setMembershipRole(role);
+            item.setAccessMode(role == null ? "SYSTEM_MAINTENANCE" : "MEMBER");
+            boolean admin = systemAdmin || "TEAM_ADMIN".equals(role);
+            boolean write = admin || "EDITOR".equals(role);
+            Map<String, Boolean> capabilities = new LinkedHashMap<String, Boolean>();
+            capabilities.put("read", true); capabilities.put("write", write);
+            capabilities.put("manageMembers", admin); capabilities.put("manageTeam", admin);
+            capabilities.put("purge", admin); capabilities.put("overwriteImport", admin);
+            capabilities.put("batchDelete", admin);
+            item.setCapabilities(capabilities); teamRoles.add(item);
+        }
+        UserInfo info = new UserInfo();
+        info.setId(user.getId()); info.setUsername(user.getUsername()); info.setDisplayName(user.getDisplayName());
+        info.setGlobalRole(globalRole); info.setFirstLogin(user.isFirstLogin()); info.setStatus(user.getStatus());
+        info.setTeams(teamRoles);
+        return info;
+    }
+
+    private String truncate(String value, int limit) {
+        return value == null || value.length() <= limit ? value : value.substring(0, limit);
     }
 }

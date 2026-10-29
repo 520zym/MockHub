@@ -3,6 +3,9 @@ package com.mockhub.auth.controller;
 import com.mockhub.auth.model.ChangePasswordRequest;
 import com.mockhub.auth.model.LoginRequest;
 import com.mockhub.auth.model.LoginResponse;
+import com.mockhub.auth.model.UserInfo;
+import javax.servlet.http.HttpServletRequest;
+import org.springframework.web.bind.annotation.GetMapping;
 import com.mockhub.auth.service.AuthService;
 import com.mockhub.common.model.Result;
 import org.slf4j.Logger;
@@ -19,7 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
  * 路由前缀：/api/auth
  * <ul>
  *   <li>POST /api/auth/login — 登录，返回 JWT Token 和用户信息</li>
- *   <li>POST /api/auth/logout — 登出（无状态，前端清除 Token 即可）</li>
+ *   <li>POST /api/auth/logout — 撤销当前网页会话</li>
  *   <li>POST /api/auth/change-password — 修改密码（需登录态）</li>
  * </ul>
  */
@@ -42,25 +45,28 @@ public class AuthController {
      * @return Result 包含 token 和 user 信息
      */
     @PostMapping("/login")
-    public Result<LoginResponse> login(@RequestBody LoginRequest req) {
+    public Result<LoginResponse> login(@RequestBody LoginRequest req, HttpServletRequest request) {
         log.debug("收到登录请求 [username={}]", req.getUsername());
-        LoginResponse response = authService.login(req);
+        LoginResponse response = authService.login(req, request.getHeader("User-Agent"), request.getRemoteAddr());
         return Result.ok(response);
     }
 
     /**
      * 登出
      * <p>
-     * JWT 是无状态认证，服务端无需做任何处理。
+     * 服务端撤销当前 sid，不影响其他网页会话或 MCP 凭证。
      * 前端收到成功响应后清除 localStorage 中的 token 即可。
      *
      * @return Result 成功标识
      */
     @PostMapping("/logout")
     public Result<Void> logout() {
-        log.debug("收到登出请求");
+        authService.logout();
         return Result.ok();
     }
+
+    @GetMapping("/me")
+    public Result<UserInfo> me() { return Result.ok(authService.me()); }
 
     /**
      * 修改密码

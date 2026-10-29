@@ -50,6 +50,8 @@ class JwtAuthFilterTest {
         claims.put("username", "old-name");
         claims.put("globalRole", "SUPER_ADMIN");
         claims.put("teamIds", "old-team");
+        claims.put("auth_version", 0);
+        claims.put("sid", "session-1");
         when(jwtUtil.validateToken("old-token")).thenReturn(claims);
     }
 
@@ -60,7 +62,7 @@ class JwtAuthFilterTest {
 
     @Test
     void sameTokenUsesCurrentIdentityAndTeamsOnEveryRequest() throws Exception {
-        when(users.findById("user-1")).thenReturn(
+        when(users.findBySession("user-1", 0, "session-1")).thenReturn(
                 new CurrentUser("user-1", "current-name", "SUPER_ADMIN", Arrays.asList("a", "b")),
                 new CurrentUser("user-1", "renamed", "USER", Collections.singletonList("b")));
         AtomicInteger calls = new AtomicInteger();
@@ -83,12 +85,12 @@ class JwtAuthFilterTest {
             assertNull(SecurityContextHolder.getContext().getAuthentication());
         }
         assertEquals(2, calls.get());
-        verify(users, times(2)).findById("user-1");
+        verify(users, times(2)).findBySession("user-1", 0, "session-1");
     }
 
     @Test
     void currentAccountWithNoTeamsRemainsAuthenticatedWithoutStaleTeamClaims() throws Exception {
-        when(users.findById("user-1")).thenReturn(currentUser());
+        when(users.findBySession("user-1", 0, "session-1")).thenReturn(currentUser());
         filter.doFilter(request("/api/apis", "Bearer old-token"), new MockHttpServletResponse(), (req, res) -> {
             assertEquals(Collections.emptyList(), SecurityContextUtil.getCurrentTeamIds());
             assertFalse(SecurityContextUtil.isSuperAdmin());
@@ -98,9 +100,9 @@ class JwtAuthFilterTest {
 
     @Test
     void deletedAccountIsRejectedEvenWithValidSignedIdentity() throws Exception {
-        when(users.findById("user-1")).thenReturn(null);
+        when(users.findBySession("user-1", 0, "session-1")).thenReturn(null);
         assertUnauthorized("Bearer old-token");
-        verify(users).findById("user-1");
+        verify(users).findBySession("user-1", 0, "session-1");
     }
 
     @ParameterizedTest
@@ -123,7 +125,7 @@ class JwtAuthFilterTest {
     @Test
     void databaseFailureDoesNotFallBackToTokenClaimsOrLeavePriorIdentity() throws Exception {
         DataAccessResourceFailureException failure = new DataAccessResourceFailureException("database unavailable");
-        when(users.findById("user-1")).thenThrow(failure);
+        when(users.findBySession("user-1", 0, "session-1")).thenThrow(failure);
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken("previous-admin", null, Collections.emptyList()));
         FilterChain chain = mock(FilterChain.class);
@@ -131,6 +133,29 @@ class JwtAuthFilterTest {
                 () -> filter.doFilter(request("/api/apis", "Bearer old-token"), new MockHttpServletResponse(), chain)));
         verifyNoInteractions(chain);
         assertNull(SecurityContextHolder.getContext().getAuthentication());
+    }
+
+    @Test
+    void preUpgradeJwtWithoutVersionOrSidMustLoginAgain() throws Exception {
+        for (String missing : Arrays.asList("auth_version", "sid")) {
+            Claims legacy = Jwts.claims().setSubject("user-1");
+            legacy.put("auth_version", 0); legacy.put("sid", "session-1");
+            legacy.remove(missing);
+            when(jwtUtil.validateToken("old-token")).thenReturn(legacy);
+            assertUnauthorized("Bearer old-token");
+        }
+        verifyNoInteractions(users);
+    }
+
+    @Test
+    void malformedSessionClaimsAreNotCoercedIntoValidVersions() throws Exception {
+        for (Object version : Arrays.asList("0", 0.1, -1)) {
+            Claims claims = Jwts.claims().setSubject("user-1");
+            claims.put("auth_version", version); claims.put("sid", "session-1");
+            when(jwtUtil.validateToken("old-token")).thenReturn(claims);
+            assertUnauthorized("Bearer old-token");
+        }
+        verifyNoInteractions(users);
     }
 
     static Stream<Exception> downstreamFailures() {
@@ -141,7 +166,7 @@ class JwtAuthFilterTest {
     @ParameterizedTest
     @MethodSource("downstreamFailures")
     void downstreamFailureIsNotRewrittenAsAuthenticationFailure(Exception failure) {
-        when(users.findById("user-1")).thenReturn(currentUser());
+        when(users.findBySession("user-1", 0, "session-1")).thenReturn(currentUser());
         MockHttpServletResponse response = new MockHttpServletResponse();
         Exception thrown = assertThrows(Exception.class, () -> filter.doFilter(
                 request("/api/apis", "Bearer old-token"), response, (req, res) -> {

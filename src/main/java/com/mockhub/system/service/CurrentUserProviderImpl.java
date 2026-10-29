@@ -1,6 +1,7 @@
 package com.mockhub.system.service;
 
 import com.mockhub.common.model.CurrentUser;
+import com.mockhub.auth.repository.AuthSessionRepository;
 import com.mockhub.common.model.enums.UserRole;
 import com.mockhub.common.util.CurrentUserProvider;
 import com.mockhub.system.model.entity.User;
@@ -20,19 +21,33 @@ public class CurrentUserProviderImpl implements CurrentUserProvider {
 
     private final UserRepository userRepository;
 
-    public CurrentUserProviderImpl(UserRepository userRepository) {
+    private final AuthSessionRepository sessions;
+
+    public CurrentUserProviderImpl(UserRepository userRepository, AuthSessionRepository sessions) {
         this.userRepository = userRepository;
+        this.sessions = sessions;
+    }
+
+    @Override
+    public CurrentUser findBySession(String userId, long authVersion, String sessionId) {
+        CurrentUser current = findById(userId);
+        if (current == null || current.getAuthVersion() != authVersion || sessionId == null
+                || sessionId.trim().isEmpty()
+                || !sessions.isActive(sessionId, userId, authVersion, System.currentTimeMillis())) {
+            return null;
+        }
+        return current;
     }
 
     @Override
     public CurrentUser findById(String userId) {
         User user = userRepository.findById(userId);
-        if (user == null || user.getUsername() == null || user.getUsername().trim().isEmpty()) {
+        if (user == null || !user.isActive() || user.getAuthVersion() < 0 || user.getUsername() == null || user.getUsername().trim().isEmpty()) {
             return null;
         }
         String globalRole = user.getGlobalRole();
         // 旧 schema 默认 MEMBER，也曾使用全局 TEAM_ADMIN；都只保留普通账号能力。
-        // 本批不迁移数据库，不能因此锁死旧账号，更不能把团队身份升成全局管理权限。
+        // 兼容旧全局身份，但绝不能把团队身份升成全局管理权限。
         if ("MEMBER".equals(globalRole) || "TEAM_ADMIN".equals(globalRole)) {
             globalRole = UserRole.USER.name();
         }
@@ -49,6 +64,6 @@ public class CurrentUserProviderImpl implements CurrentUserProvider {
             }
         }
         return new CurrentUser(user.getId(), user.getUsername(), globalRole,
-                new ArrayList<String>(teamIds));
+                new ArrayList<String>(teamIds), user.getAuthVersion());
     }
 }

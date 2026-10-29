@@ -12,4 +12,7 @@ public interface CurrentUserProvider {
      * 数据库读取异常应向上传播，不允许回退到 JWT 中的旧角色/团队。
      */
     CurrentUser findById(String userId);
+
+    /** Also requires the persisted session and authentication version to remain current. */
+    CurrentUser findBySession(String userId, long authVersion, String sessionId);
 }

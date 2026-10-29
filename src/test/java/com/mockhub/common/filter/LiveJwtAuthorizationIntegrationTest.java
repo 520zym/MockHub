@@ -6,6 +6,8 @@ import com.mockhub.common.model.GlobalExceptionHandler;
 import com.mockhub.common.util.PasswordUtil;
 import com.mockhub.common.model.PageResult;
 import com.mockhub.common.util.JwtUtil;
+import com.mockhub.auth.repository.AuthSessionRepository;
+import com.mockhub.auth.model.AuthSession;
 import com.mockhub.common.util.SecurityContextUtil;
 import com.mockhub.log.service.LogService;
 import com.mockhub.mock.model.dto.ApiDefinitionVO;
@@ -98,8 +100,12 @@ class LiveJwtAuthorizationIntegrationTest {
         ReflectionTestUtils.setField(permission, "userRepository", users);
         jwt = new JwtUtil();
         jwt.init();
-        filter = new JwtAuthFilter(jwt, new ObjectMapper(), new CurrentUserProviderImpl(users));
-        token = jwt.generateToken("u", "old-name", "USER", Arrays.asList("a", "b", "removed"));
+        AuthSessionRepository sessions = new AuthSessionRepository(jdbc);
+        AuthSession session = new AuthSession(); session.setId("test-session"); session.setUserId("u");
+        session.setCreatedAt("now"); session.setExpiresAt(System.currentTimeMillis() + JwtUtil.EXPIRATION_MS);
+        assertTrue(sessions.insertIfCurrent(session));
+        filter = new JwtAuthFilter(jwt, new ObjectMapper(), new CurrentUserProviderImpl(users, sessions));
+        token = jwt.generateToken("u", "old-name", "USER", Arrays.asList("a", "b", "removed"), 0L, "test-session");
 
         apiRepository = spy(new ApiRepository(jdbc));
         ApiTagRepository apiTags = mock(ApiTagRepository.class);
@@ -161,7 +167,7 @@ class LiveJwtAuthorizationIntegrationTest {
     @Test
     void oldSuperAdminTokenCannotPreserveUnrestrictedAccessAfterDemotion() throws Exception {
         jdbc.update("UPDATE user SET global_role='SUPER_ADMIN' WHERE id='u'");
-        token = jwt.generateToken("u", "old-admin", "SUPER_ADMIN", Arrays.asList("a", "b"));
+        token = jwt.generateToken("u", "old-admin", "SUPER_ADMIN", Arrays.asList("a", "b"), 0L, "test-session");
         jdbc.update("DELETE FROM user_team WHERE user_id='u' AND team_id='a'");
         assertEquals(2L, listWithToken(null).getTotal(), "current super-admin keeps cross-team maintenance");
 
