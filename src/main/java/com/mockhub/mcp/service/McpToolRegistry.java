@@ -37,7 +37,7 @@ public class McpToolRegistry {
                 "按关键字搜索当前用户可见的 Mock 接口，返回方法、路径、名称与团队。",
                 schema("{\"type\":\"object\",\"properties\":{"
                         + "\"query\":{\"type\":\"string\",\"description\":\"搜索关键词，可为空\"},"
-                        + "\"teamId\":{\"type\":\"string\",\"description\":\"团队 ID；超管可省略表示全部团队\"},"
+                        + "\"teamId\":{\"type\":\"string\",\"description\":\"团队 ID；省略时仅按凭证当前有效团队分队查询\"},"
                         + "\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":20,\"default\":5}},"
                         + "\"required\":[\"query\"]}")));
         register(new Definition(GET_API_DETAIL, "读取接口详情",
@@ -46,7 +46,7 @@ public class McpToolRegistry {
                         + "\"apiId\":{\"type\":\"string\",\"description\":\"接口 ID\"}},"
                         + "\"required\":[\"apiId\"]}")));
         register(new Definition(GET_API_STATS, "查询调用统计",
-                "查询窗口内的调用总览与 Top 接口；超管可省略 teamId 查看全部团队。",
+                "查询窗口内调用统计；省略 teamId 时仅返回凭证当前有效团队的分队统计，不查询全系统。",
                 schema("{\"type\":\"object\",\"properties\":{"
                         + "\"teamId\":{\"type\":\"string\",\"description\":\"团队 ID，可省略\"},"
                         + "\"days\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":30,\"default\":7},"
@@ -160,6 +160,8 @@ public class McpToolRegistry {
             this.description = description;
             this.inputSchema = inputSchema;
         }
+
+        public String getName() { return name; }
 
         public ObjectNode toJson(ObjectMapper mapper) {
             ObjectNode node = mapper.createObjectNode();
