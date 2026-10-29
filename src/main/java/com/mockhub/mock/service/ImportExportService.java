@@ -64,6 +64,8 @@ public class ImportExportService {
     private final PermissionChecker permissionChecker;
     private final MockFileStorageService mockFileStorageService;
     private final ApiService apiService;
+    @org.springframework.beans.factory.annotation.Autowired
+    private SoapService soapService;
 
     public ImportExportService(ApiRepository apiRepository,
                                ApiResponseRepository apiResponseRepository,
@@ -172,7 +174,29 @@ public class ImportExportService {
     }
 
     private ExportPackage buildExportPackage(ImportExportData data) {
+        data.setVersion("2.3");
         Map<String, Resource> files = new HashMap<String, Resource>();
+        Map<String, String> wsdlFiles = new HashMap<String, String>();
+        Map<String, String> exportedWsdls = new HashMap<String, String>();
+        for (ApiDefinition api : data.getApis()) {
+            if (!"SOAP".equalsIgnoreCase(api.getType())) continue;
+            try {
+                String key = wsdlReference(api);
+                if (key == null) continue;
+                String identity = api.getTeamId() + "\n" + key;
+                String entry = exportedWsdls.get(identity);
+                if (entry == null) {
+                    byte[] bytes = soapService.readWsdlForExport(api.getTeamId(), key);
+                    entry = "wsdl/" + UUID.randomUUID().toString() + ".wsdl";
+                    files.put(entry, new org.springframework.core.io.ByteArrayResource(bytes));
+                    exportedWsdls.put(identity, entry);
+                }
+                wsdlFiles.put(api.getId(), entry);
+            } catch (Exception invalid) {
+                throw new com.mockhub.common.model.BizException(40927,"EXPORT_WSDL_MISSING: WSDL缺失、不安全或损坏，不能生成不完整导出包");
+            }
+        }
+        if (!wsdlFiles.isEmpty()) data.setApiWsdlFiles(wsdlFiles);
         if (data.getApiResponses() != null) {
             Set<String> exported = new HashSet<String>();
             for (ApiResponse response : data.getApiResponses()) {
@@ -242,6 +266,16 @@ public class ImportExportService {
             ResponseValidator.validateDtos(dto.getResponses(),responseModes(source));
             items.add(new ImportItem(source,target,dto));
         }
+        validateWsdlManifest(data,files);
+        // All target revisions were checked above. Store each mapped attachment once, replacing only copied DTO config.
+        Map<String,String> importedWsdls=new HashMap<String,String>();
+        for(ImportItem item:items) {
+            String entry=data.getApiWsdlFiles()==null?null:data.getApiWsdlFiles().get(item.source.getId());
+            if(entry==null)continue;
+            String key=importedWsdls.get(entry);
+            if(key==null) { key=soapService.storeImportedWsdl(teamId,files.get(entry).getData());importedWsdls.put(entry,key); }
+            ((com.fasterxml.jackson.databind.node.ObjectNode)item.dto.getSoapConfig()).put("wsdlFileName",key);
+        }
         Map<String,String> groupMap=new HashMap<String,String>(),tagMap=new HashMap<String,String>();
         if(!items.isEmpty()) {
             for(ApiGroup source:data.getGroups()==null?Collections.<ApiGroup>emptyList():data.getGroups()) {
@@ -286,6 +320,43 @@ public class ImportExportService {
         if(data.getGlobalHeaders()!=null&&!data.getGlobalHeaders().isEmpty())
             result.getWarnings().add("TEAM_HEADERS_NOT_IMPORTED: 团队全局响应头为共享配置，本次未修改，请由管理员单独核对");
         return result;
+    }
+    /** A nonempty WSDL reference must be a string in an object; never silently discard malformed config. */
+    private String wsdlReference(ApiDefinition api) {
+        if(api.getSoapConfig()==null)return null;
+        try {
+            JsonNode config=JSON_MAPPER.readTree(api.getSoapConfig());
+            if(config==null || config.isNull())return null;
+            if(!config.isObject())throw new IOException("SOAP config is not an object");
+            JsonNode key=config.get("wsdlFileName");
+            if(key==null || key.isNull() || (key.isTextual() && key.asText().isEmpty()))return null;
+            if(!key.isTextual())throw new IOException("WSDL reference is not a string");
+            return key.asText();
+        } catch(IOException invalid) { throw new com.mockhub.common.model.BizException(40000,"导入接口SOAP配置损坏"); }
+    }
+    private void validateWsdlManifest(ImportExportData data,Map<String,FileBundleEntry> files) {
+        Map<String,String> manifest=data.getApiWsdlFiles()==null?Collections.<String,String>emptyMap():data.getApiWsdlFiles();
+        if(manifest.isEmpty() && !"2.3".equals(data.getVersion()))return; // Legacy JSON keeps aggregate reference validation unchanged.
+        Set<String> referenced=new HashSet<String>();
+        for(ApiDefinition api:data.getApis()==null?Collections.<ApiDefinition>emptyList():data.getApis()) {
+            if(!"SOAP".equalsIgnoreCase(api.getType()))continue;
+            String key=wsdlReference(api);
+            if(key==null)continue;
+            referenced.add(api.getId());
+            if("2.3".equals(data.getVersion()) && !manifest.containsKey(api.getId()))
+                throw new com.mockhub.common.model.BizException(40927,"IMPORT_WSDL_MISSING: 完整导入包缺少WSDL附件映射");
+        }
+        for(Map.Entry<String,String> mapping:manifest.entrySet()) {
+            String entry=mapping.getValue();
+            if(!referenced.contains(mapping.getKey()) || entry==null
+                    || !entry.matches("wsdl/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}[.]wsdl"))
+                throw new com.mockhub.common.model.BizException(40000,"WSDL附件映射无效");
+            FileBundleEntry bundled=files==null?null:files.get(entry);
+            if(bundled==null || bundled.getData()==null || bundled.getData().length==0)
+                throw new com.mockhub.common.model.BizException(40927,"IMPORT_WSDL_MISSING: 完整导入包缺少映射的WSDL附件内容");
+            if(bundled.getData().length>SoapService.MAX_WSDL_BYTES)
+                throw new com.mockhub.common.model.BizException(40701,"WSDL文件不能超过10MiB");
+        }
     }
     private com.mockhub.mock.model.dto.ApiDefinitionDTO toDto(ApiDefinition source,String team,String path,String method) {
         com.mockhub.mock.model.dto.ApiDefinitionDTO dto=new com.mockhub.mock.model.dto.ApiDefinitionDTO();

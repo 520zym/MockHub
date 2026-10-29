@@ -71,6 +71,37 @@ public class SoapService {
         catch(IOException e){throw new BizException(40701,"无法读取WSDL上传内容");}
         Document doc=parseDocument(bytes);
         List<WsdlParseResult.WsdlOperation> operations=operations(doc);
+        String key=storeBytes(teamId,bytes);
+        WsdlParseResult result=new WsdlParseResult(key,operations);result.setOriginalFileName(displayName(file.getOriginalFilename()));
+        log.info("WSDL上传完成，操作数={}",operations.size());return result;
+    }
+    /** Raw, validated source bytes: never substitute a mock URL into a portable archive. */
+    public byte[] readWsdlForExport(String teamId,String key){
+        requireTeam(teamId);permissionChecker.checkTeamAccess(teamId);
+        byte[] bytes=readOwned(teamId,key);parseDocument(bytes);return bytes;
+    }
+    /** Only aggregate imports may create these keys; rollback deletes exactly this import's new files. */
+    String storeImportedWsdl(String teamId,byte[] bytes){
+        requireTeam(teamId);permissionChecker.checkTeamWrite(teamId);
+        if(!org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()
+                || !org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive())
+            throw new IllegalStateException("WSDL bundle storage requires an aggregate transaction");
+        if(bytes==null || bytes.length==0 || bytes.length>MAX_WSDL_BYTES)throw new BizException(40701,"WSDL文件不能为空且不能超过10MiB");
+        parseDocument(bytes);
+        final String key=storeBytes(teamId,bytes);
+        try{
+            org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                    new org.springframework.transaction.support.TransactionSynchronization(){
+                        @Override public void afterCompletion(int status){
+                            if(status==STATUS_ROLLED_BACK)deletePartial(key);
+                        }
+                    });
+        }catch(RuntimeException registrationFailure){deletePartial(key);throw registrationFailure;}
+        return key;
+    }
+    /** Shared bounded-byte storage; callers validate XML before any CREATE_NEW write. */
+    private String storeBytes(String teamId,byte[] bytes){
+        if(bytes==null || bytes.length==0 || bytes.length>MAX_WSDL_BYTES)throw new BizException(40701,"WSDL文件不能为空且不能超过10MiB");
         String key="v2/"+teamHash(teamId)+"/"+java.util.UUID.randomUUID().toString()+".wsdl";
         boolean created=false;
         try{
@@ -83,8 +114,7 @@ public class SoapService {
             if(created)deletePartial(key);
             throw new BizException(50001,"无法安全保存WSDL，请检查存储目录权限");
         }
-        WsdlParseResult result=new WsdlParseResult(key,operations);result.setOriginalFileName(displayName(file.getOriginalFilename()));
-        log.info("WSDL上传完成，操作数={}",operations.size());return result;
+        return key;
     }
     /** Explicit managed read: a viewer may inspect its own team's safe WSDL, never another team's. */
     public WsdlParseResult parseOperations(String teamId,String key){

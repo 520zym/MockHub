@@ -144,15 +144,15 @@ public class ImportExportController {
         try (ZipInputStream zipInputStream = new ZipInputStream(file.getInputStream())) {
             ZipEntry entry;long total=0;int count=0;
             while ((entry = zipInputStream.getNextEntry()) != null) {
-                if (entry.isDirectory()) {
-                    continue;
-                }
                 if(++count>1000)throw new BizException(40000,"导入包条目过多");
                 String entryName = entry.getName();
                 if(entryName.startsWith("/")||entryName.contains("../")||entryName.endsWith("/..")||entryName.indexOf('\\')>=0)
                     throw new BizException(40000,"导入包包含非法文件路径");
-                byte[] bytes = readAll(zipInputStream);total+=bytes.length;
+                long entryLimit=Math.max(0,maxImportBytes-total);
+                if(entryName.startsWith("files/wsdl/"))entryLimit=Math.min(entryLimit,com.mockhub.mock.service.SoapService.MAX_WSDL_BYTES);
+                byte[] bytes = readAll(zipInputStream,entryLimit);total+=bytes.length;
                 if(total>maxImportBytes)throw new BizException(40000,"导入包解压后过大");
+                if(entry.isDirectory())continue;
                 if ("mockhub-export.json".equals(entryName)) {
                     if(data!=null)throw new BizException(40000,"导入包重复定义主JSON文件");
                     data = objectMapper.readValue(bytes, ImportExportData.class);
@@ -200,12 +200,12 @@ public class ImportExportController {
         }
     }
 
-    private byte[] readAll(InputStream inputStream) throws IOException {
+    private byte[] readAll(InputStream inputStream,long limit) throws IOException {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         byte[] buffer = new byte[8192];
         int len;
         while ((len = inputStream.read(buffer)) != -1) {
-            if((long)outputStream.size()+len>maxImportBytes)throw new BizException(40000,"导入包条目过大");
+            if((long)outputStream.size()+len>limit)throw new BizException(40000,"导入包条目或WSDL附件过大");
             outputStream.write(buffer, 0, len);
         }
         return outputStream.toByteArray();
