@@ -1,256 +1,75 @@
 <template>
   <div class="condition-table">
-    <div class="table-header">
-      <span class="hint">条件（AND · 共 {{ conditions.length }} 条）</span>
-    </div>
-
-    <div class="table-body">
-      <div v-if="conditions.length === 0" class="empty">
-        点击左侧字段或下方「添加条件」来新增
-      </div>
-
-      <div
-        v-for="(c, idx) in conditions"
-        :key="idx"
-        class="condition-row"
-      >
-        <el-select
-          v-model="c.source"
-          :disabled="readOnly"
-          size="small"
-          class="col-source"
-          aria-label="条件参数来源"
-          @change="emitChange"
-        >
-          <el-option label="Body" value="BODY" />
-          <el-option label="Query" value="QUERY" />
-          <el-option label="Header" value="HEADER" />
+    <div class="table-scroll" role="region" aria-label="AND 条件表格，可横向滚动" tabindex="0">
+      <div class="condition-grid table-head" aria-hidden="true"><span>来源</span><span>字段路径 / 名称</span><span>运算符</span><span>预期值</span><span>类型</span><span></span></div>
+      <div v-for="(c, idx) in conditions" :key="idx" class="condition-grid condition-row">
+        <el-select :model-value="c.source" :disabled="readOnly" aria-label="条件参数来源" @update:model-value="patchAt(idx, { source: $event })">
+          <el-option label="Body" value="BODY" /><el-option label="Query" value="QUERY" /><el-option label="Header" value="HEADER" />
         </el-select>
-        <el-input
-          v-model="c.path"
-          :readonly="readOnly"
-          size="small"
-          :placeholder="c.source === 'HEADER' ? 'Header 名称' : '字段路径'"
-          class="col-path"
-          @input="emitChange"
-        />
-        <el-select
-          v-model="c.operator"
-          :disabled="readOnly"
-          size="small"
-          class="col-op"
-          @change="onOperatorChange(c)"
-        >
-          <el-option
-            v-for="opt in availableOperators(c)"
-            :key="opt.value"
-            :label="opt.label"
-            :value="opt.value"
-          >
-            <span>{{ opt.label }}</span>
-            <el-tooltip
-              v-if="opt.hint"
-              effect="dark"
-              :content="opt.hint"
-              placement="right"
-            >
-              <el-icon class="op-hint"><InfoFilled /></el-icon>
-            </el-tooltip>
-          </el-option>
+        <el-input :model-value="c.path" :readonly="readOnly" :placeholder="c.source === 'HEADER' ? 'Header 名称' : '字段路径'" aria-label="条件字段路径" @update:model-value="patchAt(idx, { path: $event })" />
+        <el-select :model-value="c.operator" :disabled="readOnly" aria-label="条件运算符" @update:model-value="changeOperator(idx, $event)">
+          <el-option v-for="opt in availableOperators(c)" :key="opt.value" :label="opt.label" :value="opt.value" :title="opt.hint || opt.label" />
         </el-select>
-        <el-input
-          v-if="c.operator !== 'IS_EMPTY'"
-          v-model="c.value"
-          :readonly="readOnly"
-          size="small"
-          :placeholder="valuePlaceholder(c)"
-          class="col-value"
-          @input="emitChange"
-        />
-        <span v-else class="value-na">—</span>
-
-        <span class="col-type-tag" :class="'t-' + (c.valueType || 'STRING').toLowerCase()">
-          {{ (c.valueType || 'STRING').toLowerCase() }}
-        </span>
-
-        <el-button
-          size="small"
-          text
-          type="danger"
-          class="col-delete"
-          v-if="!readOnly"
-          @click="removeAt(idx)"
-        >
-          <el-icon><Close /></el-icon>
-        </el-button>
+        <el-input v-if="c.operator !== 'IS_EMPTY'" :model-value="c.value" :readonly="readOnly" :placeholder="valuePlaceholder(c)" aria-label="条件预期值" @update:model-value="patchAt(idx, { value: $event })" />
+        <span v-else class="value-na" title="为空操作符不使用预期值">—</span>
+        <span class="col-type-tag" :title="'示例推断类型：' + (c.valueType || 'STRING')">{{ (c.valueType || 'STRING').toLowerCase() }}</span>
+        <button v-if="!readOnly" type="button" class="delete-row" :aria-label="'删除第 ' + (idx + 1) + ' 条条件'" @click="removeAt(idx)">×</button><span v-else></span>
       </div>
     </div>
-
-    <button v-if="!readOnly" type="button" class="add-row" @click="addEmpty">
-      <el-icon><Plus /></el-icon>
-      <span>手动添加条件</span>
-    </button>
+    <button v-if="!readOnly" type="button" class="add-row" :disabled="conditions.length >= 100" @click="addEmpty"><span aria-hidden="true">＋</span> 手动添加条件</button>
   </div>
 </template>
 
 <script setup>
-/**
- * 条件表格组件
- *
- * 展示并编辑一组 MatchCondition（AND 关系）。列：来源 / 字段路径 / 操作符 / 值 / 类型标签 / 删除。
- *
- * 操作符下拉根据每条条件的 valueType 动态筛选：
- * - NUMBER 类型才展示 GT / GTE / LT / LTE
- * - STRING / BOOLEAN 不展示纯数字操作符
- *
- * v-model 绑定的是 conditions 数组本身；内部修改会 emit update:modelValue。
- */
 import { computed } from 'vue'
-import { Close, Plus, InfoFilled } from '@element-plus/icons-vue'
-
-const props = defineProps({
-  /** MatchCondition 数组 */
-  modelValue: { type: Array, default: () => [] },
-  readOnly: { type: Boolean, default: false },
-  /** 手动新增沿用面板所选来源；已有条件保持各自来源。 */
-  defaultSource: { type: String, default: 'BODY' }
-})
-
+const props = defineProps({ modelValue: { type: Array, default: () => [] }, readOnly: { type: Boolean, default: false }, defaultSource: { type: String, default: 'BODY' } })
 const emit = defineEmits(['update:modelValue'])
-
 const conditions = computed(() => props.modelValue)
-
-// 操作符元数据（中文标签 + 说明）
 const ALL_OPERATORS = [
-  { value: 'EQ', label: '等于' },
-  { value: 'NE', label: '不等于' },
-  { value: 'CONTAINS', label: '包含', hint: '仅对字符串生效，判断 actual 是否包含 value 子串' },
-  { value: 'IS_EMPTY', label: '为空', hint: '当请求中该字段不存在、为 null、空字符串或空数组时命中' },
-  { value: 'IN', label: '在列表中', hint: 'value 写成 JSON 数组：["a","b","c"]' },
-  { value: 'GT', label: '大于', numberOnly: true },
-  { value: 'GTE', label: '大于等于', numberOnly: true },
-  { value: 'LT', label: '小于', numberOnly: true },
-  { value: 'LTE', label: '小于等于', numberOnly: true },
-  { value: 'REGEX', label: '匹配正则', hint: '标准 Java 正则，使用 find() 语义（部分匹配即命中）' }
+  { value: 'EQ', label: '等于' }, { value: 'NE', label: '不等于' },
+  { value: 'CONTAINS', label: '包含', hint: 'actual 包含 value 子串' },
+  { value: 'IS_EMPTY', label: '为空', hint: '不存在、null、空字符串、空数组或空对象' },
+  { value: 'IN', label: '在列表中', hint: '预期值为 JSON 数组' },
+  { value: 'GT', label: '大于', numberOnly: true }, { value: 'GTE', label: '大于等于', numberOnly: true },
+  { value: 'LT', label: '小于', numberOnly: true }, { value: 'LTE', label: '小于等于', numberOnly: true },
+  { value: 'REGEX', label: '匹配正则', hint: '标准 Java 正则，find() 部分匹配语义' }
 ]
-
-function availableOperators(c) {
-  const isNumber = c.valueType === 'NUMBER'
-  return ALL_OPERATORS.filter((op) => !op.numberOnly || isNumber)
-}
-
-function valuePlaceholder(c) {
-  if (c.operator === 'IN') return 'JSON 数组，如 ["a","b"]'
-  if (c.operator === 'REGEX') return '正则，如 ^\\d+$'
-  return '预期值'
-}
-
+function availableOperators(c) { return ALL_OPERATORS.filter(op => !op.numberOnly || c.valueType === 'NUMBER') }
+function valuePlaceholder(c) { return c.operator === 'IN' ? 'JSON 数组，如 ["a","b"]' : c.operator === 'REGEX' ? 'Java 正则表达式' : '预期值' }
 function addEmpty() {
-  if (props.readOnly) return
-  const next = [...conditions.value, {
-    source: ['QUERY', 'HEADER'].includes(props.defaultSource) ? props.defaultSource : 'BODY',
-    path: '',
-    operator: 'EQ',
-    value: '',
-    valueType: 'STRING'
-  }]
-  emit('update:modelValue', next)
+  if (props.readOnly || conditions.value.length >= 100) return
+  emit('update:modelValue', [...conditions.value, { source: ['QUERY', 'HEADER'].includes(props.defaultSource) ? props.defaultSource : 'BODY', path: '', operator: 'EQ', value: '', valueType: 'STRING' }])
 }
-
-function removeAt(idx) {
-  if (props.readOnly) return
-  const next = [...conditions.value]
-  next.splice(idx, 1)
-  emit('update:modelValue', next)
+function removeAt(idx) { if (!props.readOnly) emit('update:modelValue', conditions.value.filter((_, index) => index !== idx)) }
+function patchAt(idx, patch) {
+  if (props.readOnly || !conditions.value[idx]) return
+  emit('update:modelValue', conditions.value.map((row, index) => index === idx ? { ...row, ...patch } : { ...row }))
 }
-
-function emitChange() {
-  if (props.readOnly) return
-  // 内部直接改 modelValue 元素；emit 让父组件感知并触发持久化
-  emit('update:modelValue', [...conditions.value])
+function changeOperator(idx, value) {
+  if (props.readOnly || !conditions.value[idx]) return
+  if (!availableOperators(conditions.value[idx]).some(op => op.value === value)) return
+  patchAt(idx, { operator: value })
 }
-
-/** 切换操作符时联动 valueType：数字操作符强制 NUMBER */
-function onOperatorChange(c) {
-  if (props.readOnly) return
-  const op = ALL_OPERATORS.find((o) => o.value === c.operator)
-  if (op && op.numberOnly) {
-    c.valueType = 'NUMBER'
-  }
-  emitChange()
-}
+// Retained handler names for existing readonly regression coverage; never mutate prop objects.
+function emitChange() { if (!props.readOnly) emit('update:modelValue', conditions.value.map(row => ({ ...row }))) }
+function onOperatorChange(c) { if (!props.readOnly) changeOperator(conditions.value.indexOf(c), c.operator) }
 </script>
 
 <style scoped>
-.condition-table {
-  display: flex;
-  flex-direction: column;
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  padding: 10px;
-}
-.table-header {
-  font-size: 11px;
-  color: #6b7280;
-  margin-bottom: 8px;
-}
-.table-body {
-  max-height: 260px;
-  overflow-y: auto;
-}
-.empty {
-  padding: 16px;
-  text-align: center;
-  color: #9ca3af;
-  font-size: 12px;
-}
-.condition-row {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  margin-bottom: 8px;
-  font-size: 12px;
-}
-.col-source { flex: 0 0 88px; }
-.col-path { flex: 1.2; min-width: 0; }
-.col-op { flex: 0.9; min-width: 0; }
-.col-value { flex: 1; min-width: 0; }
-.col-type-tag {
-  font-size: 10px;
-  padding: 1px 5px;
-  border-radius: 3px;
-  background: #f3f4f6;
-  color: #6b7280;
-  white-space: nowrap;
-}
-.col-type-tag.t-number { background: #fef3c7; color: #b45309; }
-.col-type-tag.t-boolean { background: #dbeafe; color: #0369a1; }
-.col-type-tag.t-string { background: #ede9fe; color: #7c3aed; }
-.col-delete { padding: 4px; }
-.value-na {
-  flex: 1;
-  color: #9ca3af;
-  font-size: 12px;
-  text-align: center;
-}
-.add-row {
-  margin-top: 4px;
-  padding: 8px;
-  text-align: center;
-  color: #6366f1;
-  font-size: 12px;
-  border: 1px dashed #c7d2fe;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-.add-row:hover {
-  background: #eef2ff;
-}
-.op-hint {
-  margin-left: 4px;
-  color: #9ca3af;
-  font-size: 12px;
-}
+.condition-table { min-width: 0; }
+.table-scroll { max-width: 100%; overflow: auto; max-height: 360px; scrollbar-width: thin; padding-bottom: 4px; }
+.condition-grid { display: grid; grid-template-columns: 86px minmax(155px, 1.3fr) 112px minmax(125px, 1fr) 62px 24px; gap: 8px; align-items: center; min-width: 640px; }
+.table-head { color: #8b9099; font-size: 11px; padding: 6px 0 10px; }
+.condition-row { margin-bottom: 12px; font-size: 12px; }
+.condition-row :deep(.el-input__wrapper), .condition-row :deep(.el-select__wrapper) { min-height: 38px; background: #F4F6F9; border: 1px solid transparent; border-radius: 9px; box-shadow: none; padding: 0 10px; }
+.condition-row :deep(.el-input__wrapper:focus-within), .condition-row :deep(.el-select__wrapper.is-focused) { border-color: #3568D4; box-shadow: none; }
+.condition-row :deep(.el-input__inner), .condition-row :deep(.el-select__selected-item) { color: #17191D; font-size: 12px; }
+.condition-row :deep(.el-input__inner) { font-family: 'SF Mono', Menlo, Consolas, monospace; }
+.col-type-tag { justify-self: start; font: 10px 'SF Mono', Menlo, monospace; color: #60759a; background: #edf2fb; border-radius: 5px; padding: 3px 5px; white-space: nowrap; }
+.delete-row { border: 0; background: transparent; color: #90959e; cursor: pointer; font-size: 20px; padding: 0; }
+.delete-row:hover { color: #b24c48; }
+.add-row { width: 100%; margin-top: 4px; min-height: 38px; border: 0; border-radius: 9px; background: #F4F6F9; color: #3568D4; font: inherit; font-size: 12px; cursor: pointer; }
+.add-row:hover { background: #edf2fb; }
+.add-row:disabled { cursor: not-allowed; color: #9298a2; }
+.value-na { color: #9298a2; text-align: center; }
 </style>
