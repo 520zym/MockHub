@@ -8,6 +8,8 @@ import com.mockhub.common.model.PageResult;
 import com.mockhub.common.util.JwtUtil;
 import com.mockhub.auth.repository.AuthSessionRepository;
 import com.mockhub.auth.model.AuthSession;
+import com.mockhub.auth.service.CredentialRevocationService;
+import com.mockhub.mcp.repository.McpTokenRepository;
 import com.mockhub.common.util.SecurityContextUtil;
 import com.mockhub.log.service.LogService;
 import com.mockhub.mock.model.dto.ApiDefinitionVO;
@@ -221,6 +223,8 @@ class LiveJwtAuthorizationIntegrationTest {
     void resetPasswordEndpointUsesLiveRoleAndRealServiceAuthorization() throws Exception {
         UserServiceImpl userService = new UserServiceImpl();
         ReflectionTestUtils.setField(userService, "userRepository", users);
+        ReflectionTestUtils.setField(userService, "credentialRevocationService", new CredentialRevocationService(
+                users, new AuthSessionRepository(jdbc), new McpTokenRepository(jdbc)));
         UserController controller = new UserController();
         ReflectionTestUtils.setField(controller, "userService", userService);
         MockMvc mvc = MockMvcBuilders.standaloneSetup(controller)

@@ -239,6 +239,23 @@ class SchemaVersionMigrationTest {
     }
 
     @Test
+    void fullSchemaPassBeforeMigrationDoesNotRequireNewUserColumnsOnLegacyDatabase() throws Exception {
+        org.springframework.jdbc.core.JdbcTemplate jdbc = new org.springframework.jdbc.core.JdbcTemplate(dataSource);
+        Method schema = DataSourceConfig.class.getDeclaredMethod("executeSchemaSql", org.springframework.jdbc.core.JdbcTemplate.class);
+        schema.setAccessible(true);
+        schema.invoke(config, jdbc); // old user has no status/auth_version yet
+        execSql("INSERT INTO schema_version(version,description) VALUES(7,'old v7')");
+        runMigration();
+        schema.invoke(config, jdbc);
+        assertEquals(8, readSchemaVersion());
+        assertEquals("ACTIVE", jdbc.queryForObject("SELECT status FROM user WHERE id='legacy'", String.class));
+        assertEquals(0, jdbc.queryForObject("SELECT auth_version FROM user WHERE id='legacy'", Integer.class));
+        assertTrue(columnExists("auth_session", "expires_at"));
+        runMigration();
+        assertEquals(2, countSchemaVersionRows());
+    }
+
+    @Test
     void v8PreservesDisabledAccountsAndVersionsAcrossRepeatedUpgrade() throws Exception {
         setupFullSchema();
         runMigration();

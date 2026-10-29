@@ -2,6 +2,7 @@ package com.mockhub.system.service;
 
 import com.mockhub.auth.model.ChangePasswordRequest;
 import com.mockhub.auth.service.AuthService;
+import com.mockhub.auth.service.CredentialRevocationService;
 import com.mockhub.common.model.BizException;
 import com.mockhub.common.util.PasswordUtil;
 import com.mockhub.system.model.entity.User;
@@ -41,6 +42,7 @@ class UserServiceImplResetPasswordTest {
 
     private UserRepository repository;
     private UserServiceImpl service;
+    private CredentialRevocationService revocation;
 
     @BeforeEach
     void setUp() {
@@ -48,6 +50,8 @@ class UserServiceImplResetPasswordTest {
         repository = mock(UserRepository.class);
         service = new UserServiceImpl();
         ReflectionTestUtils.setField(service, "userRepository", repository);
+        revocation = mock(CredentialRevocationService.class);
+        ReflectionTestUtils.setField(service, "credentialRevocationService", revocation);
     }
 
     @AfterEach
@@ -66,7 +70,7 @@ class UserServiceImplResetPasswordTest {
                 () -> service.resetPassword("missing", null)).getCode());
         assertEquals(40101, assertThrows(BizException.class,
                 () -> service.resetPassword("caller", "short")).getCode());
-        verifyNoInteractions(repository);
+        verifyNoInteractions(repository, revocation);
     }
 
     @Test
@@ -75,7 +79,7 @@ class UserServiceImplResetPasswordTest {
                 () -> service.resetPassword("target", "new-password")).getCode());
         assertEquals(40002, assertThrows(BizException.class,
                 () -> service.resetPassword("missing", null)).getCode());
-        verifyNoInteractions(repository);
+        verifyNoInteractions(repository, revocation);
     }
 
     @Test
@@ -94,6 +98,7 @@ class UserServiceImplResetPasswordTest {
         order.verify(repository).findById("target");
         order.verify(repository).updatePassword(eq("target"), hash.capture(), updatedAt.capture());
         order.verify(repository).updateFirstLogin("target", true, updatedAt.getValue());
+        verify(revocation).revokeSecurityCredentials("target");
         assertNotEquals("123456", hash.getValue());
         assertTrue(PasswordUtil.verify("123456", hash.getValue()));
         verifyNoMoreInteractions(repository);
@@ -109,7 +114,7 @@ class UserServiceImplResetPasswordTest {
                 () -> service.resetPassword("target", password));
 
         assertEquals(40000, error.getCode());
-        verifyNoInteractions(repository);
+        verifyNoInteractions(repository, revocation);
     }
 
     @Test
@@ -132,6 +137,7 @@ class UserServiceImplResetPasswordTest {
         service.updatePassword("caller", hash);
 
         verify(repository).updatePassword(eq("caller"), eq(hash), anyString());
+        verify(revocation).revokeSecurityCredentials("caller");
         verifyNoMoreInteractions(repository);
     }
 
@@ -154,6 +160,7 @@ class UserServiceImplResetPasswordTest {
         verify(repository).findById("caller");
         verify(repository).updatePassword(eq("caller"), hash.capture(), anyString());
         assertTrue(PasswordUtil.verify("self-password", hash.getValue()));
+        verify(revocation).revokeSecurityCredentials("caller");
         if (firstLogin) {
             verify(repository).updateFirstLogin(eq("caller"), eq(false), anyString());
         } else {

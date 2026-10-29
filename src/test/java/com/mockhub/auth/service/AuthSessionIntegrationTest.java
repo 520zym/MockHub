@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mockhub.auth.controller.AuthController;
 import com.mockhub.auth.controller.MeController;
 import com.mockhub.auth.repository.AuthSessionRepository;
+import com.mockhub.mcp.repository.McpTokenRepository;
 import com.mockhub.common.filter.JwtAuthFilter;
 import com.mockhub.common.model.GlobalExceptionHandler;
 import com.mockhub.common.util.JwtUtil;
@@ -180,6 +181,53 @@ class AuthSessionIntegrationTest {
                 .andExpect(jsonPath("$.code").value(40001));
     }
 
+    @Test void selfPasswordChangeRevokesEveryWebSessionAndOnlyOwnersMcp() throws Exception {
+        String one = login("u"), two = login("u"); seedMcp();
+        jdbc.update("INSERT INTO mcp_token(id,name,token_hash,token_prefix,user_id,created_at) "
+                + "VALUES('other-mcp','Other','other-hash','prefix','other','now')");
+        mvc.perform(post("/api/auth/change-password").header("Authorization", bearer(one))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"oldPassword\":\"old-password\",\"newPassword\":\"new-password\"}"))
+                .andExpect(jsonPath("$.code").value(0));
+        denied(one); denied(two);
+        assertEquals(1, jdbc.queryForObject("SELECT auth_version FROM user WHERE id='u'", Integer.class));
+        assertEquals(0, jdbc.queryForObject("SELECT first_login FROM user WHERE id='u'", Integer.class));
+        assertNotNull(jdbc.queryForObject("SELECT revoked_at FROM mcp_token WHERE id='mcp'", String.class));
+        assertNull(jdbc.queryForObject("SELECT revoked_at FROM mcp_token WHERE id='other-mcp'", String.class));
+        mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"username\":\"u\",\"password\":\"old-password\"}"))
+                .andExpect(jsonPath("$.code").value(40001));
+        mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"username\":\"u\",\"password\":\"new-password\"}"))
+                .andExpect(jsonPath("$.code").value(0)).andExpect(jsonPath("$.data.user.firstLogin").value(false));
+    }
+
+    @Test void selfPasswordChangeRollsBackEveryCredentialWhenFirstLoginWriteFails() throws Exception {
+        String token = login("u"); seedMcp();
+        String hash = jdbc.queryForObject("SELECT password_hash FROM user WHERE id='u'", String.class);
+        jdbc.execute("CREATE TRIGGER reject_first_login BEFORE UPDATE OF first_login ON user "
+                + "BEGIN SELECT RAISE(ABORT, 'first_login write failed'); END");
+        mvc.perform(post("/api/auth/change-password").header("Authorization", bearer(token))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"oldPassword\":\"old-password\",\"newPassword\":\"new-password\"}"))
+                .andExpect(jsonPath("$.code").value(50001));
+        assertEquals(hash, jdbc.queryForObject("SELECT password_hash FROM user WHERE id='u'", String.class));
+        assertEquals(0, jdbc.queryForObject("SELECT auth_version FROM user WHERE id='u'", Integer.class));
+        assertNull(jdbc.queryForObject("SELECT revoked_at FROM mcp_token WHERE id='mcp'", String.class));
+        assertEquals("u", me(token).path("id").asText());
+    }
+
+    @Test void wrongPasswordAndInvalidNewPasswordNeverInvalidateCredentials() throws Exception {
+        String token = login("u"); seedMcp();
+        mvc.perform(post("/api/auth/change-password").header("Authorization", bearer(token))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"oldPassword\":\"wrong\",\"newPassword\":\"new-password\"}"))
+                .andExpect(jsonPath("$.code").value(40004));
+        mvc.perform(post("/api/auth/change-password").header("Authorization", bearer(token))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"oldPassword\":\"old-password\",\"newPassword\":\"short\"}"))
+                .andExpect(jsonPath("$.code").value(40000));
+        assertEquals("u", me(token).path("id").asText());
+        assertEquals(0, jdbc.queryForObject("SELECT auth_version FROM user WHERE id='u'", Integer.class));
+        assertNull(jdbc.queryForObject("SELECT revoked_at FROM mcp_token WHERE id='mcp'", String.class));
+    }
+
     private String login(String username) throws Exception {
         MvcResult result = mvc.perform(post("/api/auth/login").header("User-Agent", "Test browser")
                 .contentType(MediaType.APPLICATION_JSON).content("{\"username\":\"" + username + "\",\"password\":\"old-password\"}"))
@@ -216,7 +264,8 @@ class AuthSessionIntegrationTest {
 
     @Configuration @EnableTransactionManagement(proxyTargetClass = true)
     @Import({AuthService.class, UserServiceImpl.class, UserRepository.class, TeamRepository.class,
-            AuthSessionRepository.class, JwtUtil.class, AuthController.class, MeController.class})
+            AuthSessionRepository.class, CredentialRevocationService.class, McpTokenRepository.class,
+            JwtUtil.class, AuthController.class, MeController.class})
     static class Config {
         @Bean PlatformTransactionManager transactionManager(DataSource ds) { return new DataSourceTransactionManager(ds); }
     }

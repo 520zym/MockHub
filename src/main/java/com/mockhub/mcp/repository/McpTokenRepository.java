@@ -65,6 +65,12 @@ public class McpTokenRepository {
                 now, id);
     }
 
+    /** Explicit owner-wide revocation for password resets, password changes and account disable. */
+    public int revokeAllByOwner(String userId, String now) {
+        return jdbcTemplate.update("UPDATE mcp_token SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL",
+                now, userId);
+    }
+
     public void touchLastUsed(String id, String now) {
         jdbcTemplate.update("UPDATE mcp_token SET last_used_at = ? WHERE id = ?", now, id);
     }

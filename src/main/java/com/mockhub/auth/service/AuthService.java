@@ -31,6 +31,7 @@ public class AuthService {
     @Autowired private AuthSessionRepository sessions;
     @Autowired private JwtUtil jwtUtil;
 
+    @Transactional
     public LoginResponse login(LoginRequest req) { return login(req, null, null); }
 
     @Transactional
@@ -105,16 +106,19 @@ public class AuthService {
         sessions.revokeAllByUser(userId, now);
     }
 
+    @Transactional
     public void changePassword(ChangePasswordRequest req) {
+        if (req == null || req.getOldPassword() == null || req.getNewPassword() == null
+                || req.getNewPassword().length() < 6) {
+            throw new BizException(40000, "新密码长度不能少于6位，且须提供原密码");
+        }
         // 1. 获取当前登录用户 ID
         String userId = SecurityContextUtil.getCurrentUserId();
 
         // 2. 查询用户完整信息（需要 passwordHash 用于校验旧密码）
         User user = userService.findById(userId);
-        if (user == null) {
-            // 正常情况不应出现：已登录用户在数据中不存在
-            log.error("修改密码异常：用户不存在 [userId={}]", userId);
-            throw new BizException(50001, "系统内部错误");
+        if (user == null || !user.isActive()) {
+            throw new BizException(40002, "账号不存在或已停用，请重新登录");
         }
 
         // 3. 校验旧密码

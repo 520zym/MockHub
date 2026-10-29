@@ -377,12 +377,6 @@ public class DataSourceConfig {
         addColumnIfNotExists(conn, "mcp_settings", "tool_update_api_draft", "INTEGER NOT NULL DEFAULT 1");
     }
 
-    /**
-     * 老版本兼容兜底：不依赖 schema_version，逐列补齐当前代码会读取的字段。
-     * <p>
-     * 老用户可能来自任意历史版本，甚至没有完整的版本记录；这里只做幂等补列，
-     * 不修改已有数据，保证升级后不用手工改库。
-     */
     /** V8 在旧库先补列，新库同样幂等。任何 DDL 错误均由迁移事务回滚并拒绝启动。 */
     private void migrateV8(Connection conn) throws SQLException {
         addColumnIfNotExists(conn, "user", "status",
@@ -403,6 +397,12 @@ public class DataSourceConfig {
         }
     }
 
+    /**
+     * 老版本兼容兜底：不依赖 schema_version，逐列补齐当前代码会读取的字段。
+     * <p>
+     * 老用户可能来自任意历史版本，甚至没有完整的版本记录；这里只做幂等补列，
+     * 不修改已有数据，保证升级后不用手工改库。
+     */
     private void ensureCompatibilityColumns(Connection conn) throws SQLException {
         migrateV8(conn);
         ensureColumns(conn, "api_definition", new String[][]{

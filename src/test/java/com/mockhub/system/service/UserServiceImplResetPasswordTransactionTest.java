@@ -1,6 +1,11 @@
 package com.mockhub.system.service;
 
 import com.mockhub.common.util.PasswordUtil;
+import com.mockhub.auth.service.CredentialRevocationService;
+import com.mockhub.auth.repository.AuthSessionRepository;
+import com.mockhub.mcp.repository.McpTokenRepository;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import com.mockhub.system.model.entity.User;
 import com.mockhub.system.repository.UserRepository;
 import org.junit.jupiter.api.AfterEach;
@@ -51,11 +56,14 @@ class UserServiceImplResetPasswordTransactionTest {
         SQLiteDataSource dataSource = new SQLiteDataSource();
         dataSource.setUrl("jdbc:sqlite:" + tempDir.resolve("reset-password.db").toString());
         jdbcTemplate = new JdbcTemplate(dataSource);
-        jdbcTemplate.execute("CREATE TABLE user (id TEXT PRIMARY KEY, username TEXT, password_hash TEXT, "
-                + "display_name TEXT, global_role TEXT, first_login INTEGER, status TEXT DEFAULT 'ACTIVE', auth_version INTEGER DEFAULT 0, created_at TEXT, updated_at TEXT)");
+        new ResourceDatabasePopulator(new ClassPathResource("schema.sql")).execute(dataSource);
         oldHash = PasswordUtil.hash("old-password");
         jdbcTemplate.update("INSERT INTO user (id,username,password_hash,display_name,global_role,first_login,created_at,updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 "target", "target-user", oldHash, "Target", "USER", 0, "before", "before");
+        jdbcTemplate.update("INSERT INTO auth_session(id,user_id,auth_version,created_at,expires_at) VALUES('session','target',0,'before',?)",
+                System.currentTimeMillis() + 100000);
+        jdbcTemplate.update("INSERT INTO mcp_token(id,name,token_hash,token_prefix,user_id,created_at) "
+                + "VALUES('mcp','MCP','hash','prefix','target','before')");
         repository = new UserRepository();
         ReflectionTestUtils.setField(repository, "jdbcTemplate", jdbcTemplate);
         context = new AnnotationConfigApplicationContext();
@@ -94,6 +102,8 @@ class UserServiceImplResetPasswordTransactionTest {
         assertTrue(PasswordUtil.verify("new-password", updated.getPasswordHash()));
         assertTrue(updated.isFirstLogin());
         assertNotEquals("before", updated.getUpdatedAt());
+        assertEquals(1, updated.getAuthVersion());
+        assertTrue(credentialsRevoked());
     }
 
     @Test
@@ -107,11 +117,43 @@ class UserServiceImplResetPasswordTransactionTest {
         assertEquals(oldHash, unchanged.getPasswordHash());
         assertFalse(unchanged.isFirstLogin());
         assertEquals("before", unchanged.getUpdatedAt());
+        assertEquals(0, unchanged.getAuthVersion());
+        assertFalse(credentialsRevoked());
+    }
+
+    @Test
+    void mcpRevocationFailureRollsBackPasswordVersionSessionsAndFirstLogin() {
+        jdbcTemplate.execute("CREATE TRIGGER reject_mcp_revoke BEFORE UPDATE OF revoked_at ON mcp_token "
+                + "BEGIN SELECT RAISE(ABORT, 'MCP revoke failed'); END");
+        assertThrows(DataAccessException.class, () -> service.resetPassword("target", "new-password"));
+        User unchanged = repository.findById("target");
+        assertEquals(oldHash, unchanged.getPasswordHash());
+        assertFalse(unchanged.isFirstLogin()); assertEquals(0, unchanged.getAuthVersion());
+        assertFalse(credentialsRevoked());
+    }
+
+    @Test
+    void genericPasswordUpdateDoesNotRequireSuperAdminButStillRevokesCredentials() {
+        Map<String, Object> details = new HashMap<String, Object>();
+        details.put("userId", "target"); details.put("username", "target-user"); details.put("globalRole", "USER");
+        UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken("target", null, Collections.emptyList());
+        auth.setDetails(details); SecurityContextHolder.getContext().setAuthentication(auth);
+        service.updatePassword("target", PasswordUtil.hash("new-password"));
+        assertTrue(PasswordUtil.verify("new-password", repository.findById("target").getPasswordHash()));
+        assertEquals(1, repository.findById("target").getAuthVersion());
+        assertTrue(credentialsRevoked()); assertFalse(repository.findById("target").isFirstLogin());
+    }
+
+    private boolean credentialsRevoked() {
+        String web = jdbcTemplate.queryForObject("SELECT revoked_at FROM auth_session WHERE id='session'", String.class);
+        String mcp = jdbcTemplate.queryForObject("SELECT revoked_at FROM mcp_token WHERE id='mcp'", String.class);
+        assertEquals(web == null, mcp == null, "web and MCP credentials must change atomically");
+        return web != null;
     }
 
     @Configuration
     @EnableTransactionManagement(proxyTargetClass = true)
-    @Import(UserServiceImpl.class)
+    @Import({UserServiceImpl.class, CredentialRevocationService.class, AuthSessionRepository.class, McpTokenRepository.class})
     static class TransactionConfig {
 
         @Bean

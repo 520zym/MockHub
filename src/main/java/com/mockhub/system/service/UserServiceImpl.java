@@ -1,6 +1,7 @@
 package com.mockhub.system.service;
 
 import com.mockhub.common.model.BizException;
+import com.mockhub.auth.service.CredentialRevocationService;
 import com.mockhub.common.model.enums.UserRole;
 import com.mockhub.common.util.PasswordUtil;
 import com.mockhub.common.util.SecurityContextUtil;
@@ -39,6 +40,9 @@ public class UserServiceImpl implements UserService {
     @Autowired
     private UserRepository userRepository;
 
+    @Autowired
+    private CredentialRevocationService credentialRevocationService;
+
     @Override
     public User findByUsername(String username) {
         return userRepository.findByUsername(username);
@@ -56,9 +60,11 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    @Transactional
     public void updatePassword(String userId, String newPasswordHash) {
         log.info("更新用户密码：userId={}", userId);
         userRepository.updatePassword(userId, newPasswordHash, LocalDateTime.now().toString());
+        credentialRevocationService.revokeSecurityCredentials(userId);
     }
 
     @Override
@@ -78,6 +84,7 @@ public class UserServiceImpl implements UserService {
         String now = LocalDateTime.now().toString();
         userRepository.updatePassword(userId, newHash, now);
         userRepository.updateFirstLogin(userId, true, now);
+        credentialRevocationService.revokeSecurityCredentials(userId);
         log.info("超管重置用户密码：userId={}, username={}", userId, user.getUsername());
     }
 
