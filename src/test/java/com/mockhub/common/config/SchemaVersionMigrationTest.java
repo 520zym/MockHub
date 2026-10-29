@@ -260,8 +260,8 @@ class SchemaVersionMigrationTest {
         setupFullSchema();
         execSql("CREATE TABLE mcp_token(id TEXT PRIMARY KEY, revoked_at TEXT)",
                 "INSERT INTO mcp_token VALUES('old',NULL)",
-                "CREATE TABLE ai_pending_action(id TEXT PRIMARY KEY)",
-                "INSERT INTO ai_pending_action VALUES('unbound')");
+                "CREATE TABLE ai_pending_action(id TEXT PRIMARY KEY,action_type TEXT,payload TEXT,status TEXT)",
+                "INSERT INTO ai_pending_action VALUES('unbound','CREATE_API','{}','PENDING')");
         runMigration();
         try(Connection conn=dataSource.getConnection();Statement st=conn.createStatement()){
             try(ResultSet rs=st.executeQuery("SELECT scope_version,team_ids,scopes,revoked_at FROM mcp_token WHERE id='old'")){

@@ -27,11 +27,11 @@ public class AiPendingActionRepository {
 
     public void insert(AiPendingAction action) {
         jdbcTemplate.update("INSERT INTO ai_pending_action "
-                        + "(id, user_id, team_id, action_type, payload, summary, status, created_at, expires_at, confirmed_at, result_api_id, base_revision,target_api_id) "
-                        + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        + "(id, user_id, team_id, action_type, payload, summary, status, created_at, expires_at, confirmed_at, result_api_id, base_revision,target_api_id,source_type,source_token_id,source_scope_json) "
+                        + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 action.getId(), action.getUserId(), action.getTeamId(), action.getActionType(),
                 action.getPayload(), action.getSummary(), action.getStatus(), action.getCreatedAt(),
-                action.getExpiresAt(), action.getConfirmedAt(), action.getResultApiId(),action.getBaseRevision(),action.getTargetApiId());
+                action.getExpiresAt(), action.getConfirmedAt(), action.getResultApiId(),action.getBaseRevision(),action.getTargetApiId(),action.getSourceType(),action.getSourceTokenId(),action.getSourceScopeJson());
         protectDraftFiles(action);
     }
 
@@ -129,6 +129,7 @@ public class AiPendingActionRepository {
             action.setResultApiId(rs.getString("result_api_id"));
             long base=rs.getLong("base_revision");action.setBaseRevision(rs.wasNull()?null:base);
             action.setTargetApiId(rs.getString("target_api_id"));
+            action.setSourceType(rs.getString("source_type"));action.setSourceTokenId(rs.getString("source_token_id"));action.setSourceScopeJson(rs.getString("source_scope_json"));
             return action;
         }
     };

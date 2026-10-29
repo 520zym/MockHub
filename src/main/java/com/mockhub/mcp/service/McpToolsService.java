@@ -71,6 +71,10 @@ public class McpToolsService {
     }
 
     public Object execute(String name, JsonNode args) {
+        return com.mockhub.mock.lifecycle.ApiMutationSource.withSource("MCP", () -> executeInternal(name,args));
+    }
+
+    private Object executeInternal(String name, JsonNode args) {
         if (McpToolRegistry.SEARCH_APIS.equals(name)) {
             return searchApis(args);
         }

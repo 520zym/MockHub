@@ -45,6 +45,8 @@ public class PendingActionService {
     private final ApiService apiService;
     private final PermissionChecker permissionChecker;
     private final LogService logService;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.mockhub.mcp.service.McpDraftSourceGuard sourceGuard;
 
     public PendingActionService(AiPendingActionRepository repository,
                                 ObjectMapper objectMapper,
@@ -79,6 +81,7 @@ public class PendingActionService {
         } catch (Exception e) {
             throw new BizException(50001, "序列化接口草稿失败");
         }
+        bindSource(action);
         repository.insert(action);
         log.info("创建 AI 待确认操作：id={}, teamId={}, path={}", action.getId(), dto.getTeamId(), dto.getPath());
         return toCardMap(action, dto);
@@ -106,6 +109,7 @@ public class PendingActionService {
         } catch (Exception e) {
             throw new BizException(50001, "序列化接口修改草稿失败");
         }
+        bindSource(action);
         repository.insert(action);
         log.info("创建 AI 修改草稿：id={}, apiId={}, responseId={}",
                 action.getId(), draft.getApiId(), draft.getResponseId());
@@ -135,6 +139,7 @@ public class PendingActionService {
         } catch (Exception e) {
             throw new BizException(50001, "序列化接口修改草稿失败");
         }
+        bindSource(action);
         repository.insert(action);
         log.info("创建 AI 整体修改草稿：id={}, apiId={}", action.getId(), draft.getApiId());
         return toFullUpdateCardMap(action, draft);
@@ -145,8 +150,11 @@ public class PendingActionService {
      */
     public Map<String,Object> confirm(String id) {
         try {
-            return com.mockhub.mock.lifecycle.ApiMutationSource.withSource(com.mockhub.mock.lifecycle.ApiMutationSource.effective("AI"),
-                    () -> repository.write(() -> confirmInternal(id)));
+            return repository.write(() -> {
+                AiPendingAction action=requireAction(id);
+                String origin="MCP".equals(action.getSourceType())?"MCP":com.mockhub.mock.lifecycle.ApiMutationSource.effective("AI");
+                return com.mockhub.mock.lifecycle.ApiMutationSource.withSource(origin, () -> confirmInternal(id));
+            });
         } catch(BizException error) {
             if(error.getCode()==40901) repository.write(() -> { repository.expire(id,now());return null; });
             throw error;
@@ -156,6 +164,7 @@ public class PendingActionService {
         AiPendingAction action = requireAction(id);
         checkOwner(action);
         if(action.getBaseRevision()==null) throw new BizException(40920,"DRAFT_REGENERATION_REQUIRED: 草稿已升级，请重新生成");
+        verifySource(action);
         if (!"PENDING".equals(action.getStatus())) {
             throw new BizException(40902, "该操作已处理，请刷新确认状态");
         }
@@ -461,6 +470,27 @@ public class PendingActionService {
         String preview = draft.getDto().getResponseBody() == null ? "" : draft.getDto().getResponseBody();
         card.put("preview", preview.length() > 8000 ? preview.substring(0, 8000) + "…" : preview);
         return card;
+    }
+
+    private void bindSource(AiPendingAction action) {
+        com.mockhub.mcp.service.McpRequestContext context=com.mockhub.mcp.service.McpRequestContext.current();
+        if(context==null){
+            if("MCP".equals(com.mockhub.mock.lifecycle.ApiMutationSource.effective("WEB")))throw new BizException(40105,"MCP草稿缺少可信凭证上下文");
+            action.setSourceType("WEB");action.setSourceTokenId(null);action.setSourceScopeJson(null);
+        }else{
+            if(sourceGuard==null)throw new IllegalStateException("MCP draft source verifier is required");
+            sourceGuard.bind(action);
+        }
+    }
+    private void verifySource(AiPendingAction action) {
+        if("WEB".equals(action.getSourceType()) && action.getSourceTokenId()==null && action.getSourceScopeJson()==null){
+            if(com.mockhub.mcp.service.McpRequestContext.current()!=null)throw new BizException(40926,"MCP不能代替网页确认其他来源草稿，请在网页独立确认");
+            if("MCP".equals(com.mockhub.mock.lifecycle.ApiMutationSource.effective("WEB")))throw new BizException(40105,"MCP确认缺少可信凭证上下文");
+            return;
+        }
+        if(!"MCP".equals(action.getSourceType()))throw new BizException(40926,"草稿来源未绑定，请重新生成");
+        if(sourceGuard==null)throw new IllegalStateException("MCP draft source verifier is required");
+        sourceGuard.verify(action);
     }
 
     private AiPendingAction requireAction(String id) {
