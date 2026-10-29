@@ -1,501 +1,103 @@
-<!--
-  TeamManage.vue — 团队管理页面（超级管理员专属）
-  功能：团队卡片网格展示、创建/编辑团队、成员管理（抽屉）、删除团队
--->
 <template>
-  <div class="page-container page-team-manage">
-    <!-- 新建按钮 -->
-    <div class="page-header">
-      <el-button type="primary" @click="openCreateDialog">
-        <el-icon><Plus /></el-icon>
-        新建团队
-      </el-button>
-    </div>
-
-    <!-- 加载状态 -->
-    <div v-if="loading" class="loading-container">
-      <el-skeleton :rows="3" animated />
-    </div>
-
-    <!-- 空状态 -->
-    <el-empty v-else-if="teams.length === 0" description="暂无团队，点击右上方按钮创建" />
-
-    <!-- 团队卡片网格 -->
-    <div v-else class="team-grid">
-      <div
-        v-for="team in teams"
-        :key="team.id"
-        class="soft-card team-card"
-      >
-        <!-- 卡片头部：TeamTag + 团队名 -->
-        <div class="team-card__header">
-          <TeamTag :identifier="team.identifier" :color="team.color" />
-          <span class="team-card__name">{{ team.name }}</span>
-        </div>
-
-        <!-- 统计数字 -->
-        <div class="team-card__stats">
-          <div class="stat-item">
-            <span class="stat-value">{{ team.memberCount }}</span>
-            <span class="stat-label">成员</span>
-          </div>
-          <div class="stat-item">
-            <span class="stat-value">{{ team.apiCount }}</span>
-            <span class="stat-label">接口</span>
-          </div>
-        </div>
-
-        <!-- 底部操作 -->
-        <div class="team-card__actions">
-          <el-button text type="primary" size="small" @click="openEditDialog(team)">
-            <el-icon><Edit /></el-icon>
-            编辑
-          </el-button>
-          <el-button text type="primary" size="small" @click="openMemberDrawer(team)">
-            <el-icon><User /></el-icon>
-            成员
-          </el-button>
-          <el-button text type="danger" size="small" @click="handleDeleteTeam(team)">
-            <el-icon><Delete /></el-icon>
-            删除
-          </el-button>
-        </div>
-      </div>
-    </div>
-
-    <!-- 创建/编辑团队对话框 -->
-    <el-dialog
-      v-model="teamDialogVisible"
-      :title="isEditMode ? '编辑团队' : '新建团队'"
-      width="460px"
-      :close-on-click-modal="false"
-      destroy-on-close
-    >
-      <el-form
-        ref="teamFormRef"
-        :model="teamForm"
-        :rules="teamRules"
-        label-position="top"
-      >
-        <el-form-item label="团队名称" prop="name">
-          <el-input v-model="teamForm.name" placeholder="如：前端团队" maxlength="50" />
-        </el-form-item>
-        <el-form-item label="团队标识" prop="identifier">
-          <el-input
-            v-model="teamForm.identifier"
-            placeholder="如：FE（2~8 位大写字母/数字）"
-            maxlength="8"
-            @input="teamForm.identifier = teamForm.identifier.toUpperCase().replace(/[^A-Z0-9]/g, '')"
-          />
-        </el-form-item>
-        <el-form-item label="团队颜色" prop="color">
-          <div class="color-picker-row">
-            <el-color-picker v-model="teamForm.color" />
-            <span class="color-preview-text" :style="{ color: teamForm.color }">{{ teamForm.color }}</span>
-          </div>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="teamDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="teamSubmitting" @click="handleSubmitTeam">
-          {{ isEditMode ? '保存' : '创建' }}
-        </el-button>
-      </template>
+  <div class="system-teams">
+    <header class="page-heading"><div><div class="title-row"><h1>团队管理</h1><span class="badge muted">系统级操作</span></div><p>管理全部团队 · 创建、指派首位管理员与归档恢复</p></div><button v-if="userStore.isSuperAdmin" class="button primary" :disabled="busy" @click="openCreate"><FilledIcon name="team" :size="15" /> 新建团队</button></header>
+    <div v-if="!userStore.isSuperAdmin" class="panel empty"><FilledIcon name="shield" :size="32" /><h2>仅超级管理员可访问</h2><p>团队管理员请进入本团队的「团队设置」维护团队信息和成员。</p></div>
+    <template v-else>
+      <div class="notice"><FilledIcon name="shield" :size="18" /><span><b>系统管理与团队成员身份独立。</b> 超级管理员可以跨团队维护，但不自动成为团队成员，也不替代真实有效团队管理员。</span></div>
+      <div v-if="error" class="notice error" role="alert">{{ error }}<button class="text-button" :disabled="loading" @click="reload">重新加载</button></div>
+      <div class="toolbar"><label class="search"><input v-model="query" placeholder="搜索团队名称或标识" aria-label="搜索团队" /></label><select v-model="statusFilter" aria-label="筛选团队状态"><option value="ALL">全部状态</option><option value="ACTIVE">正常团队</option><option value="ARCHIVED">已归档</option></select><span class="toolbar-count">{{ filteredTeams.length }} 个团队</span><button class="text-button" :disabled="loading || busy" @click="reload">刷新</button></div>
+      <div class="cards-scroll" :aria-busy="loading"><div v-if="loading" class="empty">正在加载团队…</div><div v-else-if="!filteredTeams.length" class="panel empty"><FilledIcon name="team" :size="30" /><h2>{{ teams.length ? '没有匹配的团队' : '尚未创建团队' }}</h2><p>创建团队时必须同时指派首位正常账号作为团队管理员。</p></div><div v-else class="team-grid"><article v-for="team in filteredTeams" :key="team.id" class="panel team-card"><div class="card-heading"><span class="team-mark" :style="{ color: team.color || '#3568d4' }">{{ team.identifier }}</span><span class="badge" :class="team.status === 'ARCHIVED' ? 'muted' : 'green'">{{ team.status === 'ARCHIVED' ? '已归档' : '正常' }}</span></div><h2>{{ team.name }}</h2><p class="description">{{ team.description || '暂无团队描述' }}</p><div class="stats"><div><b>{{ team.memberCount ?? '—' }}</b><span>成员</span></div><div><b>{{ team.apiCount ?? '—' }}</b><span>接口</span></div><div><b>{{ team.effectiveAdminCount ?? '—' }}</b><span>有效管理员</span></div></div><div v-if="team.adminRepairRequired || team.effectiveAdminCount === 0" class="repair"><FilledIcon name="shield" :size="16" /><span>缺少有效管理员。{{ team.status === 'ARCHIVED' ? '先恢复团队，再进入维护指派正常账号。' : '请进入团队维护，明确指派正常账号；不会随机提权。' }}</span></div><p v-else-if="team.status === 'ARCHIVED'" class="archive-note">保留标识与资源，管理写入已冻结；Mock 不会自动停服。</p><div class="card-actions"><button class="button primary" :disabled="busy" @click="enterTeam(team)">维护团队</button><button class="text-button" :disabled="busy || team.status === 'ARCHIVED'" @click="openEdit(team)">编辑信息</button><button class="text-button" :disabled="busy" @click="changeStatus(team)">{{ pendingTeamId === team.id ? '处理中…' : team.status === 'ARCHIVED' ? '恢复团队' : '归档' }}</button></div></article></div></div>
+      <footer class="page-foot">归档不释放团队标识，不删除成员与资源，不自动停止 Mock 服务。团队不提供物理删除入口。</footer>
+    </template>
+    <el-dialog v-model="dialogVisible" :title="editingId ? '编辑团队信息' : '新建团队'" width="min(800px, 94vw)" class="system-team-dialog" :close-on-click-modal="false" :show-close="!busy" :close-on-press-escape="!busy" destroy-on-close>
+      <div class="create-layout"><form id="system-team-form" class="team-form" @submit.prevent="submit"><label>团队名称 <em>*</em><input v-model="form.name" required maxlength="50" :disabled="busy" placeholder="团队展示名称" /></label><label>团队标识 <em>*</em><input v-model="form.identifier" required pattern="[A-Z0-9]{2,8}" minlength="2" maxlength="8" :disabled="busy || !!editingId" placeholder="2~8 位大写字母或数字" @input="form.identifier = form.identifier.toUpperCase().replace(/[^A-Z0-9]/g, '')" /><small>决定 Mock 地址前缀，创建后不可修改；归档后仍保留。</small></label><label class="wide">团队描述<textarea v-model="form.description" rows="3" maxlength="1000" :disabled="busy" placeholder="一句话说明团队负责什么"></textarea></label><label>团队颜色<input v-model="form.color" type="color" :disabled="busy" /></label><div v-if="!editingId" class="wide admin-search"><label for="initial-admin">首位团队管理员 <em>*</em></label><div class="search-row"><input id="initial-admin" v-model="adminUsername" :disabled="busy" placeholder="输入完整用户名精确查找" @input="resetAdmin" @keydown.enter.prevent="findAdmin" /><button type="button" class="button" :disabled="busy || searching || !adminUsername.trim()" @click="findAdmin">{{ searching ? '查找中…' : '查找' }}</button></div><div class="admin-result" aria-live="polite"><template v-if="selectedAdmin"><b>{{ selectedAdmin.displayName }}</b><span class="mono">{{ selectedAdmin.username }}</span><span class="badge green">正常账号</span></template><span v-else>{{ adminHint }}</span></div><small>只能指派已有正常账号；创建团队与首位管理员在同一事务内完成。</small></div></form><aside class="preview"><FilledIcon name="team" :size="28" /><h3>{{ form.name || '团队名称' }}</h3><span class="identifier">{{ form.identifier || 'TEAM' }}</span><p>{{ form.description || '团队资源与权限独立，成员在各团队中的角色互不影响。' }}</p><hr /><b>{{ editingId ? '团队信息维护' : '创建后立即启用' }}</b><p>{{ editingId ? '不会修改团队标识、状态或成员角色。' : '首位管理员可以继续添加已有账号。创建者不会自动获得额外团队角色或资源所有权。' }}</p></aside></div><div v-if="dialogError" class="notice error" role="alert">{{ dialogError }}</div><template #footer><button class="button" :disabled="busy" @click="dialogVisible = false">取消</button><button class="button primary" type="submit" form="system-team-form" :disabled="busy || (!editingId && !selectedAdmin)">{{ busy ? '保存中…' : editingId ? '保存修改' : '创建并指派管理员' }}</button></template>
     </el-dialog>
-
-    <!-- 成员管理抽屉 -->
-    <el-drawer
-      v-model="memberDrawerVisible"
-      :title="currentTeam?.name + ' — 成员管理'"
-      size="520px"
-      destroy-on-close
-    >
-      <!-- 添加成员区域 -->
-      <div class="member-add-section">
-        <el-select
-          v-model="addMemberForm.userId"
-          placeholder="选择要添加的用户"
-          filterable
-          class="member-add-select"
-        >
-          <el-option
-            v-for="user in availableUsers"
-            :key="user.id"
-            :label="`${user.displayName}（${user.username}）`"
-            :value="user.id"
-          />
-        </el-select>
-        <el-select v-model="addMemberForm.role" class="member-add-role">
-          <el-option label="团队管理员" value="TEAM_ADMIN" />
-          <el-option label="普通成员" value="MEMBER" />
-        </el-select>
-        <el-button type="primary" :disabled="!addMemberForm.userId" @click="handleAddMember">
-          添加
-        </el-button>
-      </div>
-
-      <!-- 成员加载状态 -->
-      <div v-if="memberLoading" class="loading-container">
-        <el-skeleton :rows="4" animated />
-      </div>
-
-      <!-- 成员空状态 -->
-      <el-empty v-else-if="members.length === 0" description="暂无成员" :image-size="80" />
-
-      <!-- 成员列表表格 -->
-      <el-table v-else :data="members" style="width: 100%">
-        <el-table-column prop="username" label="用户名" width="120" />
-        <el-table-column prop="displayName" label="显示名" width="120" />
-        <el-table-column label="角色" width="160">
-          <template #default="{ row }">
-            <el-select
-              :model-value="row.role"
-              size="small"
-              @change="(val) => handleChangeRole(row, val)"
-            >
-              <el-option label="团队管理员" value="TEAM_ADMIN" />
-              <el-option label="普通成员" value="MEMBER" />
-            </el-select>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="80" align="center">
-          <template #default="{ row }">
-            <el-button text type="danger" size="small" @click="handleRemoveMember(row)">
-              移除
-            </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-drawer>
   </div>
 </template>
 
 <script setup>
-/**
- * 团队管理页面
- * - 卡片网格展示团队列表
- * - 支持创建/编辑/删除团队
- * - 抽屉管理团队成员（添加、修改角色、移除）
- */
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Edit, Delete, User } from '@element-plus/icons-vue'
-import {
-  getTeams,
-  createTeam,
-  updateTeam,
-  deleteTeam,
-  getTeamMembers,
-  addTeamMember,
-  removeTeamMember,
-  updateMemberRole
-} from '@/api/teams'
+import FilledIcon from '@/components/FilledIcon.vue'
+import { useUserStore } from '@/stores/user'
+import { useAppStore } from '@/stores/app'
+import { getTeams, createTeam, updateTeam, updateTeamStatus } from '@/api/teams'
 import { getUsers } from '@/api/users'
-import TeamTag from '@/components/TeamTag.vue'
-
-// ========== 团队列表 ==========
-const loading = ref(false)
-const teams = ref([])
-
-async function loadTeams() {
-  loading.value = true
-  try {
-    teams.value = await getTeams()
-  } catch (err) {
-    // 拦截器已处理错误提示
-  } finally {
-    loading.value = false
-  }
+const userStore = useUserStore(), appStore = useAppStore(), router = useRouter()
+const teams = ref([]), loading = ref(false), busy = ref(false), error = ref(''), query = ref(''), statusFilter = ref('ALL'), pendingTeamId = ref(null)
+const filteredTeams = computed(() => teams.value.filter(t => (statusFilter.value === 'ALL' || t.status === statusFilter.value) && (t.name + ' ' + t.identifier).toLowerCase().includes(query.value.trim().toLowerCase())))
+const dialogVisible = ref(false), editingId = ref(null), dialogError = ref(''), selectedAdmin = ref(null), adminUsername = ref(''), adminHint = ref('仅按完整用户名查找已有正常账号。'), searching = ref(false)
+const form = reactive({ name: '', identifier: '', description: '', color: '#3568d4' })
+const message = err => err?.msg || err?.response?.data?.msg || err?.message || '操作失败，请重试'
+let loadRevision = 0, adminRevision = 0
+async function reload() {
+  if (!userStore.isSuperAdmin) return
+  const revision = ++loadRevision; loading.value = true; error.value = ''
+  try { const data = await getTeams(); if (revision === loadRevision && userStore.isSuperAdmin) teams.value = data || [] }
+  catch (err) { if (revision === loadRevision) error.value = message(err) }
+  finally { if (revision === loadRevision) loading.value = false }
 }
-
-onMounted(() => {
-  loadTeams()
-})
-
-// ========== 创建/编辑团队对话框 ==========
-const teamDialogVisible = ref(false)
-const teamFormRef = ref(null)
-const teamSubmitting = ref(false)
-const isEditMode = ref(false)
-const editingTeamId = ref(null)
-
-const teamForm = reactive({
-  name: '',
-  identifier: '',
-  color: '#6366F1'
-})
-
-const teamRules = {
-  name: [{ required: true, message: '请输入团队名称', trigger: 'blur' }],
-  identifier: [
-    { required: true, message: '请输入团队标识', trigger: 'blur' },
-    { pattern: /^[A-Z0-9]{2,8}$/, message: '2~8 位大写字母或数字', trigger: 'blur' }
-  ],
-  color: [{ required: true, message: '请选择团队颜色', trigger: 'change' }]
+watch(() => userStore.isSuperAdmin, allowed => { if (allowed) reload(); else { ++loadRevision; teams.value = []; loading.value = false; dialogVisible.value = false } }, { immediate: true })
+function resetAdmin() { ++adminRevision; selectedAdmin.value = null; searching.value = false; adminHint.value = '用户名变更后请重新精确查找。'; dialogError.value = '' }
+function openCreate() {
+  if (!userStore.isSuperAdmin || busy.value) return
+  editingId.value = null; Object.assign(form, { name: '', identifier: '', description: '', color: '#3568d4' }); adminUsername.value = ''; resetAdmin(); dialogVisible.value = true
 }
-
-function openCreateDialog() {
-  isEditMode.value = false
-  editingTeamId.value = null
-  teamForm.name = ''
-  teamForm.identifier = ''
-  teamForm.color = '#6366F1'
-  teamDialogVisible.value = true
+function openEdit(team) {
+  if (!userStore.isSuperAdmin || busy.value || team.status === 'ARCHIVED') return
+  editingId.value = team.id; Object.assign(form, { name: team.name, identifier: team.identifier, description: team.description || '', color: team.color || '#3568d4' }); dialogError.value = ''; dialogVisible.value = true
 }
-
-function openEditDialog(team) {
-  isEditMode.value = true
-  editingTeamId.value = team.id
-  teamForm.name = team.name
-  teamForm.identifier = team.identifier
-  teamForm.color = team.color
-  teamDialogVisible.value = true
+async function findAdmin() {
+  if (!userStore.isSuperAdmin || busy.value || !adminUsername.value.trim()) return
+  const revision = ++adminRevision, username = adminUsername.value.trim(); selectedAdmin.value = null; searching.value = true; dialogError.value = ''
+  try {
+    const users = await getUsers()
+    if (revision !== adminRevision || !userStore.isSuperAdmin) return
+    selectedAdmin.value = users.find(u => u.username === username && u.status === 'ACTIVE') || null
+    adminHint.value = selectedAdmin.value ? '' : '未找到此完整用户名的正常账号，请先在账号管理中创建或恢复。'
+  } catch (err) { if (revision === adminRevision) dialogError.value = message(err) }
+  finally { if (revision === adminRevision) searching.value = false }
 }
-
-async function handleSubmitTeam() {
-  const formEl = teamFormRef.value
-  if (!formEl) return
-  const valid = await formEl.validate().catch(() => false)
-  if (!valid) return
-
-  teamSubmitting.value = true
-  try {
-    if (isEditMode.value) {
-      await updateTeam(editingTeamId.value, { ...teamForm })
-      ElMessage.success('团队已更新')
-    } else {
-      await createTeam({ ...teamForm })
-      ElMessage.success('团队已创建')
-    }
-    teamDialogVisible.value = false
-    // 刷新列表
-    await loadTeams()
-  } catch (err) {
-    // 拦截器已处理 40301/40302 等错误提示
-  } finally {
-    teamSubmitting.value = false
-  }
+async function refreshAfterWrite() {
+  await reload()
+  try { await userStore.refreshIdentity(); await appStore.loadTeams() } catch (err) { error.value = '操作已保存，但身份或团队列表刷新失败：' + message(err) }
 }
-
-// ========== 删除团队 ==========
-async function handleDeleteTeam(team) {
+async function submit() {
+  if (!userStore.isSuperAdmin || busy.value || !form.name.trim()) return
+  dialogError.value = ''
+  if (!editingId.value && (!/^[A-Z0-9]{2,8}$/.test(form.identifier) || !selectedAdmin.value || selectedAdmin.value.status !== 'ACTIVE')) { dialogError.value = '请填写有效团队标识，并精确查找首位正常管理员。'; return }
+  if (!editingId.value && teams.value.some(t => t.identifier.toUpperCase() === form.identifier)) { dialogError.value = '此团队标识已被使用（含已归档团队）。'; return }
+  busy.value = true
   try {
-    await ElMessageBox.confirm(
-      `确定删除团队「${team.name}」吗？此操作不可恢复。`,
-      '删除确认',
-      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
-    )
-  } catch {
-    return // 用户取消
-  }
-
-  try {
-    await deleteTeam(team.id)
-    ElMessage.success('团队已删除')
-    await loadTeams()
-  } catch (err) {
-    // 后端返回 40303 时拦截器会显示"团队下有接口，不能删除"
-  }
+    const payload = { name: form.name.trim(), description: form.description, color: form.color }
+    if (editingId.value) await updateTeam(editingId.value, payload)
+    else await createTeam({ ...payload, identifier: form.identifier, initialAdminUserId: selectedAdmin.value.id })
+    ElMessage.success(editingId.value ? '团队信息已保存' : '团队已创建并指派首位管理员'); dialogVisible.value = false
+    await refreshAfterWrite()
+  } catch (err) { dialogError.value = message(err) }
+  finally { busy.value = false }
 }
-
-// ========== 成员管理抽屉 ==========
-const memberDrawerVisible = ref(false)
-const memberLoading = ref(false)
-const currentTeam = ref(null)
-const members = ref([])
-const allUsers = ref([])
-
-// 添加成员表单
-const addMemberForm = reactive({
-  userId: '',
-  role: 'MEMBER'
-})
-
-// 计算可添加的用户列表：排除已在当前团队中的用户
-const availableUsers = computed(() => {
-  const memberUserIds = new Set(members.value.map(m => m.userId))
-  return allUsers.value.filter(u => !memberUserIds.has(u.id))
-})
-
-async function openMemberDrawer(team) {
-  currentTeam.value = team
-  memberDrawerVisible.value = true
-  addMemberForm.userId = ''
-  addMemberForm.role = 'MEMBER'
-
-  // 并行加载成员列表和全部用户
-  memberLoading.value = true
-  try {
-    const [membersData, usersData] = await Promise.all([
-      getTeamMembers(team.id),
-      getUsers()
-    ])
-    members.value = membersData
-    allUsers.value = usersData
-  } catch (err) {
-    // 拦截器已处理
-  } finally {
-    memberLoading.value = false
-  }
+async function changeStatus(team) {
+  if (!userStore.isSuperAdmin || busy.value) return
+  const next = team.status === 'ARCHIVED' ? 'ACTIVE' : 'ARCHIVED'
+  try { await ElMessageBox.confirm(next === 'ARCHIVED' ? '归档「' + team.name + '」将冻结团队管理写入。成员、资源和标识均保留，不会自动停止 Mock 服务。' : '恢复「' + team.name + '」后将按原有成员角色开放管理写入，资源与标识不变。', next === 'ARCHIVED' ? '归档团队' : '恢复团队', { type: 'warning', confirmButtonText: next === 'ARCHIVED' ? '确认归档' : '确认恢复', cancelButtonText: '取消' }) } catch { return }
+  if (!userStore.isSuperAdmin || busy.value) return
+  busy.value = true; pendingTeamId.value = team.id; error.value = ''
+  try { await updateTeamStatus(team.id, next); ElMessage.success(next === 'ARCHIVED' ? '团队已归档；Mock 服务不会自动停止' : '团队已恢复'); await refreshAfterWrite() }
+  catch (err) { error.value = message(err) }
+  finally { busy.value = false; pendingTeamId.value = null }
 }
-
-// 添加成员
-async function handleAddMember() {
-  if (!addMemberForm.userId) return
-
-  try {
-    await addTeamMember(currentTeam.value.id, {
-      userId: addMemberForm.userId,
-      role: addMemberForm.role
-    })
-    ElMessage.success('成员已添加')
-    addMemberForm.userId = ''
-    addMemberForm.role = 'MEMBER'
-    // 刷新成员列表和团队列表（成员数变化）
-    const [membersData] = await Promise.all([
-      getTeamMembers(currentTeam.value.id),
-      loadTeams()
-    ])
-    members.value = membersData
-  } catch (err) {
-    // 拦截器已处理
-  }
-}
-
-// 修改成员角色
-async function handleChangeRole(member, newRole) {
-  try {
-    await updateMemberRole(currentTeam.value.id, member.userId, { role: newRole })
-    // 直接更新本地数据
-    member.role = newRole
-    ElMessage.success('角色已更新')
-  } catch (err) {
-    // 拦截器已处理
-  }
-}
-
-// 移除成员
-async function handleRemoveMember(member) {
-  try {
-    await ElMessageBox.confirm(
-      `确定移除成员「${member.displayName}」吗？`,
-      '移除确认',
-      { type: 'warning', confirmButtonText: '移除', cancelButtonText: '取消' }
-    )
-  } catch {
-    return
-  }
-
-  try {
-    await removeTeamMember(currentTeam.value.id, member.userId)
-    ElMessage.success('成员已移除')
-    // 刷新成员列表和团队列表
-    const [membersData] = await Promise.all([
-      getTeamMembers(currentTeam.value.id),
-      loadTeams()
-    ])
-    members.value = membersData
-  } catch (err) {
-    // 拦截器已处理
-  }
+async function enterTeam(team) {
+  if (!userStore.isSuperAdmin || busy.value) return
+  busy.value = true; error.value = ''
+  try { await appStore.loadTeams(); appStore.setFilter(team.id); await router.push('/team') }
+  catch (err) { error.value = message(err) }
+  finally { busy.value = false }
 }
 </script>
 
-<style lang="scss" scoped>
-// ========== 页面头部 ==========
-.page-header {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  margin-bottom: 24px;
-}
-
-// ========== 团队卡片网格 ==========
-.team-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 20px;
-}
-
-.team-card {
-  display: flex;
-  flex-direction: column;
-  cursor: default;
-
-  &__header {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 20px;
-  }
-
-  &__name {
-    font-size: 16px;
-    font-weight: 600;
-    color: #1B2559;
-  }
-
-  &__stats {
-    display: flex;
-    gap: 32px;
-    margin-bottom: 20px;
-    padding-bottom: 16px;
-    border-bottom: 1px solid #F1F5F9;
-  }
-}
-
-.stat-item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.stat-value {
-  font-size: 28px;
-  font-weight: 700;
-  color: #1B2559;
-  line-height: 1.2;
-}
-
-.stat-label {
-  font-size: 13px;
-  color: #A3AED0;
-}
-
-.team-card__actions {
-  display: flex;
-  gap: 4px;
-}
-
-// ========== 颜色选择器行 ==========
-.color-picker-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.color-preview-text {
-  font-size: 14px;
-  font-weight: 500;
-}
-
-// ========== 成员添加区域 ==========
-.member-add-section {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 20px;
-}
-
-.member-add-select {
-  flex: 1;
-}
-
-.member-add-role {
-  width: 140px;
-}
-
-// ========== 加载容器 ==========
-.loading-container {
-  padding: 40px 0;
-}
+<style scoped>
+.system-teams{height:100%;min-height:0;display:flex;flex-direction:column;gap:17px;color:#25292f;font-size:13px}.page-heading,.title-row,.toolbar,.card-heading,.card-actions,.search-row{display:flex;align-items:center;gap:12px}.page-heading,.card-heading{justify-content:space-between}.page-heading h1{font-size:26px;letter-spacing:-.7px;margin:0;font-weight:650}.page-heading p,.description{color:#7c8490;line-height:1.75;margin:6px 0 0}.panel{background:#fff;border-radius:17px;padding:21px;min-width:0}.notice{display:flex;align-items:center;gap:11px;background:#e9effa;color:#4f6790;border-radius:11px;padding:13px 16px;font-size:12px;line-height:1.75}.notice.error{background:#fff1ed;color:#a14736;justify-content:space-between}.badge{padding:5px 8px;font-size:11px;border-radius:7px;white-space:nowrap}.green{background:#edf7f2;color:#43846c}.muted{background:#f2f3f7;color:#808895}.toolbar{flex-wrap:wrap}.search{flex:1;min-width:170px;max-width:340px}.toolbar>select{width:auto;min-width:120px}.toolbar-count{margin-left:auto;color:#949ba5;font-size:12px}.cards-scroll{overflow:auto;flex:1;min-height:0;padding:1px}.team-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:16px}.team-card{display:flex;flex-direction:column;min-height:300px}.team-mark{padding:9px 11px;border-radius:9px;background:#f3f5f9;font:12px ui-monospace,monospace;max-width:150px;overflow:hidden;text-overflow:ellipsis}.team-card h2{font-size:17px;font-weight:600;margin:19px 0 0}.description{font-size:12px;min-height:42px;overflow-wrap:anywhere}.stats{display:flex;gap:30px;padding:20px 0}.stats div{display:flex;flex-direction:column;gap:4px}.stats b{font-size:24px;font-weight:600}.stats span{font-size:11px;color:#929aa5}.repair{display:flex;gap:8px;padding:10px 11px;border-radius:8px;background:#fff5e6;color:#99702e;font-size:11px;line-height:1.7;margin-bottom:15px}.archive-note{color:#89929f;font-size:11px;line-height:1.7;margin:0 0 14px}.card-actions{padding-top:16px;border-top:1px solid #f1f3f7;flex-wrap:wrap;margin-top:auto;gap:12px}.button{display:inline-flex;align-items:center;justify-content:center;gap:7px;background:#f1f4f8;color:#586272;border:0;border-radius:9px;padding:10px 14px;font:inherit;font-size:12px;cursor:pointer;white-space:nowrap}.button.primary{background:#1c1e22;color:white}.button:hover:not(:disabled){background:#e6ebf3}.button.primary:hover:not(:disabled){background:#34383f}.button:disabled,.text-button:disabled{opacity:.45;cursor:not-allowed}.text-button{border:0;background:none;color:#3568d4;cursor:pointer;font:inherit;font-size:12px;padding:4px 0}.page-foot{color:#929aa5;font-size:11px;line-height:1.8}.empty{min-height:230px;display:grid;place-content:center;justify-items:center;color:#8b94a1;text-align:center;gap:10px}.empty h2{font-size:17px;color:#4b5665;margin:0}.empty p{margin:0;font-size:12px}.create-layout{display:grid;grid-template-columns:minmax(0,1fr) 225px;gap:24px}.team-form{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-content:start}.team-form label{font-size:12px;color:#546071;display:flex;flex-direction:column;gap:8px}.wide{grid-column:1/-1}.team-form em{font-style:normal;color:#be6b58}.team-form small{font-size:11px;color:#8b95a4;font-weight:400;line-height:1.7}input,select,textarea{box-sizing:border-box;width:100%;border:1px solid transparent;border-radius:8px;background:#f5f6f9;padding:10px 11px;color:#3e4857;outline:none;font:inherit;font-size:12px}input:focus,textarea:focus,select:focus{border-color:#95afe9}input:disabled{color:#9aa3af;cursor:not-allowed}input[type=color]{width:65px;height:38px;padding:4px}.admin-search>label{margin-bottom:8px}.admin-result{display:flex;gap:9px;flex-wrap:wrap;align-items:center;min-height:52px;padding:12px;background:#f5f7fa;border-radius:9px;margin:13px 0;color:#818c9b;font-size:12px}.mono,.identifier{font-family:ui-monospace,monospace;font-size:11px}.preview{padding:22px;background:#f5f7fa;border-radius:12px;line-height:1.8;color:#8490a1;font-size:12px}.preview h3{font-size:17px;font-weight:500;color:#3f4b5c;margin:13px 0}.preview .identifier{background:#e8edf6;color:#4e6fa4;padding:6px 9px;border-radius:6px}.preview p{margin:18px 0;overflow-wrap:anywhere}.preview hr{border:0;border-top:1px solid #e8edf4;margin:23px 0}.preview b{font-weight:500;color:#64758e}:global(.system-team-dialog){box-shadow:none!important;border-radius:16px}:global(.system-team-dialog .el-dialog__footer){display:flex;justify-content:flex-end;gap:8px}
+@media(max-width:900px){.team-grid{grid-template-columns:repeat(auto-fill,minmax(250px,1fr))}.create-layout{grid-template-columns:1fr}.preview{display:none}}@media(max-width:620px){.page-heading{align-items:flex-start;gap:10px}.title-row{flex-wrap:wrap;gap:7px}.page-heading h1{font-size:22px}.page-heading p{font-size:11px}.team-form{grid-template-columns:1fr}.notice{align-items:flex-start}.team-grid{grid-template-columns:1fr}}
 </style>
