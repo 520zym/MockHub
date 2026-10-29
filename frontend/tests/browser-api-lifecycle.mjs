@@ -4,17 +4,19 @@ import os from 'node:os'
 import { spawn } from 'node:child_process'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { build } from 'vite'
+import { runListChecks } from './browser-api-list-checks.mjs'
 
 // Real components/Element Plus; request transport is intentionally stubbed. No backend or HTTP server starts here.
 const frontend = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const root = path.join(frontend, 'tests/fixtures/api-lifecycle')
+const view = process.argv.find(arg => arg.startsWith('--view='))?.slice(7) || 'history'
 const out = '/tmp/mockhub-api-ui-fixture'
 const output = process.argv.find(arg => arg.startsWith('--output='))?.slice(9) || '/tmp/mockhub-api-ui-artifacts'
 if (path.resolve(out) !== '/tmp/mockhub-api-ui-fixture') throw new Error('Unexpected fixture build output')
 console.log('Rebuild isolated fixture output:', out)
 await fs.mkdir(output, { recursive: true })
-const stub = path.join(root, 'request-stub.js'), realRequest = path.join(frontend, 'src/api/request')
-await build({ configFile: false, root, base: './', plugins: [(await import('@vitejs/plugin-vue')).default(), { name: 'explicit-api-fixture', enforce: 'pre', resolveId(source, importer) { const candidate = source.startsWith('.') && importer ? path.resolve(path.dirname(importer.split('?')[0]), source) : source; if (source === '@/api/request' || candidate === realRequest || candidate === realRequest + '.js') return stub } }], resolve: { alias: [{ find: '@', replacement: path.join(frontend, 'src') }, { find: 'vue', replacement: path.join(frontend, 'node_modules/vue/dist/vue.esm-bundler.js') }] }, build: { outDir: out, emptyOutDir: true, chunkSizeWarningLimit: 1400 }, logLevel: 'warn' })
+const stub = path.join(root, 'request-stub.js'), realRequest = path.join(frontend, 'src/api/request'), settingsStub = path.join(root, 'settings-stub.js'), realSettings = path.join(frontend, 'src/api/settings')
+await build({ configFile: false, root, base: './', plugins: [(await import('@vitejs/plugin-vue')).default(), { name: 'explicit-api-fixture', enforce: 'pre', resolveId(source, importer) { const candidate = source.startsWith('.') && importer ? path.resolve(path.dirname(importer.split('?')[0]), source) : source; if (source === '@/api/request' || candidate === realRequest || candidate === realRequest + '.js') return stub; if (source === '@/api/settings' || candidate === realSettings || candidate === realSettings + '.js') return settingsStub } }], resolve: { alias: [{ find: '@', replacement: path.join(frontend, 'src') }, { find: 'vue', replacement: path.join(frontend, 'node_modules/vue/dist/vue.esm-bundler.js') }] }, build: { outDir: out, emptyOutDir: true, chunkSizeWarningLimit: 1400 }, logLevel: 'warn' })
 const chrome = process.env.CHROME || path.join(os.homedir(), 'Library/Caches/ms-playwright/chromium_headless_shell-1223/chrome-headless-shell-mac-arm64/chrome-headless-shell')
 const browser = spawn(chrome, ['--no-sandbox', '--headless', '--disable-gpu', '--allow-file-access-from-files', '--remote-debugging-pipe', '--no-first-run', '--no-default-browser-check'], { stdio: ['ignore', 'ignore', 'pipe', 'pipe', 'pipe'] })
 let nextId = 0, buffer = Buffer.alloc(0), stderr = '', session, expectedUrl = '', frameUrl = '', loadedResolve
@@ -33,9 +35,10 @@ try {
   const target = await cdp('Target.createTarget', { url: 'about:blank' }, null); session = (await cdp('Target.attachToTarget', { targetId: target.targetId, flatten: true }, null)).sessionId
   await cdp('Page.enable'); await cdp('Runtime.enable'); await cdp('Network.enable')
   await cdp('Emulation.setDeviceMetricsOverride', { width: 1440, height: 960, deviceScaleFactor: 1, mobile: false })
-  expectedUrl = pathToFileURL(path.join(out, 'index.html')).href
+  const pageUrl = pathToFileURL(path.join(out, 'index.html')); if(view!=='history')pageUrl.searchParams.set('view',view); expectedUrl = pageUrl.href
   const loaded = new Promise((resolve, reject) => { const timer = setTimeout(() => reject(new Error('Fixture page did not load')), 15000); loadedResolve = () => { clearTimeout(timer); resolve() } })
   await cdp('Page.navigate', { url: expectedUrl }); await loaded
+  if(view === 'history') {
   await waitFor('window.fixture && document.querySelectorAll(".comparison-group").length >= 4')
   check('fixture explicitly declares API stubbing', await evaluate('window.fixture.apiStub === true'))
   check('actual history groups include body, rules, SOAP and attachments', await evaluate('["响应正文","conditions","SOAP","附件元信息"].every(t=>document.body.innerText.includes(t))'))
@@ -62,6 +65,7 @@ try {
   await evaluate('window.fixture.close();window.fixture.conflict(false)'); await waitFor('!document.querySelector(".comparison-heading")'); await evaluate('window.fixture.open()'); await waitFor('document.querySelectorAll(".comparison-group").length >= 4')
   await click('回滚到', true); await click('确认回滚'); await waitFor('document.querySelector("#fixture-changed").textContent.trim()==="1"')
   check('successful rollback emits new revision and closes the drawer', await evaluate('window.fixture.state.revisions["api-a"]===4'))
+  } else { await runListChecks({ cdp, evaluate, waitFor, click, check, screenshot }) }
   check('no browser JavaScript exceptions', exceptions.length === 0); check('no failed fixture resources', resourceErrors.length === 0)
   await fs.writeFile(path.join(output, 'report.json'), JSON.stringify({ apiStub: true, backendIntegration: false, passed: true, checks, screenshots, exceptions, resourceErrors }, null, 2))
   console.log(JSON.stringify({ passed: true, apiStub: true, checks: checks.length, screenshots, output }, null, 2))
