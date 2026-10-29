@@ -14,6 +14,15 @@ import java.util.Map;
  */
 public class ApiDefinitionDetailVO {
 
+    private String createdByName;
+    public String getCreatedByName() { return createdByName; }
+    public void setCreatedByName(String value) { createdByName=value; }
+    private String updatedByName;
+    public String getUpdatedByName() { return updatedByName; }
+    public void setUpdatedByName(String value) { updatedByName=value; }
+    private long revision = 1;
+    public long getRevision() { return revision; }
+    public void setRevision(long revision) { this.revision = revision; }
     private String id;
     private String teamId;
     private String groupId;

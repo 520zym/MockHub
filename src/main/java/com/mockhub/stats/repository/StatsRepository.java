@@ -41,7 +41,7 @@ public class StatsRepository {
      * @return 启用接口数
      */
     public long countEnabledApis(String teamId) {
-        String sql = "SELECT COUNT(*) FROM api_definition WHERE enabled = 1";
+        String sql = "SELECT COUNT(*) FROM api_definition WHERE deleted_at IS NULL AND enabled = 1";
         Long count;
         if (teamId == null) {
             count = jdbcTemplate.queryForObject(sql, Long.class);
@@ -138,7 +138,7 @@ public class StatsRepository {
                 "       ad.name AS name, " +
                 "       COUNT(*) AS cnt " +
                 "FROM request_log rl " +
-                "LEFT JOIN api_definition ad ON ad.id = rl.api_id " +
+                "JOIN api_definition ad ON ad.id = rl.api_id AND ad.deleted_at IS NULL " +
                 "LEFT JOIN team t ON t.id = ad.team_id " +
                 "WHERE rl.created_at >= ? AND rl.api_id IS NOT NULL ");
         List<Object> args = new ArrayList<Object>();
@@ -190,7 +190,7 @@ public class StatsRepository {
                 "       ad.hit_count AS hit_count " +
                 "FROM api_definition ad " +
                 "LEFT JOIN team t ON t.id = ad.team_id " +
-                "WHERE ad.enabled = 1 " +
+                "WHERE ad.deleted_at IS NULL AND ad.enabled = 1 " +
                 "  AND (ad.last_called_at IS NULL OR ad.last_called_at < ?) ");
         List<Object> args = new ArrayList<Object>();
         args.add(threshold);
@@ -230,7 +230,7 @@ public class StatsRepository {
      */
     public long countZombieApis(String teamId, String threshold) {
         String sql = "SELECT COUNT(*) FROM api_definition " +
-                "WHERE enabled = 1 AND (last_called_at IS NULL OR last_called_at < ?)";
+                "WHERE deleted_at IS NULL AND enabled = 1 AND (last_called_at IS NULL OR last_called_at < ?)";
         Long count;
         if (teamId == null) {
             count = jdbcTemplate.queryForObject(sql, Long.class, threshold);

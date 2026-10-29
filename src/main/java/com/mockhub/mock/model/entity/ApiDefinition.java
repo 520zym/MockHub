@@ -10,6 +10,9 @@ package com.mockhub.mock.model.entity;
 public class ApiDefinition {
 
     /** 接口 ID（UUID） */
+    private long revision = 1;
+    public long getRevision() { return revision; }
+    public void setRevision(long revision) { this.revision = revision; }
     private String id;
 
     /** 所属团队 ID */

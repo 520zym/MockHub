@@ -52,14 +52,15 @@ class ApiControllerSaveResponseTest {
 
         MockHttpServletRequestBuilder request = update ? put("/api/apis/api-1") : post("/api/apis");
         MockHttpServletResponse response = mvc.perform(request.contentType(MediaType.APPLICATION_JSON)
-                .content("{\"name\":\"大返回体接口\"}"))
+                .content("{\"name\":\"大返回体接口\",\"expectedRevision\":1}"))
                 .andExpect(status().isOk()).andReturn().getResponse();
         byte[] bytes = response.getContentAsByteArray();
         assertTrue(bytes.length < 1024, "保存响应应小于 1 KB，不应回传 5 MB 响应体");
         JsonNode result = new ObjectMapper().readTree(bytes);
         assertEquals(0, result.path("code").asInt());
         JsonNode data = result.path("data");
-        assertEquals(6, data.size());
+        assertEquals(7, data.size());
+        assertEquals(1,data.path("revision").asLong());
         assertEquals("api-1", data.path("id").asText());
         assertEquals("大返回体接口", data.path("name").asText());
         assertEquals("/large", data.path("path").asText());

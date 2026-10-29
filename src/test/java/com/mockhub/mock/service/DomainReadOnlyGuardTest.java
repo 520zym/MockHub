@@ -67,6 +67,7 @@ class DomainReadOnlyGuardTest {
         UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken("u", null, Collections.emptyList());
         auth.setDetails(details); SecurityContextHolder.getContext().setAuthentication(auth);
         apis = mock(ApiRepository.class); responses = mock(ApiResponseRepository.class);
+        when(apis.write(any())).thenAnswer(invocation -> ((java.util.function.Supplier<?>)invocation.getArgument(0)).get());
         apiTags = mock(ApiTagRepository.class); groups = mock(GroupRepository.class); tags = mock(TagRepository.class);
         service = new ApiServiceImpl(apis, responses, apiTags, groups, tags, mock(TeamService.class), permission,
                 new ObjectMapper(), mock(LogService.class), users, mock(MockFileStorageService.class));

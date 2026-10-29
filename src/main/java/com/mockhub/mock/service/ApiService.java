@@ -16,6 +16,8 @@ import java.util.List;
  * 提供接口 CRUD、路径匹配、启用/禁用、复制等功能。
  */
 public interface ApiService {
+    java.util.List<java.util.Map<String,Object>> revisions(String id);
+    java.util.Map<String,Object> revision(String id,String revisionId);
 
     /**
      * 查找匹配的接口定义（Mock 分发时调用）
@@ -58,6 +60,8 @@ public interface ApiService {
      * @return 接口定义详情（含所有字段、返回体列表、标签列表）
      */
     ApiDefinitionDetailVO getById(String id);
+    PageResult<ApiDefinitionVO> list(String teamId,String groupId,String method,Boolean enabled,String keyword,
+            List<String> tagIds,String type,String sortBy,String sortDir,int page,int size,String createdBy);
 
     /**
      * 创建接口
@@ -85,6 +89,7 @@ public interface ApiService {
      * @return 更新后的接口定义
      */
     ApiDefinition updateResponseBody(String apiId, String responseId, String body);
+    ApiDefinition updateResponseBody(String apiId,String responseId,String body,Long expectedRevision);
 
     /**
      * 删除接口
@@ -92,6 +97,7 @@ public interface ApiService {
      * @param id 接口 ID
      */
     void delete(String id);
+    void delete(String id, Long expectedRevision);
 
     /**
      * 复制接口
@@ -102,6 +108,7 @@ public interface ApiService {
      * @return 新创建的接口定义
      */
     ApiDefinition copy(String id);
+    ApiDefinition copy(String id,Long expectedRevision);
 
     /**
      * 切换启用/禁用状态
@@ -110,6 +117,7 @@ public interface ApiService {
      * @return 新的启用状态
      */
     boolean toggle(String id);
+    boolean toggle(String id, Long expectedRevision);
 
     /**
      * 批量操作（启用/禁用/删除/移动分组）
@@ -123,6 +131,7 @@ public interface ApiService {
      * @return 实际处理的接口数量
      */
     BatchApiResult batch(String action, List<String> ids, String targetGroupId);
+    BatchApiResult batch(String action,List<String> ids,String targetGroupId,java.util.Map<String,Long> expectedRevisions);
 
     /**
      * 路径冲突预检（编辑页实时校验用）

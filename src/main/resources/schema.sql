@@ -108,6 +108,10 @@ CREATE TABLE IF NOT EXISTS api_definition (
     created_at             TEXT NOT NULL,
     updated_at             TEXT NOT NULL,
     updated_by             TEXT,
+    revision               INTEGER NOT NULL DEFAULT 1 CHECK(revision >= 1),
+    deleted_at             TEXT,
+    deleted_by             TEXT,
+    purge_after            TEXT,
     FOREIGN KEY (team_id)  REFERENCES team(id) ON DELETE CASCADE,
     FOREIGN KEY (group_id) REFERENCES api_group(id) ON DELETE SET NULL,
     FOREIGN KEY (created_by) REFERENCES user(id) ON DELETE SET NULL,
@@ -116,13 +120,29 @@ CREATE TABLE IF NOT EXISTS api_definition (
 
 -- 同团队内 path + method 唯一
 CREATE UNIQUE INDEX IF NOT EXISTS idx_api_definition_team_path_method
-    ON api_definition(team_id, path, method);
+    ON api_definition(team_id, path, method) WHERE deleted_at IS NULL;
 
 CREATE INDEX IF NOT EXISTS idx_api_definition_team_id ON api_definition(team_id);
 CREATE INDEX IF NOT EXISTS idx_api_definition_group_id ON api_definition(group_id);
 CREATE INDEX IF NOT EXISTS idx_api_definition_enabled ON api_definition(team_id, enabled);
 -- 注意：last_called_at 索引由 migrateV3 创建，避免老库 schema.sql 早于
 -- migrateV3 执行时该列尚不存在导致 CREATE INDEX 失败
+
+-- ========== 接口生命周期 ==========
+
+CREATE TABLE IF NOT EXISTS api_revision (
+    id TEXT PRIMARY KEY, api_id TEXT NOT NULL, team_id TEXT NOT NULL, revision INTEGER NOT NULL,
+    action TEXT NOT NULL, actor_id TEXT, actor_name_snapshot TEXT NOT NULL, created_at TEXT NOT NULL,
+    source TEXT NOT NULL, snapshot_json TEXT NOT NULL, snapshot_schema_version INTEGER NOT NULL DEFAULT 1,
+    restored_from_revision_id TEXT, UNIQUE(api_id, revision)
+);
+CREATE INDEX IF NOT EXISTS idx_api_revision_api ON api_revision(api_id, revision DESC);
+CREATE TABLE IF NOT EXISTS api_lifecycle_lock (id INTEGER PRIMARY KEY CHECK(id=1), marker INTEGER NOT NULL DEFAULT 0);
+INSERT OR IGNORE INTO api_lifecycle_lock(id,marker) VALUES(1,0);
+CREATE TABLE IF NOT EXISTS mock_blob (file_path TEXT PRIMARY KEY, team_id TEXT NOT NULL, lease_expires_at INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS mock_blob_ref (file_path TEXT NOT NULL, owner_type TEXT NOT NULL, owner_id TEXT NOT NULL,
+    expires_at INTEGER, PRIMARY KEY(file_path,owner_type,owner_id));
+CREATE INDEX IF NOT EXISTS idx_mock_blob_ref_owner ON mock_blob_ref(owner_type,owner_id);
 
 -- ========== 标签 ==========
 

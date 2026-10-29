@@ -141,7 +141,7 @@ class SchemaVersionMigrationTest {
      */
     private void setupFullSchema() throws Exception {
         execSql(
-                "CREATE TABLE api_definition (id TEXT PRIMARY KEY, type TEXT, " +
+                "CREATE TABLE api_definition (id TEXT PRIMARY KEY, team_id TEXT DEFAULT 'legacy', name TEXT DEFAULT 'Legacy', method TEXT, path TEXT, type TEXT, " +
                         "response_code INTEGER, content_type TEXT, response_body TEXT, " +
                         "delay_ms INTEGER, soap_config TEXT, created_at TEXT, updated_at TEXT, " +
                         "description TEXT)",
@@ -164,7 +164,7 @@ class SchemaVersionMigrationTest {
     private void setupV143LegacyDbWithData() throws Exception {
         execSql(
                 // 老 api_definition（不含 description 列）
-                "CREATE TABLE api_definition (id TEXT PRIMARY KEY, type TEXT, " +
+                "CREATE TABLE api_definition (id TEXT PRIMARY KEY, team_id TEXT DEFAULT 'legacy', name TEXT DEFAULT 'Legacy', method TEXT, path TEXT, type TEXT, " +
                         "response_code INTEGER, content_type TEXT, response_body TEXT, " +
                         "delay_ms INTEGER, soap_config TEXT, created_at TEXT, updated_at TEXT)",
                 // api_response 由 schema.sql 建出
@@ -198,7 +198,7 @@ class SchemaVersionMigrationTest {
 
         runMigration();
 
-        assertEquals(9, readSchemaVersion(), "全新库应记录 schema_version=9（v1 至 v9）");
+        assertEquals(10, readSchemaVersion(), "全新库应记录 schema_version=10（v1 至 v10）");
         assertTrue(columnExists("api_definition", "description"),
                 "description 列应已存在（全新库 schema.sql 已建出）");
         assertTrue(columnExists("api_definition", "group_id"),
@@ -232,7 +232,7 @@ class SchemaVersionMigrationTest {
 
         runMigration();
 
-        assertEquals(9, readSchemaVersion(), "兼容补列不应改变 schema_version");
+        assertEquals(10, readSchemaVersion(), "兼容补列不应改变 schema_version");
         assertTrue(columnExists("ai_settings", "vendor"), "旧 v7 库缺 vendor 时应自动补列");
         assertTrue(columnExists("api_response", "conditions"), "旧库缺 conditions 时应自动补列");
         assertTrue(columnExists("api_definition", "scenarios"), "旧库缺 scenarios 时应自动补列");
@@ -247,12 +247,12 @@ class SchemaVersionMigrationTest {
         execSql("INSERT INTO schema_version(version,description) VALUES(7,'old v7')");
         runMigration();
         schema.invoke(config, jdbc);
-        assertEquals(9, readSchemaVersion());
+        assertEquals(10, readSchemaVersion());
         assertEquals("ACTIVE", jdbc.queryForObject("SELECT status FROM user WHERE id='legacy'", String.class));
         assertEquals(0, jdbc.queryForObject("SELECT auth_version FROM user WHERE id='legacy'", Integer.class));
         assertTrue(columnExists("auth_session", "expires_at"));
         runMigration();
-        assertEquals(3, countSchemaVersionRows());
+        assertEquals(4, countSchemaVersionRows());
     }
 
     @Test
@@ -292,7 +292,7 @@ class SchemaVersionMigrationTest {
                 "INSERT INTO user_team VALUES('legacy','orphan','MEMBER')");
         runMigration();
         runMigration();
-        assertEquals(9, readSchemaVersion());
+        assertEquals(10, readSchemaVersion());
         assertTrue(columnExists("team", "status"));
         assertTrue(columnExists("team", "description"));
         try (Connection conn = dataSource.getConnection(); Statement st = conn.createStatement()) {
@@ -307,6 +307,27 @@ class SchemaVersionMigrationTest {
                 assertTrue(rs.next()); assertEquals(1, rs.getInt(1));
             }
         }
+    }
+
+    @Test
+    void v10ReplacesWholePathIndexAndCapturesOnlyTruthfulUpgradeBaseline() throws Exception {
+        setupFullSchema();
+        execSql("INSERT INTO api_definition(id,team_id,name,method,path,type,response_body,created_at,updated_at) "
+                        + "VALUES('api','legacy','Old','GET','/reuse','REST','old-body','original-created','original-updated')",
+                "CREATE UNIQUE INDEX idx_api_definition_team_path_method ON api_definition(team_id,path,method)");
+        runMigration();runMigration();
+        org.springframework.jdbc.core.JdbcTemplate jdbc=new org.springframework.jdbc.core.JdbcTemplate(dataSource);
+        String index=jdbc.queryForObject("SELECT sql FROM sqlite_master WHERE name='idx_api_definition_team_path_method'",String.class);
+        assertTrue(index.contains("WHERE deleted_at IS NULL"));
+        assertEquals(1,jdbc.queryForObject("SELECT COUNT(*) FROM api_revision WHERE api_id='api'",Integer.class));
+        assertEquals("MIGRATION_BASELINE",jdbc.queryForObject("SELECT action FROM api_revision WHERE api_id='api'",String.class));
+        org.junit.jupiter.api.Assertions.assertNull(jdbc.queryForObject("SELECT actor_id FROM api_revision WHERE api_id='api'",String.class));
+        assertEquals("original-updated",jdbc.queryForObject("SELECT updated_at FROM api_definition WHERE id='api'",String.class));
+        assertTrue(jdbc.queryForObject("SELECT snapshot_json FROM api_revision WHERE api_id='api'",String.class).contains("old-body"));
+        execSql("UPDATE api_definition SET deleted_at='now' WHERE id='api'",
+                "INSERT INTO api_definition(id,team_id,name,method,path) VALUES('replacement','legacy','New','GET','/reuse')");
+        runMigration();
+        assertEquals(2,jdbc.queryForObject("SELECT COUNT(*) FROM api_definition",Integer.class));
     }
 
     // ---------- case2：v1.4.3 发版老库 ----------
@@ -328,7 +349,7 @@ class SchemaVersionMigrationTest {
                 "api_response.body_type 列应在 v4 迁移后存在");
         assertTrue(columnExists("api_definition", "response_mode"),
                 "api_definition.response_mode 列应在 v5 迁移后存在");
-        assertEquals(9, readSchemaVersion(), "迁移完成后 schema_version 应记为 9（v1 至 v9）");
+        assertEquals(10, readSchemaVersion(), "迁移完成后 schema_version 应记为 10（v1 至 v10）");
     }
 
     // ---------- case3：已跑过 soap-mock-enhancement 的本地库 ----------
@@ -351,7 +372,7 @@ class SchemaVersionMigrationTest {
         runMigration();
 
         assertEquals(1, countApiResponse(), "已迁移的数据不应被重复插入");
-        assertEquals(9, readSchemaVersion());
+        assertEquals(10, readSchemaVersion());
     }
 
     // ---------- case4：二次启动幂等 ----------
@@ -366,8 +387,8 @@ class SchemaVersionMigrationTest {
 
         assertEquals(firstRunResponseCount, countApiResponse(),
                 "二次迁移不应新增 api_response 数据");
-        assertEquals(9, readSchemaVersion());
-        assertEquals(9, countSchemaVersionRows(),
+        assertEquals(10, readSchemaVersion());
+        assertEquals(10, countSchemaVersionRows(),
                 "schema_version 应有六条记录：version=1 至 7，二次执行不重复写入");
     }
 }

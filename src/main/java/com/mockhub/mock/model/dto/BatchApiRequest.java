@@ -14,6 +14,9 @@ import java.util.List;
  * </ul>
  */
 public class BatchApiRequest {
+    private java.util.Map<String,Long> expectedRevisions;
+    public java.util.Map<String,Long> getExpectedRevisions() { return expectedRevisions; }
+    public void setExpectedRevisions(java.util.Map<String,Long> versions) { expectedRevisions=versions; }
 
     /** 操作类型 */
     private String action;

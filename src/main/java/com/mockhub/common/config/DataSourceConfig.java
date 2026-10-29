@@ -215,9 +215,12 @@ public class DataSourceConfig {
                     migrateV9(conn);
                     recordSchemaVersion(conn, 9, "团队角色、归档状态与管理员安全写锁");
                 }
-                // 后续版本从 V10 追加。
-
                 ensureCompatibilityColumns(conn);
+                ensureLifecycleSchema(conn);
+                if (current < 10) {
+                    migrateV10(conn);
+                    recordSchemaVersion(conn, 10, "接口聚合版本、并发校验与30天回收站");
+                }
                 conn.commit();
                 log.info("DB 迁移完成");
             } catch (Exception e) {
@@ -483,6 +486,47 @@ public class DataSourceConfig {
                 {"tool_explain_match_result", "INTEGER NOT NULL DEFAULT 1"},
                 {"updated_at", "TEXT"}, {"updated_by", "TEXT"}
         });
+    }
+
+    private void ensureLifecycleSchema(Connection conn) throws SQLException {
+        addColumnIfNotExists(conn, "api_definition", "revision", "INTEGER NOT NULL DEFAULT 1 CHECK(revision >= 1)");
+        addColumnIfNotExists(conn, "api_definition", "deleted_at", "TEXT");
+        addColumnIfNotExists(conn, "api_definition", "deleted_by", "TEXT");
+        addColumnIfNotExists(conn, "api_definition", "purge_after", "TEXT");
+        if (tableExists(conn, "ai_pending_action")) addColumnIfNotExists(conn,"ai_pending_action","base_revision","INTEGER");
+        try (Statement st=conn.createStatement()) {
+            st.execute("CREATE TABLE IF NOT EXISTS api_revision (\n    id TEXT PRIMARY KEY, api_id TEXT NOT NULL, team_id TEXT NOT NULL, revision INTEGER NOT NULL,\n    action TEXT NOT NULL, actor_id TEXT, actor_name_snapshot TEXT NOT NULL, created_at TEXT NOT NULL,\n    source TEXT NOT NULL, snapshot_json TEXT NOT NULL, snapshot_schema_version INTEGER NOT NULL DEFAULT 1,\n    restored_from_revision_id TEXT, UNIQUE(api_id, revision)\n)");
+            st.execute("CREATE INDEX IF NOT EXISTS idx_api_revision_api ON api_revision(api_id, revision DESC)");
+            st.execute("CREATE TABLE IF NOT EXISTS api_lifecycle_lock (id INTEGER PRIMARY KEY CHECK(id=1), marker INTEGER NOT NULL DEFAULT 0)");
+            st.execute("INSERT OR IGNORE INTO api_lifecycle_lock(id,marker) VALUES(1,0)");
+            st.execute("CREATE TABLE IF NOT EXISTS mock_blob (file_path TEXT PRIMARY KEY, team_id TEXT NOT NULL, lease_expires_at INTEGER NOT NULL DEFAULT 0)");
+            st.execute("CREATE TABLE IF NOT EXISTS mock_blob_ref (file_path TEXT NOT NULL, owner_type TEXT NOT NULL, owner_id TEXT NOT NULL,\n    expires_at INTEGER, PRIMARY KEY(file_path,owner_type,owner_id))");
+            st.execute("CREATE INDEX IF NOT EXISTS idx_mock_blob_ref_owner ON mock_blob_ref(owner_type,owner_id)");
+            st.execute("CREATE TRIGGER IF NOT EXISTS api_revision_immutable BEFORE UPDATE ON api_revision "
+                    + "BEGIN SELECT RAISE(ABORT,'Published API revisions are immutable'); END");
+            st.execute("SELECT id,api_id,team_id,revision,action,actor_id,actor_name_snapshot,created_at,source,snapshot_json,"
+                    + "snapshot_schema_version,restored_from_revision_id FROM api_revision LIMIT 0");
+            st.execute("DROP INDEX IF EXISTS idx_api_definition_team_path_method");
+            st.execute("CREATE UNIQUE INDEX idx_api_definition_team_path_method ON api_definition(team_id,path,method) WHERE deleted_at IS NULL");
+        }
+    }
+
+    private void migrateV10(Connection conn) throws SQLException {
+        java.util.List<java.util.Map<String,Object>> apis = com.mockhub.mock.lifecycle.ApiSnapshot.query(conn,
+                "SELECT id,team_id,revision FROM api_definition");
+        for (java.util.Map<String,Object> api : apis) {
+            String id = api.get("id").toString();
+            String snapshot = com.mockhub.mock.lifecycle.ApiSnapshot.capture(conn,id);
+            String revisionId=UUID.randomUUID().toString();
+            try (PreparedStatement ps=conn.prepareStatement("INSERT OR IGNORE INTO api_revision "
+                    + "(id,api_id,team_id,revision,action,actor_name_snapshot,created_at,source,snapshot_json) "
+                    + "VALUES(?,?,?,?, 'MIGRATION_BASELINE','系统迁移',?,'MIGRATION',?)")) {
+                ps.setString(1,revisionId); ps.setString(2,id);
+                ps.setObject(3,api.get("team_id")); ps.setObject(4,api.get("revision"));
+                ps.setString(5,java.time.Instant.now().toString()); ps.setString(6,snapshot); ps.executeUpdate();
+                com.mockhub.mock.lifecycle.ApiSnapshot.protectBlobs(conn,api.get("team_id").toString(),id,revisionId,snapshot);
+            }
+        }
     }
 
     private void ensureColumns(Connection conn, String table, String[][] columns) throws SQLException {

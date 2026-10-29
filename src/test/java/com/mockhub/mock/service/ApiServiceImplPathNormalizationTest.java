@@ -44,6 +44,10 @@ class ApiServiceImplPathNormalizationTest {
     @BeforeEach
     void setUp() {
         apiRepository = mock(ApiRepository.class);
+        when(apiRepository.write(org.mockito.ArgumentMatchers.any())).thenAnswer(invocation ->
+                ((java.util.function.Supplier<?>)invocation.getArgument(0)).get());
+        when(apiRepository.claimRevision(org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.anyLong(),
+                org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.anyString())).thenReturn(1);
         apiResponseRepository = mock(ApiResponseRepository.class);
         groupRepository = mock(GroupRepository.class);
         permissionChecker = mock(PermissionChecker.class);
@@ -268,6 +272,7 @@ class ApiServiceImplPathNormalizationTest {
 
     private ApiDefinitionDTO newDto(String path) {
         ApiDefinitionDTO dto = new ApiDefinitionDTO();
+        dto.setExpectedRevision(1L);
         dto.setTeamId("team-1");
         dto.setType("REST");
         dto.setName("用户信息");

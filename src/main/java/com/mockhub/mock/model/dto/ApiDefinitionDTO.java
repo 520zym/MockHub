@@ -8,6 +8,9 @@ import java.util.Map;
  * 接口定义创建/更新请求体
  */
 public class ApiDefinitionDTO {
+    private Long expectedRevision;
+    public Long getExpectedRevision() { return expectedRevision; }
+    public void setExpectedRevision(Long expectedRevision) { this.expectedRevision = expectedRevision; }
 
     /** 所属团队 ID */
     private String teamId;

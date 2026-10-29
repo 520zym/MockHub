@@ -54,7 +54,7 @@ class ApiRepositoryTest {
                         + "response_mode TEXT NOT NULL DEFAULT 'CONDITION', "
                         + "hit_count INTEGER NOT NULL DEFAULT 0, last_called_at TEXT, "
                         + "created_by TEXT, created_at TEXT NOT NULL, "
-                        + "updated_at TEXT NOT NULL, updated_by TEXT)"
+                        + "updated_at TEXT NOT NULL, updated_by TEXT, revision INTEGER NOT NULL DEFAULT 1, deleted_at TEXT, deleted_by TEXT, purge_after TEXT)"
         );
 
         // 插入 3 条数据：name 字典序 Alpha < Bravo < Charlie；
