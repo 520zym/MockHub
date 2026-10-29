@@ -2,7 +2,7 @@
   <div class="response-tabs">
     <div class="response-mode-bar">
       <span class="response-mode-label">选择方式</span>
-      <el-radio-group :model-value="normalizedSelectionMode" size="small" @change="changeSelectionMode">
+      <el-radio-group :model-value="normalizedSelectionMode" :disabled="readOnly" size="small" @change="changeSelectionMode">
         <el-radio-button value="CONDITION">按条件匹配</el-radio-button>
         <el-radio-button value="RANDOM">等概率随机</el-radio-button>
       </el-radio-group>
@@ -51,9 +51,9 @@
           autofocus
         />
       </div>
-      <div class="tab-add" @click="addResponse">
+      <button v-if="!readOnly" type="button" class="tab-add" @click="addResponse" aria-label="添加返回体">
         <el-icon><Plus /></el-icon>
-      </div>
+      </button>
     </div>
 
     <!-- 当前 Tab 内容 -->
@@ -66,6 +66,7 @@
         :team-id="teamId"
         :api-context="apiContext"
         :response-name="currentResponse.name"
+        :read-only="readOnly"
       />
       <el-alert
         v-else
@@ -75,7 +76,7 @@
         title="随机模式会忽略本返回体已保存的命中条件。切回按条件匹配时，原条件会继续保留。"
         class="random-mode-alert"
       />
-      <el-form label-position="top">
+      <el-form label-position="top" :disabled="readOnly">
         <el-row :gutter="16">
           <!-- 名称 -->
           <el-col :span="6">
@@ -217,7 +218,7 @@
             </div>
           </el-popover>
           <el-button
-            v-if="aiStore.capabilities.responseBody"
+            v-if="!readOnly && aiStore.capabilities.responseBody"
             size="small"
             class="ai-gen-btn"
             @click="aiDrawerVisible = true"
@@ -235,6 +236,7 @@
           v-model="currentResponse.responseBody"
           :language="currentEditorLanguage"
           :dynamic-variables="combinedVariablesForEditor"
+          :read-only="readOnly"
           class="response-editor"
         />
         <div v-else-if="!isCurrentFileResponse" class="oversize-preview">
@@ -247,7 +249,7 @@
           <div class="oversize-actions">
             <el-button type="primary" @click="openFullEditor">
               <el-icon><EditPen /></el-icon>
-              全文编辑
+              {{ readOnly ? '全文查看' : '全文编辑' }}
             </el-button>
           </div>
         </div>
@@ -292,7 +294,7 @@
         class="full-editor-dialog"
       >
         <div class="full-editor-toolbar">
-          <el-button size="small" @click="formatDraftBody">
+          <el-button v-if="!readOnly" size="small" @click="formatDraftBody">
             <el-icon><MagicStick /></el-icon>
             格式化
           </el-button>
@@ -306,11 +308,12 @@
           v-model="fullEditorDraft"
           :language="currentEditorLanguage"
           :dynamic-variables="combinedVariablesForEditor"
+          :read-only="readOnly"
           class="full-editor-monaco"
         />
         <template #footer>
           <el-button @click="cancelFullEditor">取消</el-button>
-          <el-button type="primary" @click="confirmFullEditor">保存</el-button>
+          <el-button v-if="!readOnly" type="primary" @click="confirmFullEditor">应用草稿</el-button>
         </template>
       </el-dialog>
 
@@ -350,7 +353,7 @@
       />
 
       <!-- 底部操作栏 -->
-      <div class="tab-actions">
+      <div v-if="!readOnly" class="tab-actions">
         <!-- 启用/禁用切换（取代原"设为生效"单选语义；多条可同时启用） -->
         <el-button
           v-if="!currentResponse.isActive"
@@ -395,7 +398,7 @@
  * REST 模式下 operationName 为 null，SOAP 模式下为对应的 operation 名称。
  * 支持添加、删除、切换、设为生效等操作。
  */
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import {
   Plus, Check, MagicStick, Upload, Select, Delete, ArrowDown, Search,
   StarFilled, CircleClose, WarningFilled, EditPen
@@ -410,6 +413,7 @@ import { getTeamVariables } from '@/api/customVariable'
 import { uploadResponseFile } from '@/api/apis'
 
 const props = defineProps({
+  readOnly: { type: Boolean, default: false },
   /** 返回体数组 (v-model) */
   modelValue: {
     type: Array,
@@ -457,6 +461,7 @@ const normalizedSelectionMode = computed(() =>
 )
 
 function changeSelectionMode(mode) {
+  if (props.readOnly) return
   emit('update:selectionMode', mode === 'RANDOM' ? 'RANDOM' : 'CONDITION')
 }
 
@@ -468,6 +473,8 @@ const variableSearchKeyword = ref('')
 
 // 团队自定义变量列表（从后端按 teamId 拉取，打开接口编辑页时加载一次）
 const customVariables = ref([])
+let variableRequest = 0, tabDisposed = false
+onBeforeUnmount(() => { tabDisposed = true; variableRequest++ })
 
 // 过滤后的内置变量
 const filteredBuiltin = computed(() => {
@@ -512,6 +519,7 @@ const combinedVariablesForEditor = computed(() => {
 // 选择分组的小对话框状态
 const showGroupPickDialog = ref(false)
 const pickingVariable = ref(null)
+watch(() => props.readOnly, value => { if (value) { aiDrawerVisible.value = false; showGroupPickDialog.value = false; editingTabIndex.value = -1 } })
 
 // Monaco 编辑器引用，用于调用 insertAtCursor
 const editorRef = ref(null)
@@ -537,6 +545,7 @@ const fullEditorRef = ref(null)
  * @param {string} name 变量名，如 'timestamp'
  */
 function insertVariable(name) {
+  if (props.readOnly) return
   const activeRef = (fullEditorVisible.value && fullEditorRef.value)
       ? fullEditorRef.value
       : editorRef.value
@@ -556,6 +565,7 @@ function insertVariable(name) {
  * 点击自定义变量：若有分组则弹对话框让用户选，否则直接插入 {{name}}
  */
 function handleCustomVariableClick(cv) {
+  if (props.readOnly) return
   if (cv.groups && cv.groups.length > 0) {
     pickingVariable.value = cv
     showGroupPickDialog.value = true
@@ -570,6 +580,7 @@ function handleCustomVariableClick(cv) {
  * @param groupName 分组名；null 表示插入 {{cv.name}}（全部值）
  */
 function insertCustomPick(cv, groupName) {
+  if (props.readOnly) return
   if (!cv) return
   const placeholder = groupName ? `${cv.name}.${groupName}` : cv.name
   insertVariable(placeholder)
@@ -581,15 +592,14 @@ function insertCustomPick(cv, groupName) {
  * 拉取团队自定义变量列表
  */
 async function loadCustomVariables() {
-  if (!props.teamId) {
-    customVariables.value = []
-    return
-  }
+  const teamId = props.teamId, sequence = ++variableRequest
+  customVariables.value = []
+  if (!teamId) return
   try {
-    customVariables.value = await getTeamVariables(props.teamId)
-  } catch (e) {
-    // 权限不足或其他错误时静默，响应拦截器已弹错
-    customVariables.value = []
+    const rows = await getTeamVariables(teamId)
+    if (sequence === variableRequest && teamId === props.teamId) customVariables.value = rows
+  } catch {
+    if (sequence === variableRequest) customVariables.value = []
   }
 }
 
@@ -696,6 +706,7 @@ function openFullEditor() {
 
 /** v1.4.4：保存草稿回写到当前响应体 */
 function confirmFullEditor() {
+  if (props.readOnly) return
   if (currentResponse.value) {
     currentResponse.value.responseBody = fullEditorDraft.value
     emit('update:modelValue', [...responses.value])
@@ -712,6 +723,7 @@ function cancelFullEditor() {
 
 /** v1.4.4：Dialog 内的格式化，目标是 fullEditorDraft（不是父组件的 responseBody） */
 function formatDraftBody() {
+  if (props.readOnly) return
   const body = (fullEditorDraft.value || '').trim()
   if (!body) return
   const type = props.operationName ? 'xml' : manualContentType.value
@@ -751,6 +763,7 @@ watch(detectedContentType, (val) => {
 
 // 同步 manualContentType → currentResponse.contentType
 watch(manualContentType, (val) => {
+  if (props.readOnly) return
   if (!currentResponse.value || props.operationName) return
   if (isCurrentFileResponse.value) return
   const typeMap = { json: 'application/json', xml: 'application/xml', text: 'text/plain' }
@@ -769,6 +782,7 @@ watch(activeIndex, () => {
 
 /** AI 生成内容插入当前返回体 */
 function handleAiInsert(content) {
+  if (props.readOnly) return
   if (!currentResponse.value) return
   currentResponse.value.responseBody = content
   if (!props.operationName) {
@@ -783,11 +797,13 @@ function handleAiInsert(content) {
 
 /** 双击 Tab 名称开始编辑 */
 function startEditTabName(idx) {
+  if (props.readOnly) return
   editingTabIndex.value = idx
 }
 
 /** 添加新返回体 */
 function addResponse() {
+  if (props.readOnly) return
   const newResp = {
     id: null,
     soapOperationName: props.operationName,
@@ -841,6 +857,7 @@ function isEmptyConditions(json) {
  * - 禁用当前唯一兜底 Tab 时弹 warning 拦截
  */
 async function toggleEnabled(idx) {
+  if (props.readOnly) return
   const r = responses.value[idx]
   if (!r) return
 
@@ -898,6 +915,7 @@ function groupMates(idx) {
 
 /** 删除返回体 */
 function removeResponse(idx) {
+  if (props.readOnly) return
   if (responses.value.length <= 1) return
   responses.value.splice(idx, 1)
   // 调整 activeIndex
@@ -940,6 +958,7 @@ function formatXml(xml) {
  *       manualContentType 保持默认 'json' 永远不会变，不能作为判断依据。
  */
 function formatBody() {
+  if (props.readOnly) return
   if (!currentResponse.value) return
   if (isCurrentFileResponse.value) return
   const body = (currentResponse.value.responseBody || '').trim()
@@ -970,6 +989,7 @@ function formatBody() {
 }
 
 function handleBodyTypeChange(type) {
+  if (props.readOnly) return
   if (!currentResponse.value) return
   currentResponse.value.bodyType = type
   if (type === 'FILE') {
@@ -984,6 +1004,7 @@ function handleBodyTypeChange(type) {
 }
 
 function clearResponseFile(emitUpdate = true) {
+  if (props.readOnly) return
   if (!currentResponse.value) return
   currentResponse.value.fileName = ''
   currentResponse.value.filePath = ''
@@ -996,6 +1017,7 @@ function clearResponseFile(emitUpdate = true) {
 
 /** 从文件上传响应体内容；文本模式读为文本，文件模式上传到后端文件仓库。 */
 async function handleUploadFile(uploadFile) {
+  if (props.readOnly) return
   if (!uploadFile || !uploadFile.raw) return
   if (isCurrentFileResponse.value) {
     if (!props.teamId) {
@@ -1003,15 +1025,16 @@ async function handleUploadFile(uploadFile) {
       return
     }
     try {
-      const meta = await uploadResponseFile(props.teamId, uploadFile.raw)
-      if (!currentResponse.value) return
-      currentResponse.value.bodyType = 'FILE'
-      currentResponse.value.fileName = meta.fileName || uploadFile.name
-      currentResponse.value.filePath = meta.filePath || ''
-      currentResponse.value.downloadName = meta.downloadName || meta.fileName || uploadFile.name
-      currentResponse.value.fileSize = meta.fileSize || uploadFile.size || null
-      currentResponse.value.contentType = meta.contentType || uploadFile.raw.type || 'application/octet-stream'
-      currentResponse.value.responseBody = ''
+      const target = currentResponse.value, teamId = props.teamId
+      const meta = await uploadResponseFile(teamId, uploadFile.raw)
+      if (tabDisposed || props.readOnly || teamId !== props.teamId || !responses.value.includes(target) || target.bodyType !== 'FILE') return
+      target.bodyType = 'FILE'
+      target.fileName = meta.fileName || uploadFile.name
+      target.filePath = meta.filePath || ''
+      target.downloadName = meta.downloadName || meta.fileName || uploadFile.name
+      target.fileSize = meta.fileSize || uploadFile.size || null
+      target.contentType = meta.contentType || uploadFile.raw.type || 'application/octet-stream'
+      target.responseBody = ''
       emit('update:modelValue', [...responses.value])
       ElMessage.success('响应文件已上传')
     } catch (e) {
@@ -1019,10 +1042,10 @@ async function handleUploadFile(uploadFile) {
     }
     return
   }
-  const reader = new FileReader()
+  const reader = new FileReader(), target = currentResponse.value, teamId = props.teamId
   reader.onload = (e) => {
-    if (currentResponse.value) {
-      currentResponse.value.responseBody = e.target.result
+    if (!tabDisposed && !props.readOnly && teamId === props.teamId && responses.value.includes(target) && target.bodyType !== 'FILE') {
+      target.responseBody = e.target.result
     }
   }
   reader.readAsText(uploadFile.raw)

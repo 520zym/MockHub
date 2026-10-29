@@ -19,6 +19,7 @@ const routes = [
     { path: 'logs/request', name: 'RequestLog', component: () => import('@/views/LogView.vue'), meta: { title: '请求日志', teamRequired: true } },
     { path: 'mcp-confirm/:id', name: 'McpConfirm', component: () => import('@/views/McpConfirm.vue'), meta: { title: 'AI 草稿确认', teamRequired: true } },
     { path: 'settings', name: 'Settings', component: () => import('@/views/Settings.vue'), meta: { title: '全局设置', requiresSuperAdmin: true } },
+    { path: 'account/tokens', name: 'AccountTokens', component: () => import('@/views/AccountTokens.vue'), meta: { title: '个人访问凭证' } },
     { path: 'account', name: 'Account', component: () => import('@/views/Account.vue'), meta: { title: '个人账号' } },
     { path: 'no-access', name: 'NoAccess', component: () => import('@/views/NoAccess.vue'), meta: { title: '无权访问' } },
     { path: ':pathMatch(.*)*', redirect: '/apis' }

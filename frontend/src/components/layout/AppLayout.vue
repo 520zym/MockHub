@@ -12,7 +12,7 @@
           <code>{{ userStore.user?.username }}</code>
           <router-link to="/account?tab=teams"><el-button>查看个人账号与团队</el-button></router-link>
         </section>
-        <router-view v-else />
+        <router-view v-else v-slot="{ Component }"><component :is="Component" :key="String(route.name) + String(route.params.id || '')" /></router-view>
       </main>
     </div>
     <AiAssistant v-if="userStore.identityReady && appStore.currentTeamId" />

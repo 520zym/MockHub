@@ -13,11 +13,14 @@
       <p>请先复制需要保留的编辑，再重新加载最新版本。不会自动用新版本号覆盖队友的修改。</p>
       <el-button size="small" @click="copyDraft">复制当前草稿</el-button><el-button size="small" @click="reloadCurrentVersion">重新加载</el-button>
     </el-alert>
+    <el-alert v-if="readOnly && !pageLoading && !detailError" title="当前为只读查看，未提交草稿仍然保留，可继续查看和复制。" type="info" :closable="false" show-icon />
+    <el-result v-if="detailError" icon="warning" title="接口详情暂时不可用" :sub-title="detailError"><template #extra><el-button @click="reloadCurrentVersion">重新加载</el-button><el-button @click="goBack">返回列表</el-button></template></el-result>
+    <template v-else>
     <!-- 卡片 1：基本信息 -->
     <div class="soft-card section-card">
       <h3 class="section-title">基本信息</h3>
 
-      <el-form :model="form" label-width="100px" label-position="top">
+      <el-form :model="form" label-width="100px" label-position="top" :disabled="readOnly || pageLoading">
         <!-- 接口类型切换 -->
         <el-form-item label="接口类型">
           <el-radio-group v-model="form.type">
@@ -39,11 +42,12 @@
             <el-form-item label="所属团队" required>
               <el-select
                 v-model="form.teamId"
+                :disabled="isEdit || readOnly"
                 placeholder="选择团队"
                 style="width: 100%"
               >
                 <el-option
-                  v-for="team in appStore.teams"
+                  v-for="team in (isEdit ? appStore.teams : writableTeams)"
                   :key="team.id"
                   :label="team.name"
                   :value="team.id"
@@ -151,7 +155,7 @@
       <h3 class="section-title">SOAP / WSDL 配置</h3>
 
       <!-- WSDL 上传 -->
-      <el-form label-position="top">
+      <el-form label-position="top" :disabled="readOnly || pageLoading">
         <el-form-item label="WSDL 文件">
           <div class="wsdl-upload-row">
             <el-upload
@@ -223,6 +227,7 @@
           <template v-if="!isOpCollapsed(op)">
             <el-input
               v-model="op.description"
+              :readonly="readOnly"
               type="textarea"
               :autosize="{ minRows: 1, maxRows: 4 }"
               placeholder="接口描述（选填，建议 200 字内说明用途 / 参数 / 注意事项）"
@@ -234,6 +239,7 @@
               :operation-name="op.operationName"
               :team-id="form.teamId"
               :api-context="aiApiContext"
+        :read-only="readOnly"
               default-content-type="text/xml"
               editor-language="xml"
             />
@@ -254,20 +260,21 @@
         v-model:selection-mode="form.responseMode"
         :team-id="form.teamId"
         :api-context="aiApiContext"
+        :read-only="readOnly"
       />
     </div>
 
     <!-- 卡片：标签 -->
     <div class="soft-card section-card">
       <h3 class="section-title">标签</h3>
-      <TagInput v-model="form.tagIds" :team-id="form.teamId" />
+      <TagInput v-model="form.tagIds" :team-id="form.teamId" :read-only="readOnly" />
     </div>
 
     <!-- 卡片：高级配置 -->
     <div class="soft-card section-card">
       <h3 class="section-title">高级配置</h3>
 
-      <el-form label-position="top">
+      <el-form label-position="top" :disabled="readOnly || pageLoading">
         <!-- 全局响应头覆盖 -->
         <el-form-item label="全局响应头覆盖">
           <div class="header-overrides">
@@ -291,10 +298,11 @@
       </el-form>
     </div>
 
+    </template>
     <!-- 底部操作栏 -->
     <div class="bottom-actions">
       <el-button @click="goBack">取消</el-button>
-      <el-button type="primary" :loading="saving" :disabled="saving || !userStore.canWriteTeam(form.teamId)" @click="handleSave">
+      <el-button type="primary" :loading="saving" :disabled="saving || pageLoading || !!detailError || readOnly || (isEdit && !loadedApiId)" @click="handleSave">
         {{ isEdit ? '保存' : '创建' }}
       </el-button>
     </div>
@@ -312,7 +320,7 @@
  * 每个返回体有独立的名称、状态码、Content-Type、延迟和响应体。
  */
 import { ref, computed, onMounted, onBeforeUnmount, reactive, watch } from 'vue'
-import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
+import { useRoute, useRouter, onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAppStore } from '@/stores/app'
 import { useUserStore } from '@/stores/user'
@@ -338,7 +346,7 @@ const availableGroups = ref([])
 
 /** 当前用户在所选团队是否有创建分组的权限（团队管理员/超管） */
 const canCreateGroup = computed(() => {
-  return form.teamId ? userStore.isTeamAdmin(form.teamId) : false
+  return form.teamId ? userStore.canWriteTeam(form.teamId) : false
 })
 
 // 是否为编辑模式
@@ -347,6 +355,11 @@ const pageLoading = ref(false)
 const saving = ref(false)
 const loadedRevision = ref(null)
 const revisionConflict = ref(false)
+const loadedApiId = ref(null)
+const detailError = ref('')
+let detailRequest = 0, disposed = false
+const readOnly = computed(() => !userStore.canWriteTeam(form.teamId))
+const writableTeams = computed(() => appStore.teams.filter(team => userStore.canWriteTeam(team.id)))
 
 /**
  * v1.4.4 性能：SOAP operation 折叠态管理。
@@ -536,7 +549,7 @@ function captureSnapshot() {
 }
 
 const isDirty = computed(() => {
-  if (skipLeaveGuard.value) return false
+  if (skipLeaveGuard.value || !formSnapshot.value) return false
   return JSON.stringify(form) !== formSnapshot.value
       || JSON.stringify(headerOverrideList.value) !== headerSnapshot.value
 })
@@ -551,7 +564,7 @@ function beforeUnloadHandler(e) {
 }
 
 onBeforeRouteLeave(async (to, from, next) => {
-  if (!isDirty.value) {
+  if (!isDirty.value || (form.teamId && !userStore.hasCapability(form.teamId, 'read'))) {
     next()
     return
   }
@@ -567,6 +580,10 @@ onBeforeRouteLeave(async (to, from, next) => {
   }
 })
 
+onBeforeRouteUpdate(async (to, from) => {
+  if (to.params.id === from.params.id || !isDirty.value) return true
+  try { await ElMessageBox.confirm('当前草稿未保存，切换接口会丢弃未提交编辑。', '切换接口', { type: 'warning' }); return true } catch { return false }
+})
 // --- 计算属性 ---
 
 /** 当前选中团队的 identifier */
@@ -599,10 +616,14 @@ const wsdlHostUrl = computed(() => {
 
 async function loadApiDetail() {
   if (!route.params.id) return
-  pageLoading.value = true
+  pageLoading.value = true; detailError.value = ''
+  const id = route.params.id, sequence = ++detailRequest
   try {
-    const data = await getApiDetail(route.params.id)
+    const data = await getApiDetail(id)
+    if (disposed || sequence !== detailRequest || route.params.id !== id) return
+    loadedApiId.value = id
     loadedRevision.value = data.revision
+    appStore.setFilter(data.teamId)
     revisionConflict.value = false
 
     // 填充基本信息
@@ -743,9 +764,11 @@ async function loadApiDetail() {
       ([key, value]) => ({ key, value })
     )
   } catch (e) {
-    ElMessage.error('加载接口详情失败')
+    if (disposed || sequence !== detailRequest || route.params.id !== id) return
+    detailError.value = e.msg || '无法读取接口详情，请检查当前团队权限或稍后重试'
+    loadedApiId.value = null
   } finally {
-    pageLoading.value = false
+    if (!disposed && sequence === detailRequest) pageLoading.value = false
   }
 }
 
@@ -799,6 +822,7 @@ function handleWsdlFileChange(uploadFile) {
 }
 
 async function handleUploadWsdl() {
+  if (readOnly.value) return
   if (!wsdlFile.value) return
 
   wsdlUploading.value = true
@@ -857,10 +881,12 @@ async function handleUploadWsdl() {
 // --- 全局响应头覆盖 ---
 
 function addHeaderOverride() {
+  if (readOnly.value) return
   headerOverrideList.value.push({ key: '', value: '' })
 }
 
 function removeHeaderOverride(idx) {
+  if (readOnly.value) return
   headerOverrideList.value.splice(idx, 1)
 }
 
@@ -922,7 +948,8 @@ async function reloadCurrentVersion() {
   try { await ElMessageBox.confirm('重新加载将丢弃未提交编辑，是否继续？', '重新加载', { type: 'warning' }); await loadApiDetail(); captureSnapshot() } catch {}
 }
 async function handleSave() {
-  if (saving.value) return
+  if (saving.value || pageLoading.value || detailError.value) return
+  if (isEdit.value && loadedApiId.value !== route.params.id) { ElMessage.warning('详情尚未就绪，无法将旧草稿写入其它接口'); return }
   if (!userStore.canWriteTeam(form.teamId)) { ElMessage.warning('当前团队角色不可修改接口'); return }
 
   // 基本校验
@@ -1095,6 +1122,7 @@ watch(
  * 仅团队管理员/超管能看到该选项。
  */
 async function handleGroupSelectChange(val) {
+  if (readOnly.value) return
   if (val !== '__new__') return
 
   // 立即把 select 值还原为 null（弹窗未确认前不应保留 sentinel）
@@ -1132,10 +1160,16 @@ async function handleGroupSelectChange(val) {
 }
 
 // --- 初始化 ---
-watch(() => appStore.apiRevision, () => {
-  if (isEdit.value) {
-    loadApiDetail()
-  }
+watch(() => appStore.apiRevision, async () => {
+  if (!isEdit.value || pageLoading.value || !loadedApiId.value) return
+  const id = loadedApiId.value, sequence = detailRequest
+  try {
+    const latest = await getApiDetail(id)
+    if (disposed || sequence !== detailRequest || loadedApiId.value !== id) return
+    if (latest.revision === loadedRevision.value) return
+    if (isDirty.value) { revisionConflict.value = true; return }
+    await loadApiDetail(); captureSnapshot()
+  } catch { /* Keep the draft; the request layer reports lost access. */ }
 })
 
 onMounted(async () => {
@@ -1166,6 +1200,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  disposed = true; detailRequest++; pathCheckSeq++
   window.removeEventListener('beforeunload', beforeUnloadHandler)
   if (pathCheckTimer) clearTimeout(pathCheckTimer)
 })

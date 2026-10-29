@@ -58,6 +58,7 @@ const props = defineProps({
   modelValue: { type: String, default: '' },
   /** 已被加入条件的路径数组，用于灰显 + ✓ 标记 */
   usedPaths: { type: Array, default: () => [] },
+  readOnly: { type: Boolean, default: false },
   sampleKind: { type: String, default: 'json' }
 })
 
@@ -140,6 +141,7 @@ function onToggle(path) {
 }
 
 function onPick(node) {
+  if (props.readOnly) return
   if (node.kind !== 'leaf') return
   emit('select', node.path, node.value == null ? '' : node.value, node.valueType)
 }

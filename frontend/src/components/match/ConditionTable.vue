@@ -16,6 +16,7 @@
       >
         <el-select
           v-model="c.source"
+          :disabled="readOnly"
           size="small"
           class="col-source"
           aria-label="条件参数来源"
@@ -27,6 +28,7 @@
         </el-select>
         <el-input
           v-model="c.path"
+          :readonly="readOnly"
           size="small"
           :placeholder="c.source === 'HEADER' ? 'Header 名称' : '字段路径'"
           class="col-path"
@@ -34,6 +36,7 @@
         />
         <el-select
           v-model="c.operator"
+          :disabled="readOnly"
           size="small"
           class="col-op"
           @change="onOperatorChange(c)"
@@ -58,6 +61,7 @@
         <el-input
           v-if="c.operator !== 'IS_EMPTY'"
           v-model="c.value"
+          :readonly="readOnly"
           size="small"
           :placeholder="valuePlaceholder(c)"
           class="col-value"
@@ -74,6 +78,7 @@
           text
           type="danger"
           class="col-delete"
+          v-if="!readOnly"
           @click="removeAt(idx)"
         >
           <el-icon><Close /></el-icon>
@@ -81,10 +86,10 @@
       </div>
     </div>
 
-    <div class="add-row" @click="addEmpty">
+    <button v-if="!readOnly" type="button" class="add-row" @click="addEmpty">
       <el-icon><Plus /></el-icon>
       <span>手动添加条件</span>
-    </div>
+    </button>
   </div>
 </template>
 
@@ -106,6 +111,7 @@ import { Close, Plus, InfoFilled } from '@element-plus/icons-vue'
 const props = defineProps({
   /** MatchCondition 数组 */
   modelValue: { type: Array, default: () => [] },
+  readOnly: { type: Boolean, default: false },
   /** 手动新增沿用面板所选来源；已有条件保持各自来源。 */
   defaultSource: { type: String, default: 'BODY' }
 })
@@ -140,8 +146,9 @@ function valuePlaceholder(c) {
 }
 
 function addEmpty() {
+  if (props.readOnly) return
   const next = [...conditions.value, {
-    source: props.defaultSource === 'QUERY' ? 'QUERY' : 'BODY',
+    source: ['QUERY', 'HEADER'].includes(props.defaultSource) ? props.defaultSource : 'BODY',
     path: '',
     operator: 'EQ',
     value: '',
@@ -151,18 +158,21 @@ function addEmpty() {
 }
 
 function removeAt(idx) {
+  if (props.readOnly) return
   const next = [...conditions.value]
   next.splice(idx, 1)
   emit('update:modelValue', next)
 }
 
 function emitChange() {
+  if (props.readOnly) return
   // 内部直接改 modelValue 元素；emit 让父组件感知并触发持久化
   emit('update:modelValue', [...conditions.value])
 }
 
 /** 切换操作符时联动 valueType：数字操作符强制 NUMBER */
 function onOperatorChange(c) {
+  if (props.readOnly) return
   const op = ALL_OPERATORS.find((o) => o.value === c.operator)
   if (op && op.numberOnly) {
     c.valueType = 'NUMBER'

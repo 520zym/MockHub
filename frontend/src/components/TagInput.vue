@@ -5,7 +5,7 @@
       <el-tag
         v-for="tag in selectedTags"
         :key="tag.id"
-        closable
+        :closable="!readOnly"
         :style="{ backgroundColor: hexToRgba(tag.color, 0.15), color: tag.color, borderColor: 'transparent' }"
         @close="removeTag(tag.id)"
       >
@@ -14,7 +14,9 @@
     </div>
 
     <!-- 搜索输入 + 下拉列表 -->
-    <el-popover
+    <p v-if="tagError" class="tag-input__error" role="alert">标签读取失败，请重新加载详情后重试。</p>
+    <span v-else-if="readOnly && selectedTags.length === 0">未添加标签</span>
+    <el-popover v-if="!readOnly"
       :visible="popoverVisible"
       placement="bottom-start"
       :width="240"
@@ -70,7 +72,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { Check, Plus } from '@element-plus/icons-vue'
 import { getTags, createTag } from '@/api/tags'
 import { ElMessage } from 'element-plus'
@@ -86,6 +88,7 @@ const props = defineProps({
     type: Array,
     default: () => []
   },
+  readOnly: { type: Boolean, default: false },
   teamId: {
     type: String,
     default: ''
@@ -97,19 +100,23 @@ const emit = defineEmits(['update:modelValue'])
 const searchText = ref('')
 const popoverVisible = ref(false)
 const allTags = ref([])
+const tagError = ref(false)
+let tagRequest = 0
+onBeforeUnmount(() => { tagRequest++ })
+watch(() => props.readOnly, value => { if (value) popoverVisible.value = false })
 const creating = ref(false) // 防止重复创建
 const inputRef = ref(null)
 
 // 团队切换时重新加载标签列表
 watch(() => props.teamId, async (newTeamId) => {
-  if (newTeamId) {
-    try {
-      allTags.value = await getTags(newTeamId)
-    } catch (e) {
-      allTags.value = []
-    }
-  } else {
-    allTags.value = []
+  const sequence = ++tagRequest
+  allTags.value = []; tagError.value = false; popoverVisible.value = false
+  if (!newTeamId) return
+  try {
+    const rows = await getTags(newTeamId)
+    if (sequence === tagRequest && props.teamId === newTeamId) allTags.value = rows
+  } catch {
+    if (sequence === tagRequest) tagError.value = true
   }
 }, { immediate: true })
 
@@ -142,6 +149,7 @@ function isSelected(tagId) {
 
 // 切换标签选中/取消选中
 function toggleTag(tag) {
+  if (props.readOnly) return
   const newValue = [...props.modelValue]
   const idx = newValue.indexOf(tag.id)
   if (idx >= 0) {
@@ -153,6 +161,7 @@ function toggleTag(tag) {
 }
 
 function removeTag(tagId) {
+  if (props.readOnly) return
   const newValue = props.modelValue.filter(id => id !== tagId)
   emit('update:modelValue', newValue)
 }
@@ -164,6 +173,7 @@ function removeTag(tagId) {
  * 3. 如果输入框为空 → 不做任何操作
  */
 function handleEnter() {
+  if (props.readOnly) return
   const text = searchText.value.trim()
   if (!text) return
 
@@ -188,17 +198,20 @@ function handleEnter() {
  * 3. 成功后添加到 allTags 列表并自动选中
  */
 async function handleCreateTag() {
+  if (props.readOnly) return
   const name = searchText.value.trim()
   if (!name || creating.value) return
 
   creating.value = true
+  const teamId = props.teamId, sequence = tagRequest
   try {
     const color = PRESET_COLORS[Math.floor(Math.random() * PRESET_COLORS.length)]
     const newTag = await createTag({
-      teamId: props.teamId,
+      teamId,
       name,
       color
     })
+    if (sequence !== tagRequest || teamId !== props.teamId || props.readOnly) return
     // 将新标签加入本地列表
     allTags.value.push(newTag)
     // 自动选中新创建的标签

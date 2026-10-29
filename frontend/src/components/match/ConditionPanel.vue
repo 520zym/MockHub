@@ -64,7 +64,7 @@
         </el-popover>
 
         <el-button
-          v-if="aiStore.capabilities.conditions"
+          v-if="!readOnly && aiStore.capabilities.conditions"
           size="small"
           class="ai-rule-btn"
           @click="aiDrawerVisible = true"
@@ -85,6 +85,7 @@
           <SampleTree
             :model-value="sampleText"
             :used-paths="usedPaths"
+            :read-only="readOnly"
             :sample-kind="source === 'BODY' ? bodySampleKind : 'json'"
             @select="onTreePick"
           />
@@ -100,6 +101,7 @@
           <ConditionTable
             :model-value="conditions"
             :default-source="source"
+            :read-only="readOnly"
             @update:model-value="onConditionsUpdate"
           />
         </div>
@@ -143,6 +145,7 @@ import { parseXmlSampleTree } from '@/utils/xmlSampleTree'
 const props = defineProps({
   /** conditions JSON 字符串，对应 api_response.conditions 字段；空字符串 / null 表示无规则 */
   modelValue: { type: String, default: '' },
+  readOnly: { type: Boolean, default: false },
   /** BODY 示例类型：REST 使用 json；SOAP 使用 xml 生成点分元素路径 */
   bodySampleKind: { type: String, default: 'json' },
   /** 所属团队，供 AI 生成使用 */
@@ -157,6 +160,7 @@ const emit = defineEmits(['update:modelValue'])
 
 const aiStore = useAiStore()
 const aiDrawerVisible = ref(false)
+watch(() => props.readOnly, value => { if (value) aiDrawerVisible.value = false })
 
 // 本地状态
 const expanded = ref(true)
@@ -222,12 +226,14 @@ function serializeConditions(list) {
 }
 
 function onConditionsUpdate(next) {
+  if (props.readOnly) return
   conditions.value = next
   emit('update:modelValue', serializeConditions(next))
 }
 
 /** 应用 AI 生成的规则（已在前端按追加/替换合并） */
 function applyAiRules(payload) {
+  if (props.readOnly) return
   try {
     const parsed = JSON.parse(payload.json)
     const next = Array.isArray(parsed?.conditions) ? parsed.conditions : []
@@ -238,6 +244,7 @@ function applyAiRules(payload) {
 }
 
 function onTreePick(path, value, valueType) {
+  if (props.readOnly) return
   // 避免重复添加：若已有相同 source+path 的条件，不再追加（但值可能需要更新）
   const dup = conditions.value.find((c) => c.source === source.value && c.path === path)
   if (dup) {
