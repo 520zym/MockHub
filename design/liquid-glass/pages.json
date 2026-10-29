@@ -1,0 +1,222 @@
+[
+  {
+    "id": "01-api-list",
+    "file": "01-api-list.html",
+    "title": "接口管理",
+    "description": "团队接口、筛选与批量操作",
+    "group": "接口与联调",
+    "route": "/apis",
+    "width": 1440,
+    "height": 900
+  },
+  {
+    "id": "06-api-new",
+    "file": "06-api-new.html",
+    "title": "新建接口",
+    "description": "基础信息、默认响应与变量",
+    "group": "接口与联调",
+    "route": "/apis/new",
+    "width": 1440,
+    "height": 900
+  },
+  {
+    "id": "02-api-edit",
+    "file": "02-api-edit.html",
+    "title": "REST 接口编辑",
+    "description": "多返回体、JSON 与匹配规则",
+    "group": "接口与联调",
+    "route": "/apis/:id/edit",
+    "width": 1440,
+    "height": 900
+  },
+  {
+    "id": "22-match-rules",
+    "file": "22-match-rules.html",
+    "title": "匹配规则配置",
+    "description": "返回体、AND 条件、请求样例与本地试配建议",
+    "group": "接口与联调",
+    "route": "/apis/:id/edit · 匹配规则状态",
+    "width": 1440,
+    "height": 900
+  },
+  {
+    "id": "20-api-soap",
+    "file": "20-api-soap.html",
+    "title": "SOAP 接口编辑",
+    "description": "WSDL、Operations 与 XML 响应",
+    "group": "接口与联调",
+    "route": "/apis/:id/edit · SOAP 状态",
+    "width": 1440,
+    "height": 900
+  },
+  {
+    "id": "03-logs",
+    "file": "03-logs.html",
+    "title": "请求日志",
+    "description": "请求明细、响应与命中链路",
+    "group": "接口与联调",
+    "route": "/logs/request",
+    "width": 1440,
+    "height": 900
+  },
+  {
+    "id": "12-operation-logs",
+    "file": "12-operation-logs.html",
+    "title": "操作日志",
+    "description": "团队审计与配置变更详情",
+    "group": "接口与联调",
+    "route": "/logs/operation",
+    "width": 1440,
+    "height": 900
+  },
+  {
+    "id": "04-assistant",
+    "file": "04-assistant.html",
+    "title": "对话助手",
+    "description": "上下文、待确认变更与差异",
+    "group": "接口与联调",
+    "route": "全局助手面板",
+    "width": 1440,
+    "height": 900
+  },
+  {
+    "id": "07-files",
+    "file": "07-files.html",
+    "title": "文件服务器",
+    "description": "文件列表、别名标签与预览",
+    "group": "工作区与管理",
+    "route": "/files",
+    "width": 1440,
+    "height": 900
+  },
+  {
+    "id": "08-variables",
+    "file": "08-variables.html",
+    "title": "动态变量",
+    "description": "变量、候选值与分组三栏",
+    "group": "工作区与管理",
+    "route": "/variables",
+    "width": 1440,
+    "height": 900
+  },
+  {
+    "id": "09-stats",
+    "file": "09-stats.html",
+    "title": "使用统计",
+    "description": "调用趋势、TOP10 与闲置接口",
+    "group": "工作区与管理",
+    "route": "/stats",
+    "width": 1440,
+    "height": 900
+  },
+  {
+    "id": "10-teams",
+    "file": "10-teams.html",
+    "title": "团队管理",
+    "description": "团队卡片、成员与角色",
+    "group": "工作区与管理",
+    "route": "/teams",
+    "width": 1440,
+    "height": 900
+  },
+  {
+    "id": "11-users",
+    "file": "11-users.html",
+    "title": "用户管理",
+    "description": "账号列表、团队分配与重置",
+    "group": "工作区与管理",
+    "route": "/users",
+    "width": 1440,
+    "height": 900
+  },
+  {
+    "id": "13-mcp-confirm",
+    "file": "13-mcp-confirm.html",
+    "title": "AI 草稿确认",
+    "description": "多返回体预览与确认写入",
+    "group": "工作区与管理",
+    "route": "/mcp-confirm/:id",
+    "width": 1440,
+    "height": 900
+  },
+  {
+    "id": "14-settings-providers",
+    "file": "14-settings-providers.html",
+    "title": "设置 · AI 供应商",
+    "description": "API 连接、模型与密钥状态",
+    "group": "全局设置",
+    "route": "/settings · AI 供应商",
+    "width": 1440,
+    "height": 900
+  },
+  {
+    "id": "15-settings-assistant",
+    "file": "15-settings-assistant.html",
+    "title": "设置 · 助手与能力",
+    "description": "四类能力、权限范围与脱敏",
+    "group": "全局设置",
+    "route": "/settings · 助手与能力",
+    "width": 1440,
+    "height": 900
+  },
+  {
+    "id": "16-settings-mcp",
+    "file": "16-settings-mcp.html",
+    "title": "设置 · MCP Server",
+    "description": "接入协议、工具与访问 Token",
+    "group": "全局设置",
+    "route": "/settings · MCP Server",
+    "width": 1440,
+    "height": 900
+  },
+  {
+    "id": "17-settings-general",
+    "file": "17-settings-general.html",
+    "title": "设置 · 基础设置",
+    "description": "服务器地址与 Mock CORS",
+    "group": "全局设置",
+    "route": "/settings · 基础设置",
+    "width": 1440,
+    "height": 900
+  },
+  {
+    "id": "18-settings-logs",
+    "file": "18-settings-logs.html",
+    "title": "设置 · 日志与保留",
+    "description": "条数或天数模式与清理影响",
+    "group": "全局设置",
+    "route": "/settings · 日志与保留",
+    "width": 1440,
+    "height": 900
+  },
+  {
+    "id": "19-settings-storage",
+    "file": "19-settings-storage.html",
+    "title": "设置 · 文件存储",
+    "description": "存储摘要、扫描与孤儿清理",
+    "group": "全局设置",
+    "route": "/settings · 文件存储",
+    "width": 1440,
+    "height": 900
+  },
+  {
+    "id": "05-login",
+    "file": "05-login.html",
+    "title": "登录",
+    "description": "内网账号与密码登录",
+    "group": "登录与安全",
+    "route": "/login",
+    "width": 1440,
+    "height": 900
+  },
+  {
+    "id": "21-password",
+    "file": "21-password.html",
+    "title": "首次登录 · 修改密码",
+    "description": "不可跳过的初始密码更新",
+    "group": "登录与安全",
+    "route": "/login · 首次登录状态",
+    "width": 1440,
+    "height": 900
+  }
+]

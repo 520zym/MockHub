@@ -3,10 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=1440, initial-scale=1">
-<title>登录 · MockHub Liquid Glass</title>
+<title>登录 · MockHub Flat</title>
 <link rel="stylesheet" href="assets/glass.css">
 <style>.logincard__foot{border-top:0;padding-top:12px}</style>
-</head>
+<link rel="stylesheet" href="assets/pages.css">
+<!-- board-fit --><style id="board-fit">html,body{overflow:hidden!important;margin:0}.app{width:1440px!important;height:900px!important;min-height:0!important}</style></head>
 <body>
 <div class="login">
   <header class="login__brand">
@@ -47,11 +48,12 @@
       <button class="btn btn--primary">登录</button>
       <div class="hint"><svg class="i" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg>账号由团队管理员开通，不支持自助注册</div>
 
-      <div class="logincard__foot"><span>MIT License</span><span>·</span><span>使用文档</span><span class="right">上次登录 10-21 18:02</span></div>
+      <div class="logincard__foot"><span>MIT License</span><span>·</span><a href="21-password.html">首次登录状态</a><span class="right">上次登录 10-21 18:02</span></div>
     </section>
   </main>
 
   <footer class="login__bottom"><span class="mono">MOCKHUB / 1.8.2</span><span>·</span><span>REST · SOAP · MCP</span><span class="right">内网专用 · 请勿公网暴露</span></footer>
 </div>
-</body>
+<script src="assets/preview.js"></script>
+<script id="board-fit-js">(function(){if(window.self!==window.top)return;var app=document.querySelector(".app");if(!app)return;function fit(){var s=Math.min(window.innerWidth/1440,window.innerHeight/900,1);app.style.transformOrigin="top left";app.style.transform="scale("+s+")";document.body.style.width=(1440*s)+"px";document.body.style.height=(900*s)+"px";}fit();window.addEventListener("resize",fit);window.addEventListener("load",fit);})();</script></body>
 </html>

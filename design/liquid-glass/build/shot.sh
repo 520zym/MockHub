@@ -1,29 +1,18 @@
 #!/usr/bin/env bash
-# 重新生成 Liquid Glass 设计稿截图（2x）
-set -eo pipefail
+# Generate the complete approved flat suite and audit real browser rendering.
+set -euo pipefail
 cd "$(dirname "$0")/.."
-
-if [ -z "$CHROME" ]; then
-  CHROME="$HOME/Library/Caches/ms-playwright/chromium_headless_shell-1223/chrome-headless-shell-mac-arm64/chrome-headless-shell"
-fi
-if [ ! -x "$CHROME" ]; then
-  echo "chrome-headless-shell not found: $CHROME" >&2
-  echo "set CHROME=/path/to/chrome-headless-shell" >&2
-  exit 1
-fi
-
-shot() {
-  name="$1"; w="$2"; h="$3"
-  "$CHROME" --no-sandbox --hide-scrollbars --force-device-scale-factor=2 \
-    --window-size="$w,$h" --screenshot="screens/$name.png" "file://$PWD/$name.html" >/dev/null 2>&1
-  echo "  screens/$name.png"
-}
-
-mkdir -p screens
-echo "rendering..."
-shot 01-api-list 1440 900
-shot 02-api-edit 1440 900
-shot 03-logs 1440 900
-shot 04-assistant 1440 900
-shot 05-login 1440 900
-echo "done."
+node build/link-pages.mjs
+node build/flows-pages.mjs
+node build/workspace-pages.mjs
+node build/admin-pages.mjs
+node build/settings-pages.mjs
+node build/match-rules.mjs
+node build/fit-board.mjs
+node build/render.mjs --all
+node build/render.mjs 22-match-rules --test-rules
+node build/gallery.mjs
+node build/render.mjs --boards
+node build/render.mjs --gallery
+node build/verify-preview.mjs
+printf "Complete: 22 page screenshots, 4 contact sheets, gallery and viewer.\n"

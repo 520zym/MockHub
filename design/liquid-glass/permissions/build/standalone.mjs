@@ -1,0 +1,10 @@
+import fs from 'node:fs';import path from 'node:path';const root=path.resolve('design/liquid-glass/permissions');
+const [src,out]=process.argv.slice(2);
+const file=path.join(root,src);let html=fs.readFileSync(file,'utf8');
+const dir=path.dirname(file);
+const readAsset=href=>{const p=path.resolve(dir,href);return fs.existsSync(p)?fs.readFileSync(p,'utf8'):null;};
+let inlined=0,missed=[];
+html=html.replace(/<link[^>]*rel="stylesheet"[^>]*href="([^"]+)"[^>]*>/g,(m,href)=>{const css=readAsset(href);if(css===null){missed.push(href);return m;}inlined++;return '<style data-from="'+href+'">'+css+'</style>';});
+html=html.replace(/<script[^>]*src="([^"]+)"[^>]*><\/script>/g,(m,src2)=>{const js=readAsset(src2);if(js===null){missed.push(src2);return m;}inlined++;return '<script data-from="'+src2+'">'+js+'</script>';});
+fs.mkdirSync(path.dirname(path.join(root,out)),{recursive:true});const target=path.join(root,out);fs.writeFileSync(target,html);
+console.log('standalone:',out,'inlined',inlined,'missed',missed.length?missed:'none','bytes',html.length);
