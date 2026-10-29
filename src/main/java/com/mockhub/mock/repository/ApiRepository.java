@@ -47,6 +47,9 @@ public class ApiRepository {
             api.setGlobalHeaderOverrides(rs.getString("global_header_overrides"));
             api.setSoapConfig(rs.getString("soap_config"));
             api.setScenarios(rs.getString("scenarios"));
+            api.setDeletedAt(rs.getString("deleted_at"));
+            api.setDeletedBy(rs.getString("deleted_by"));
+            api.setPurgeAfter(rs.getString("purge_after"));
             api.setResponseMode(rs.getString("response_mode"));
             api.setHitCount(rs.getLong("hit_count"));
             api.setLastCalledAt(rs.getString("last_called_at"));
@@ -92,9 +95,11 @@ public class ApiRepository {
         }
     };
 
-    public ApiRepository(JdbcTemplate jdbcTemplate) {
+    public ApiRepository(JdbcTemplate jdbcTemplate) { this(jdbcTemplate,50); }
+    @org.springframework.beans.factory.annotation.Autowired
+    public ApiRepository(JdbcTemplate jdbcTemplate,@org.springframework.beans.factory.annotation.Value("${mock.api.max-revisions:50}") int maxRevisions) {
         this.jdbcTemplate = jdbcTemplate;
-        this.lifecycle = new ApiLifecycleRepository(jdbcTemplate);
+        this.lifecycle = new ApiLifecycleRepository(jdbcTemplate,maxRevisions);
     }
 
     public <T> T write(java.util.function.Supplier<T> work) { return lifecycle.write(work); }
@@ -109,6 +114,24 @@ public class ApiRepository {
     public void markDeleted(String id,String now,String actor,String purgeAfter) {
         jdbcTemplate.update("UPDATE api_definition SET deleted_at=?,deleted_by=?,purge_after=? WHERE id=? AND deleted_at IS NULL",
                 now,actor,purgeAfter,id);
+    }
+
+    public List<java.util.Map<String,Object>> trash(List<String> teamIds,String teamId,int offset,int limit) {
+        return lifecycle.trash(teamIds,teamId,offset,limit);
+    }
+    public long countTrash(List<String> teamIds,String teamId) { return lifecycle.countTrash(teamIds,teamId); }
+    public void applySnapshot(String id,java.util.Map<String,Object> snapshot) { lifecycle.applySnapshot(id,snapshot); }
+    public void purgeAggregate(ApiDefinition api,String actor) { lifecycle.purge(api,actor); }
+    public int purgeExpired(int limit) { return lifecycle.purgeExpired(limit); }
+    public int restore(String id,long expected,String path,String now,String actor,String purgeAfter) {
+        return jdbcTemplate.update("UPDATE api_definition SET revision=revision+1,deleted_at=NULL,deleted_by=NULL,purge_after=NULL,"
+                        + "enabled=0,path=?,updated_at=?,updated_by=? WHERE id=? AND revision=? AND deleted_at IS NOT NULL AND purge_after=?",
+                path,now,actor,id,expected,purgeAfter);
+    }
+    public void removeMissingTeamReferences(String id,String teamId) {
+        jdbcTemplate.update("UPDATE api_definition SET group_id=NULL WHERE id=? AND group_id IS NOT NULL "
+                + "AND NOT EXISTS(SELECT 1 FROM api_group g WHERE g.id=api_definition.group_id AND g.team_id=?)",id,teamId);
+        jdbcTemplate.update("DELETE FROM api_tag WHERE api_id=? AND NOT EXISTS(SELECT 1 FROM tag t WHERE t.id=api_tag.tag_id AND t.team_id=?)",id,teamId);
     }
 
     public int claimRevision(String id,long expected,String now,String actor) {

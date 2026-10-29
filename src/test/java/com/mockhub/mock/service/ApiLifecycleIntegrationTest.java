@@ -81,6 +81,7 @@ class ApiLifecycleIntegrationTest {
         ApiDefinition one=service.create(dto("/one","one")),two=service.create(dto("/two","two"));
         String version=service.revisions(one.getId()).get(0).get("id").toString();
         assertThrows(DataAccessException.class,()->jdbc.update("UPDATE api_revision SET snapshot_json='{}' WHERE id=?",version));
+        assertThrows(DataAccessException.class,()->jdbc.update("DELETE FROM api_revision WHERE id=?",version));
         assertThrows(BizException.class,()->service.revision(two.getId(),version));
     }
 
@@ -159,6 +160,106 @@ class ApiLifecycleIntegrationTest {
         assertEquals("u",mine.getItems().get(0).getCreatedBy());assertEquals(1,mine.getItems().get(0).getRevision());
         assertEquals("Name u",mine.getItems().get(0).getUpdatedByName());
     }
+    @Test void restoreDetectsReusedPathAndRestoresOnlyToDisabledStateWithMissingReferencesRemoved() {
+        jdbc.update("INSERT INTO api_group(id,team_id,name,created_at) VALUES('g','a','Group','before')");
+        ApiDefinitionDTO original=dto("/reuse","old");original.setGroupId("g");
+        ApiDefinition api=service.create(original);service.delete(api.getId(),1L);
+        service.create(dto("/reuse","replacement"));
+        assertEquals(40922,assertThrows(BizException.class,()->service.restore(api.getId(),2L,null)).getCode());
+        jdbc.update("DELETE FROM api_group WHERE id='g'");jdbc.update("DELETE FROM tag WHERE id='tag'");
+        ApiDefinition restored=service.restore(api.getId(),2L,"restored?ignore=query");
+        assertEquals("/restored",restored.getPath());assertFalse(restored.isEnabled());assertNull(restored.getDeletedAt());
+        assertNull(restored.getGroupId());assertEquals(3,restored.getRevision());
+        assertTrue(service.getById(api.getId()).getTags().isEmpty());
+        assertNull(service.findMatch("a","GET","/restored"));assertEquals(3,service.revisions(api.getId()).size());
+    }
+
+    @Test void trashCapabilitiesAreScopedAndExpiredRowsCannotBeRestoredBeforeCleanup() {
+        ApiDefinition api=service.create(dto("/trash","old"));service.delete(api.getId(),1L);
+        jdbc.update("UPDATE user_team SET role='VIEWER' WHERE user_id='u'");
+        Map<String,Object> item=service.trash("a",1,20).getItems().get(0);
+        assertEquals(false,item.get("canRestore"));assertEquals(false,item.get("canPurge"));
+        assertEquals(40104,assertThrows(BizException.class,()->service.restore(api.getId(),2L,null)).getCode());
+        jdbc.update("UPDATE user_team SET role='EDITOR' WHERE user_id='u'");
+        assertEquals(true,service.trash("a",1,20).getItems().get(0).get("canRestore"));
+        assertEquals(40101,assertThrows(BizException.class,()->service.purge(api.getId(),2L)).getCode());
+        jdbc.update("UPDATE api_definition SET purge_after='2000-01-01T00:00:00Z' WHERE id=?",api.getId());
+        assertEquals(40923,assertThrows(BizException.class,()->service.restore(api.getId(),2L,null)).getCode());
+        assertEquals(false,service.trash("a",1,20).getItems().get(0).get("canRestore"));
+        assertEquals(1,apis.purgeExpired(100));assertEquals(0,apis.purgeExpired(100));
+        assertNull(apis.findIncludingDeleted(api.getId()));
+        assertEquals(1,jdbc.queryForObject("SELECT COUNT(*) FROM api_tombstone WHERE api_id=?",Integer.class,api.getId()));
+    }
+
+    @Test void purgeErasesAllContentSnapshotsButLeavesContentFreeAuditAndCanRollBackOnFailure() {
+        ApiDefinition api=service.create(dto("/purge","secret-body"));service.delete(api.getId(),1L);
+        jdbc.execute("CREATE TRIGGER reject_purge BEFORE DELETE ON api_definition BEGIN SELECT RAISE(ABORT,'purge failed'); END");
+        assertThrows(DataAccessException.class,()->service.purge(api.getId(),2L));
+        assertNotNull(apis.findIncludingDeleted(api.getId()));assertEquals(2,service.revisions(api.getId()).size());
+        assertEquals(1,responses.findByApiId(api.getId()).size());
+        assertEquals(0,jdbc.queryForObject("SELECT COUNT(*) FROM api_tombstone",Integer.class));
+        jdbc.execute("DROP TRIGGER reject_purge");service.purge(api.getId(),2L);
+        assertNull(apis.findIncludingDeleted(api.getId()));assertTrue(responses.findByApiId(api.getId()).isEmpty());
+        assertEquals(0,jdbc.queryForObject("SELECT COUNT(*) FROM api_revision WHERE api_id=?",Integer.class,api.getId()));
+        assertThrows(BizException.class,()->service.revisions(api.getId()));
+        assertFalse(jdbc.queryForMap("SELECT * FROM api_tombstone WHERE api_id=?",api.getId()).toString().contains("secret-body"));
+        assertEquals(0,jdbc.queryForObject("SELECT history_delete_allowed FROM api_lifecycle_lock WHERE id=1",Integer.class));
+    }
+
+    @Test void rollbackRestoresSoapRulesBodyAndFilesWithoutRestoringCreatorCountersOrDeletedState() throws Exception {
+        MockFileStorageService storage=new MockFileStorageService(temp.toString());
+        MockFileStorageService.StoredMockFile file=storage.store("a","example.txt","text/plain",3,new java.io.ByteArrayInputStream(new byte[]{1,2,3}));
+        ApiDefinitionDTO original=dto("/rollback","old");original.setType("SOAP");
+        original.setSoapConfig(Collections.singletonMap("operations",Collections.singletonList(Collections.singletonMap("operationName","GetOld"))));
+        ApiResponseDTO soap=new ApiResponseDTO();soap.setSoapOperationName("GetOld");soap.setName("SOAP");soap.setActive(true);soap.setResponseBody("<old/>");
+        ApiResponseDTO attachment=new ApiResponseDTO();attachment.setBodyType("FILE");attachment.setFilePath(file.getFilePath());
+        attachment.setFileName("example.txt");attachment.setFileSize(3L);attachment.setName("Attachment");
+        ApiResponseDTO conditional=new ApiResponseDTO();conditional.setName("Rule");conditional.setActive(true);conditional.setResponseBody("conditional-old");
+        conditional.setConditions("{\"conditions\":[{\"source\":\"QUERY\",\"path\":\"kind\",\"operator\":\"EQ\",\"value\":\"old\",\"valueType\":\"STRING\"}]}");
+        original.setResponses(Arrays.asList(conditional,original.getResponses().get(0),soap,attachment));
+        ApiDefinition api=service.create(original);String version=service.revisions(api.getId()).get(0).get("id").toString();
+        apis.incrementHitCount(api.getId(),"latest-hit");signIn("other");service.update(api.getId(),dto("/changed","new"));
+        assertTrue(responses.findAllFilePaths().contains(file.getFilePath()),"history must protect replaced file");
+        assertEquals(0,storage.deleteOrphanFiles(responses.findAllFilePaths()).getDeletedCount());
+        ApiDefinition rolled=service.rollback(api.getId(),version,2L);
+        assertEquals(3,rolled.getRevision());assertEquals("/rollback",rolled.getPath());assertEquals("old",rolled.getResponseBody());
+        assertEquals("SOAP",rolled.getType());assertTrue(rolled.getSoapConfig().contains("GetOld"));
+        assertEquals("u",rolled.getCreatedBy());assertEquals("other",rolled.getUpdatedBy());
+        assertEquals(1,rolled.getHitCount());assertEquals("latest-hit",rolled.getLastCalledAt());assertNull(rolled.getDeletedAt());
+        assertEquals(4,responses.findByApiId(api.getId()).size());
+        assertTrue(responses.findByApiId(api.getId()).stream().anyMatch(r -> r.getConditions()!=null && r.getConditions().contains("kind")));
+        assertEquals(version,service.revisions(api.getId()).get(0).get("restoredFromRevisionId"));
+        service.delete(api.getId(),3L);
+        assertEquals(40926,assertThrows(BizException.class,()->service.rollback(api.getId(),version,4L)).getCode());
+    }
+
+    @Test void configurableRetentionPrunesOnlyActiveHistoryAndKeepsTrashSnapshots() {
+        ReflectionTestUtils.setField(service,"apiRepository",new ApiRepository(jdbc,2));
+        ApiDefinition api=service.create(dto("/retention","one"));service.update(api.getId(),dto("/retention","two"));
+        ApiDefinitionDTO third=dto("/retention","three");third.setExpectedRevision(2L);service.update(api.getId(),third);
+        assertEquals(2,service.revisions(api.getId()).size());
+        service.delete(api.getId(),3L);assertEquals(3,service.revisions(api.getId()).size());
+        assertEquals(0,jdbc.queryForObject("SELECT history_delete_allowed FROM api_lifecycle_lock WHERE id=1",Integer.class));
+        service.restore(api.getId(),4L,null);assertEquals(2,service.revisions(api.getId()).size());
+        assertTrue(jdbc.queryForObject("SELECT COUNT(*) FROM operation_log WHERE action='REVISION_PRUNE'",Integer.class)>0);
+    }
+
+    @Test void concurrentRestoreAndPurgeHaveExactlyOneWinnerAndNeverLoseAnActiveAggregate() throws Exception {
+        ApiDefinition api=service.create(dto("/race","old"));service.delete(api.getId(),1L);
+        ExecutorService pool=Executors.newFixedThreadPool(2);CountDownLatch go=new CountDownLatch(1);
+        try {
+            Future<String> restore=pool.submit(()->{signIn("u");go.await();try { service.restore(api.getId(),2L,null);return "restored"; }
+                catch(BizException e) { return "rejected"; } finally { SecurityContextHolder.clearContext(); }});
+            Future<String> purge=pool.submit(()->{signIn("u");go.await();try { service.purge(api.getId(),2L);return "purged"; }
+                catch(BizException e) { return "rejected"; } finally { SecurityContextHolder.clearContext(); }});
+            go.countDown();String restored=restore.get(10,TimeUnit.SECONDS),purged=purge.get(10,TimeUnit.SECONDS);
+            assertNotEquals("rejected",restored.equals("rejected")?purged:restored);
+            assertFalse(restored.equals("restored")&&purged.equals("purged"));
+            if(restored.equals("restored")) { assertNotNull(apis.findById(api.getId()));assertFalse(apis.findById(api.getId()).isEnabled()); }
+            else assertNull(apis.findIncludingDeleted(api.getId()));
+        } finally { go.countDown();pool.shutdownNow(); }
+    }
+
     private ApiDefinitionDTO dto(String path,String body) {
         ApiDefinitionDTO dto=new ApiDefinitionDTO();dto.setTeamId("a");dto.setName(path);dto.setMethod("GET");dto.setPath(path);
         dto.setEnabled(true);dto.setResponseBody(body);dto.setExpectedRevision(1L);dto.setTagIds(Collections.singletonList("tag"));

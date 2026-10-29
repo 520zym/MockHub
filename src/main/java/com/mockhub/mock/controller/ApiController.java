@@ -107,6 +107,27 @@ public class ApiController {
         return Result.ok(detail);
     }
 
+    @GetMapping("/trash")
+    public Result<PageResult<Map<String,Object>>> trash(@RequestParam(required=false) String teamId,
+            @RequestParam(defaultValue="1") int page,@RequestParam(defaultValue="20") int size) {
+        return Result.ok(apiService.trash(teamId,page,size));
+    }
+    @PostMapping("/{id}/restore")
+    public Result<ApiSaveResultVO> restore(@PathVariable String id,@RequestBody com.mockhub.mock.model.dto.ApiRestoreRequest request) {
+        return Result.ok(ApiSaveResultVO.from(apiService.restore(id,
+                com.mockhub.mock.lifecycle.ApiVersions.require(request.getExpectedRevision()),request.getNewPath())));
+    }
+    @DeleteMapping("/{id}/purge")
+    public Result<Void> purge(@PathVariable String id,@RequestParam(required=false) Long expectedRevision) {
+        apiService.purge(id,com.mockhub.mock.lifecycle.ApiVersions.require(expectedRevision));return Result.ok();
+    }
+    @PostMapping("/{id}/revisions/{revisionId}/rollback")
+    public Result<ApiSaveResultVO> rollback(@PathVariable String id,@PathVariable String revisionId,
+            @RequestBody com.mockhub.mock.model.dto.ApiRestoreRequest request) {
+        return Result.ok(ApiSaveResultVO.from(apiService.rollback(id,revisionId,
+                com.mockhub.mock.lifecycle.ApiVersions.require(request.getExpectedRevision()))));
+    }
+
     @GetMapping("/{id}/revisions")
     public Result<List<Map<String,Object>>> revisions(@PathVariable String id) { return Result.ok(apiService.revisions(id)); }
 

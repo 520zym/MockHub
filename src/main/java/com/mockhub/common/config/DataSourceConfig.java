@@ -496,12 +496,17 @@ public class DataSourceConfig {
         if (tableExists(conn, "ai_pending_action")) addColumnIfNotExists(conn,"ai_pending_action","base_revision","INTEGER");
         try (Statement st=conn.createStatement()) {
             st.execute("CREATE TABLE IF NOT EXISTS api_revision (\n    id TEXT PRIMARY KEY, api_id TEXT NOT NULL, team_id TEXT NOT NULL, revision INTEGER NOT NULL,\n    action TEXT NOT NULL, actor_id TEXT, actor_name_snapshot TEXT NOT NULL, created_at TEXT NOT NULL,\n    source TEXT NOT NULL, snapshot_json TEXT NOT NULL, snapshot_schema_version INTEGER NOT NULL DEFAULT 1,\n    restored_from_revision_id TEXT, UNIQUE(api_id, revision)\n)");
+            st.execute("CREATE TABLE IF NOT EXISTS api_tombstone (api_id TEXT PRIMARY KEY, team_id TEXT NOT NULL, name TEXT, method TEXT, path TEXT, revision INTEGER NOT NULL, deleted_at TEXT, deleted_by TEXT, purged_at TEXT NOT NULL, purged_by TEXT)");
             st.execute("CREATE INDEX IF NOT EXISTS idx_api_revision_api ON api_revision(api_id, revision DESC)");
-            st.execute("CREATE TABLE IF NOT EXISTS api_lifecycle_lock (id INTEGER PRIMARY KEY CHECK(id=1), marker INTEGER NOT NULL DEFAULT 0)");
+            st.execute("CREATE TABLE IF NOT EXISTS api_lifecycle_lock (id INTEGER PRIMARY KEY CHECK(id=1), marker INTEGER NOT NULL DEFAULT 0, history_delete_allowed INTEGER NOT NULL DEFAULT 0)");
             st.execute("INSERT OR IGNORE INTO api_lifecycle_lock(id,marker) VALUES(1,0)");
             st.execute("CREATE TABLE IF NOT EXISTS mock_blob (file_path TEXT PRIMARY KEY, team_id TEXT NOT NULL, lease_expires_at INTEGER NOT NULL DEFAULT 0)");
             st.execute("CREATE TABLE IF NOT EXISTS mock_blob_ref (file_path TEXT NOT NULL, owner_type TEXT NOT NULL, owner_id TEXT NOT NULL,\n    expires_at INTEGER, PRIMARY KEY(file_path,owner_type,owner_id))");
             st.execute("CREATE INDEX IF NOT EXISTS idx_mock_blob_ref_owner ON mock_blob_ref(owner_type,owner_id)");
+            addColumnIfNotExists(conn,"api_lifecycle_lock","history_delete_allowed","INTEGER NOT NULL DEFAULT 0");
+            st.execute("CREATE TRIGGER IF NOT EXISTS api_revision_protected_delete BEFORE DELETE ON api_revision "
+                    + "WHEN (SELECT history_delete_allowed FROM api_lifecycle_lock WHERE id=1)=0 "
+                    + "BEGIN SELECT RAISE(ABORT,'Revision deletion requires audited retention or purge'); END");
             st.execute("CREATE TRIGGER IF NOT EXISTS api_revision_immutable BEFORE UPDATE ON api_revision "
                     + "BEGIN SELECT RAISE(ABORT,'Published API revisions are immutable'); END");
             st.execute("SELECT id,api_id,team_id,revision,action,actor_id,actor_name_snapshot,created_at,source,snapshot_json,"

@@ -136,8 +136,9 @@ CREATE TABLE IF NOT EXISTS api_revision (
     source TEXT NOT NULL, snapshot_json TEXT NOT NULL, snapshot_schema_version INTEGER NOT NULL DEFAULT 1,
     restored_from_revision_id TEXT, UNIQUE(api_id, revision)
 );
+CREATE TABLE IF NOT EXISTS api_tombstone (api_id TEXT PRIMARY KEY, team_id TEXT NOT NULL, name TEXT, method TEXT, path TEXT, revision INTEGER NOT NULL, deleted_at TEXT, deleted_by TEXT, purged_at TEXT NOT NULL, purged_by TEXT);
 CREATE INDEX IF NOT EXISTS idx_api_revision_api ON api_revision(api_id, revision DESC);
-CREATE TABLE IF NOT EXISTS api_lifecycle_lock (id INTEGER PRIMARY KEY CHECK(id=1), marker INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS api_lifecycle_lock (id INTEGER PRIMARY KEY CHECK(id=1), marker INTEGER NOT NULL DEFAULT 0, history_delete_allowed INTEGER NOT NULL DEFAULT 0);
 INSERT OR IGNORE INTO api_lifecycle_lock(id,marker) VALUES(1,0);
 CREATE TABLE IF NOT EXISTS mock_blob (file_path TEXT PRIMARY KEY, team_id TEXT NOT NULL, lease_expires_at INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS mock_blob_ref (file_path TEXT NOT NULL, owner_type TEXT NOT NULL, owner_id TEXT NOT NULL,

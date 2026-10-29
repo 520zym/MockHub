@@ -16,6 +16,10 @@ import java.util.List;
  * 提供接口 CRUD、路径匹配、启用/禁用、复制等功能。
  */
 public interface ApiService {
+    PageResult<java.util.Map<String,Object>> trash(String teamId,int page,int size);
+    ApiDefinition restore(String id,Long expectedRevision,String newPath);
+    void purge(String id,Long expectedRevision);
+    ApiDefinition rollback(String id,String revisionId,Long expectedRevision);
     java.util.List<java.util.Map<String,Object>> revisions(String id);
     java.util.Map<String,Object> revision(String id,String revisionId);
 

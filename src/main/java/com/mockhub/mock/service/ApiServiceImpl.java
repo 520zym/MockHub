@@ -72,6 +72,8 @@ public class ApiServiceImpl implements ApiService {
     private final LogService logService;
     private final com.mockhub.system.repository.UserRepository userRepository;
     private final MockFileStorageService fileStorageService;
+    @org.springframework.beans.factory.annotation.Value("${mock.api.trash-retention-days:30}")
+    private int trashRetentionDays=30;
 
     public ApiServiceImpl(ApiRepository apiRepository,
                           ApiResponseRepository apiResponseRepository,
@@ -557,7 +559,7 @@ public class ApiServiceImpl implements ApiService {
         String now=java.time.Instant.now().toString();
         claim(api,expected==null?api.getRevision():expected,now,SecurityContextUtil.getCurrentUserId());
         apiRepository.markDeleted(id,now,SecurityContextUtil.getCurrentUserId(),
-                java.time.Instant.now().plus(30,java.time.temporal.ChronoUnit.DAYS).toString());
+                java.time.Instant.now().plus(Math.max(1,trashRetentionDays),java.time.temporal.ChronoUnit.DAYS).toString());
         apiRepository.appendRevision(id,"SOFT_DELETE","WEB",null);
     }
 
@@ -736,7 +738,7 @@ public class ApiServiceImpl implements ApiService {
             affected = apiRepository.batchUpdateEnabled(validIds, false, now);
             log.info("批量禁用接口: count={}", affected);
         } else if ("delete".equals(action)) {
-            String purgeAfter=java.time.Instant.now().plus(30,java.time.temporal.ChronoUnit.DAYS).toString();
+            String purgeAfter=java.time.Instant.now().plus(Math.max(1,trashRetentionDays),java.time.temporal.ChronoUnit.DAYS).toString();
             for(ApiDefinition api:targets) apiRepository.markDeleted(api.getId(),now,SecurityContextUtil.getCurrentUserId(),purgeAfter);
             affected=targets.size();
         } else if ("move-group".equals(action)) {
@@ -1021,6 +1023,98 @@ public class ApiServiceImpl implements ApiService {
         apiResponseRepository.replaceAll(apiId, entities);
         // Physical cleanup is deferred: previous blobs may be referenced by a retained revision.
         log.debug("保存接口 {} 的返回体，共 {} 个", apiId, entities.size());
+    }
+
+    @Override
+    public PageResult<Map<String,Object>> trash(String teamId,int page,int size) {
+        List<String> teams=null;
+        if(!SecurityContextUtil.isSuperAdmin()) {
+            teams=new ArrayList<String>();
+            for(com.mockhub.system.model.entity.UserTeam membership:userRepository.findTeamRolesByUserId(SecurityContextUtil.getCurrentUserId()))
+                teams.add(membership.getTeamId());
+            if(teams.isEmpty()) return PageResult.of(Collections.emptyList(),0L,page,size);
+        }
+        if(teamId!=null&&!teamId.isEmpty()) permissionChecker.checkTeamAccess(teamId);
+        int currentPage=Math.max(1,page),pageSize=Math.max(1,Math.min(100,size));
+        List<Map<String,Object>> items=apiRepository.trash(teams,teamId,(currentPage-1)*pageSize,pageSize);
+        for(Map<String,Object> item:items) {
+            boolean write=canWrite(item.get("teamId").toString()),admin=canAdminister(item.get("teamId").toString());
+            boolean retained=item.get("purgeAfter")!=null && java.time.Instant.parse(item.get("purgeAfter").toString()).isAfter(java.time.Instant.now());
+            item.put("canRestore",retained&&write);item.put("canPurge",admin);
+        }
+        return PageResult.of(items,apiRepository.countTrash(teams,teamId),currentPage,pageSize);
+    }
+    private boolean canWrite(String team) {
+        try { permissionChecker.checkTeamWrite(team);return true; } catch(BizException denied) { return false; }
+    }
+    private boolean canAdminister(String team) {
+        try { permissionChecker.checkTeamAdmin(team);return true; } catch(BizException denied) { return false; }
+    }
+
+    @Override
+    public ApiDefinition restore(String id,Long expected,String newPath) {
+        return apiRepository.write(() -> {
+            ApiDefinition api=apiRepository.findIncludingDeleted(id);
+            if(api==null) throw new BizException(40402,"接口不存在或已彻底删除");
+            permissionChecker.checkTeamWrite(api.getTeamId());
+            if(api.getDeletedAt()==null) throw new BizException(40926,"接口不在回收站中");
+            long version=ApiVersions.require(expected);
+            if(version!=api.getRevision()) throw ApiVersions.conflict();
+            if(api.getPurgeAfter()==null || !java.time.Instant.parse(api.getPurgeAfter()).isAfter(java.time.Instant.now()))
+                throw new BizException(40923,"RETENTION_EXPIRED: 已超过恢复期限");
+            String path=newPath==null?api.getPath():normalizeApiPath(newPath);
+            if(!apiRepository.findByTeamIdAndPathAndMethod(api.getTeamId(),path,api.getMethod()).isEmpty())
+                throw new BizException(40922,"RESTORE_PATH_CONFLICT: 路径和方法已被占用，请使用新路径");
+            verifySnapshotFiles(apiRepository.revision(id,apiRepository.history(id).get(0).get("id").toString()).get("snapshot"));
+            if(apiRepository.restore(id,version,path,java.time.Instant.now().toString(),SecurityContextUtil.getCurrentUserId(),api.getPurgeAfter())!=1)
+                throw ApiVersions.conflict();
+            apiRepository.removeMissingTeamReferences(id,api.getTeamId());
+            apiRepository.appendRevision(id,"RESTORE","WEB",null);
+            return apiRepository.findById(id);
+        });
+    }
+
+    @Override
+    public void purge(String id,Long expected) {
+        apiRepository.write(() -> {
+            ApiDefinition api=apiRepository.findIncludingDeleted(id);
+            if(api==null) throw new BizException(40402,"接口不存在或已彻底删除");
+            permissionChecker.checkTeamAdmin(api.getTeamId());
+            if(ApiVersions.require(expected)!=api.getRevision()) throw ApiVersions.conflict();
+            apiRepository.purgeAggregate(api,SecurityContextUtil.getCurrentUserId());return null;
+        });
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public ApiDefinition rollback(String id,String revisionId,Long expected) {
+        return apiRepository.write(() -> {
+            ApiDefinition api=apiRepository.findIncludingDeleted(id);
+            if(api==null) throw new BizException(40402,"接口不存在");
+            permissionChecker.checkTeamWrite(api.getTeamId());
+            if(api.getDeletedAt()!=null) throw new BizException(40926,"请先从回收站恢复接口");
+            Map<String,Object> version=apiRepository.revision(id,revisionId);
+            if(((Number)version.get("snapshotSchemaVersion")).intValue()!=1) throw new BizException(40924,"SNAPSHOT_VERSION_UNSUPPORTED");
+            Map<String,Object> snapshot=(Map<String,Object>)version.get("snapshot");
+            Map<String,Object> config=(Map<String,Object>)snapshot.get("config");
+            if(config==null || config.get("path")==null || config.get("method")==null) throw new BizException(40924,"快照配置不完整");
+            for(ApiDefinition conflict:apiRepository.findByTeamIdAndPathAndMethod(api.getTeamId(),config.get("path").toString(),config.get("method").toString()))
+                if(!id.equals(conflict.getId())) throw new BizException(40922,"RESTORE_PATH_CONFLICT: 历史路径已被占用");
+            verifySnapshotFiles(snapshot);
+            claim(api,expected,java.time.Instant.now().toString(),SecurityContextUtil.getCurrentUserId());
+            apiRepository.applySnapshot(id,snapshot);
+            apiRepository.removeMissingTeamReferences(id,api.getTeamId());
+            apiRepository.appendRevision(id,"ROLLBACK","WEB",revisionId);
+            return apiRepository.findById(id);
+        });
+    }
+    @SuppressWarnings("unchecked")
+    private void verifySnapshotFiles(Object value) {
+        Map<String,Object> snapshot=(Map<String,Object>)value;
+        for(Map<String,Object> response:(List<Map<String,Object>>)snapshot.get("responses")) {
+            if("FILE".equalsIgnoreCase(String.valueOf(response.get("body_type"))))
+                fileStorageService.loadAsResource((String)response.get("file_path"));
+        }
     }
 
     private String userName(String id) {

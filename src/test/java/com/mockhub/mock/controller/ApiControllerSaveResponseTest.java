@@ -33,6 +33,22 @@ class ApiControllerSaveResponseTest {
         verifySave(true);
     }
 
+    @Test
+    void legacyPublicWritesWithoutExpectedRevisionAreExplicitlyRejectedBeforeServiceInvocation() throws Exception {
+        ApiService service=mock(ApiService.class);
+        MockMvc mvc=MockMvcBuilders.standaloneSetup(new ApiController(service,mock(MockFileStorageService.class),mock(PermissionChecker.class)))
+                .setControllerAdvice(new com.mockhub.common.model.GlobalExceptionHandler()).build();
+        for(MockHttpServletRequestBuilder request:new MockHttpServletRequestBuilder[]{
+                put("/api/apis/api"),delete("/api/apis/api"),put("/api/apis/api/toggle"),post("/api/apis/api/copy"),
+                post("/api/apis/api/restore"),delete("/api/apis/api/purge"),post("/api/apis/api/revisions/revision/rollback")}) {
+            mvc.perform(request.contentType(MediaType.APPLICATION_JSON).content("{}"))
+                    .andExpect(status().isOk()).andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.code").value(40920));
+        }
+        mvc.perform(post("/api/apis/batch").contentType(MediaType.APPLICATION_JSON).content("{\"action\":\"disable\",\"ids\":[\"api\"]}"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.code").value(40920));
+        verifyNoInteractions(service);
+    }
+
     private void verifySave(boolean update) throws Exception {
         ApiService service = mock(ApiService.class);
         ApiDefinition api = new ApiDefinition();
