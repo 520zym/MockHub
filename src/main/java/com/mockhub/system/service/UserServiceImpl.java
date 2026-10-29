@@ -14,6 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -58,6 +59,26 @@ public class UserServiceImpl implements UserService {
     public void updatePassword(String userId, String newPasswordHash) {
         log.info("更新用户密码：userId={}", userId);
         userRepository.updatePassword(userId, newPasswordHash, LocalDateTime.now().toString());
+    }
+
+    @Override
+    @Transactional
+    public void resetPassword(String userId, String newPassword) {
+        checkSuperAdmin();
+
+        if (newPassword == null || newPassword.length() < 6) {
+            throw new BizException(40000, "新密码长度不能少于6位");
+        }
+        User user = userRepository.findById(userId);
+        if (user == null) {
+            throw new BizException(40401, "用户不存在");
+        }
+
+        String newHash = PasswordUtil.hash(newPassword);
+        String now = LocalDateTime.now().toString();
+        userRepository.updatePassword(userId, newHash, now);
+        userRepository.updateFirstLogin(userId, true, now);
+        log.info("超管重置用户密码：userId={}, username={}", userId, user.getUsername());
     }
 
     /**

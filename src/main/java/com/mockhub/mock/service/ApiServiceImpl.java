@@ -209,7 +209,15 @@ public class ApiServiceImpl implements ApiService {
         // 确定当前用户可访问的团队范围
         List<String> teamIds = null;
         if (!SecurityContextUtil.isSuperAdmin()) {
-            teamIds = SecurityContextUtil.getCurrentTeamIds();
+            // 领域查询也重新取当前成员范围，不能让旧上下文或非 Web 入口沿用已撤销的团队。
+            teamIds = new ArrayList<String>();
+            for (com.mockhub.system.model.entity.UserTeam relation
+                    : userRepository.findTeamRolesByUserId(SecurityContextUtil.getCurrentUserId())) {
+                String memberTeamId = relation.getTeamId();
+                if (memberTeamId != null && !memberTeamId.isEmpty() && !teamIds.contains(memberTeamId)) {
+                    teamIds.add(memberTeamId);
+                }
+            }
             if (teamIds.isEmpty()) {
                 // 用户没有任何团队，返回空列表
                 return PageResult.of(Collections.<ApiDefinitionVO>emptyList(), 0L, page, size);

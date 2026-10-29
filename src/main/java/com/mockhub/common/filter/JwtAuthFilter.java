@@ -1,12 +1,11 @@
 package com.mockhub.common.filter;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mockhub.common.model.CurrentUser;
 import com.mockhub.common.model.Result;
+import com.mockhub.common.util.CurrentUserProvider;
 import com.mockhub.common.util.JwtUtil;
 import io.jsonwebtoken.Claims;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -19,7 +18,6 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,16 +31,18 @@ import java.util.Map;
 @Component
 public class JwtAuthFilter extends OncePerRequestFilter {
 
-    private static final Logger log = LoggerFactory.getLogger(JwtAuthFilter.class);
-
     private static final String AUTHORIZATION_HEADER = "Authorization";
     private static final String BEARER_PREFIX = "Bearer ";
 
-    @Autowired
-    private JwtUtil jwtUtil;
+    private final JwtUtil jwtUtil;
+    private final ObjectMapper objectMapper;
+    private final CurrentUserProvider currentUserProvider;
 
-    @Autowired
-    private ObjectMapper objectMapper;
+    public JwtAuthFilter(JwtUtil jwtUtil, ObjectMapper objectMapper, CurrentUserProvider currentUserProvider) {
+        this.jwtUtil = jwtUtil;
+        this.objectMapper = objectMapper;
+        this.currentUserProvider = currentUserProvider;
+    }
 
     /**
      * 放行路径不进入此 filter
@@ -65,52 +65,52 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
-        String authHeader = request.getHeader(AUTHORIZATION_HEADER);
+        // 请求之间不能沿用线程上已有的身份；失败或下游抛错时也必须清理。
+        SecurityContextHolder.clearContext();
+        try {
+            String authHeader = request.getHeader(AUTHORIZATION_HEADER);
+            if (authHeader == null || !authHeader.startsWith(BEARER_PREFIX)) {
+                writeUnauthorized(response, "未登录");
+                return;
+            }
 
-        // 无 Token
-        if (authHeader == null || !authHeader.startsWith(BEARER_PREFIX)) {
-            writeUnauthorized(response, "未登录");
-            return;
+            String token = authHeader.substring(BEARER_PREFIX.length());
+            Claims claims = jwtUtil.validateToken(token);
+            if (claims == null) {
+                writeUnauthorized(response, "Token 无效或已过期");
+                return;
+            }
+
+            // JWT 只证明签发时的身份；全局角色、团队范围必须以当前数据库为准。
+            String userId = claims.getSubject();
+            if (userId == null || userId.trim().isEmpty()) {
+                writeUnauthorized(response, "Token 无效或已过期");
+                return;
+            }
+            CurrentUser user = currentUserProvider.findById(userId);
+            if (user == null) {
+                writeUnauthorized(response, "账号不存在或身份无效，请重新登录");
+                return;
+            }
+
+            Map<String, Object> userInfo = new HashMap<String, Object>();
+            userInfo.put("userId", user.getUserId());
+            userInfo.put("username", user.getUsername());
+            userInfo.put("globalRole", user.getGlobalRole());
+            userInfo.put("teamIds", user.getTeamIds());
+
+            List<SimpleGrantedAuthority> authorities = new ArrayList<SimpleGrantedAuthority>();
+            authorities.add(new SimpleGrantedAuthority("ROLE_" + user.getGlobalRole()));
+            UsernamePasswordAuthenticationToken authentication =
+                    new UsernamePasswordAuthenticationToken(user.getUserId(), null, authorities);
+            authentication.setDetails(userInfo);
+            SecurityContextHolder.getContext().setAuthentication(authentication);
+
+            // 不把业务异常捕获成 401；数据库故障也不能回退到旧 claims。
+            filterChain.doFilter(request, response);
+        } finally {
+            SecurityContextHolder.clearContext();
         }
-
-        String token = authHeader.substring(BEARER_PREFIX.length());
-        Claims claims = jwtUtil.validateToken(token);
-
-        // Token 无效或已过期
-        if (claims == null) {
-            writeUnauthorized(response, "Token 无效或已过期");
-            return;
-        }
-
-        // 从 Claims 中提取用户信息，放入 SecurityContext
-        String userId = claims.getSubject();
-        String username = claims.get("username", String.class);
-        String globalRole = claims.get("globalRole", String.class);
-        String teamIdsStr = claims.get("teamIds", String.class);
-
-        List<String> teamIds = new ArrayList<String>();
-        if (teamIdsStr != null && !teamIdsStr.isEmpty()) {
-            teamIds = Arrays.asList(teamIdsStr.split(","));
-        }
-
-        // 构建用户信息 Map 存入 Authentication 的 details
-        Map<String, Object> userInfo = new HashMap<String, Object>();
-        userInfo.put("userId", userId);
-        userInfo.put("username", username);
-        userInfo.put("globalRole", globalRole);
-        userInfo.put("teamIds", teamIds);
-
-        // 创建 Authentication，principal 为 userId，authorities 包含角色
-        List<SimpleGrantedAuthority> authorities = new ArrayList<SimpleGrantedAuthority>();
-        authorities.add(new SimpleGrantedAuthority("ROLE_" + globalRole));
-
-        UsernamePasswordAuthenticationToken authentication =
-                new UsernamePasswordAuthenticationToken(userId, null, authorities);
-        authentication.setDetails(userInfo);
-
-        SecurityContextHolder.getContext().setAuthentication(authentication);
-
-        filterChain.doFilter(request, response);
     }
 
     /**
