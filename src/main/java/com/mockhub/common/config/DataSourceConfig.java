@@ -158,7 +158,7 @@ public class DataSourceConfig {
      *   <li>整个迁移过程包在事务中，任一环节失败全部回滚</li>
      * </ol>
      *
-     * <p>迁移失败不会阻止应用启动，但会打 ERROR 日志。老库升级路径：
+     * <p>迁移失败必须阻止启动，避免在缺少认证状态/会话结构时继续服务。老库升级路径：
      * <ul>
      *   <li>v1.4.3 发版用户：schema_version 表初始为空（current=0）→ 执行 migrateV1 真实建列/迁移 → 记录 version=1</li>
      *   <li>已在 main 跑过 soap-mock-enhancement 的开发者本地库：列/表已存在，migrateV1 幂等跳过 → 记录 version=1</li>
@@ -207,18 +207,21 @@ public class DataSourceConfig {
                     recordSchemaVersion(conn, 7,
                             "MCP 工具：mcp_settings 增加 tool_update_api_draft 开关");
                 }
-                // 后续版本追加：
-                // if (current < 8) { migrateV8(conn); recordSchemaVersion(conn, 8, "..."); }
+                if (current < 8) {
+                    migrateV8(conn);
+                    recordSchemaVersion(conn, 8, "账号状态、认证版本与网页认证会话");
+                }
+                // 后续版本从 V9 追加。
 
                 ensureCompatibilityColumns(conn);
                 conn.commit();
                 log.info("DB 迁移完成");
             } catch (Exception e) {
                 safeRollback(conn);
-                log.error("DB 迁移失败，已回滚。应用继续启动，但请尽快排查。", e);
+                throw new IllegalStateException("DB 迁移失败，已回滚，拒绝启动", e);
             }
         } catch (SQLException e) {
-            log.error("获取数据库连接失败，跳过迁移", e);
+            throw new IllegalStateException("获取数据库连接失败，拒绝跳过迁移", e);
         }
     }
 
@@ -380,7 +383,28 @@ public class DataSourceConfig {
      * 老用户可能来自任意历史版本，甚至没有完整的版本记录；这里只做幂等补列，
      * 不修改已有数据，保证升级后不用手工改库。
      */
+    /** V8 在旧库先补列，新库同样幂等。任何 DDL 错误均由迁移事务回滚并拒绝启动。 */
+    private void migrateV8(Connection conn) throws SQLException {
+        addColumnIfNotExists(conn, "user", "status",
+                "TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'DISABLED'))");
+        addColumnIfNotExists(conn, "user", "auth_version",
+                "INTEGER NOT NULL DEFAULT 0 CHECK (auth_version >= 0)");
+        try (Statement st = conn.createStatement()) {
+            st.execute("CREATE TABLE IF NOT EXISTS auth_session ("
+                    + "id TEXT PRIMARY KEY, user_id TEXT NOT NULL, auth_version INTEGER NOT NULL, "
+                    + "created_at TEXT NOT NULL, expires_at INTEGER NOT NULL, revoked_at TEXT, "
+                    + "user_agent TEXT, ip_address TEXT, "
+                    + "FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE)");
+            st.execute("CREATE INDEX IF NOT EXISTS idx_auth_session_user ON auth_session(user_id)");
+            // 即使有人误写高版本号，也不能跳过安全结构检查。
+            st.executeQuery("SELECT status, auth_version FROM user LIMIT 0").close();
+            st.executeQuery("SELECT id, user_id, auth_version, created_at, expires_at, revoked_at, "
+                    + "user_agent, ip_address FROM auth_session LIMIT 0").close();
+        }
+    }
+
     private void ensureCompatibilityColumns(Connection conn) throws SQLException {
+        migrateV8(conn);
         ensureColumns(conn, "api_definition", new String[][]{
                 {"description", "TEXT"}, {"group_id", "TEXT"}, {"scenarios", "TEXT"},
                 {"response_mode", "TEXT NOT NULL DEFAULT 'CONDITION'"},

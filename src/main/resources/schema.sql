@@ -10,11 +10,28 @@ CREATE TABLE IF NOT EXISTS user (
     display_name TEXT NOT NULL,
     global_role  TEXT NOT NULL DEFAULT 'MEMBER',  -- SUPER_ADMIN / TEAM_ADMIN / MEMBER
     first_login  INTEGER NOT NULL DEFAULT 1,      -- 0=false, 1=true
+    status       TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'DISABLED')),
+    auth_version INTEGER NOT NULL DEFAULT 0 CHECK (auth_version >= 0),
     created_at   TEXT NOT NULL,
     updated_at   TEXT NOT NULL
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_user_username ON user(username);
+
+-- ========== 网页认证会话（JWT sid） ==========
+
+CREATE TABLE IF NOT EXISTS auth_session (
+    id           TEXT PRIMARY KEY,
+    user_id      TEXT NOT NULL,
+    auth_version INTEGER NOT NULL,
+    created_at   TEXT NOT NULL,
+    expires_at   INTEGER NOT NULL,
+    revoked_at   TEXT,
+    user_agent   TEXT,
+    ip_address   TEXT,
+    FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_auth_session_user ON auth_session(user_id);
 
 -- ========== 团队 ==========
 

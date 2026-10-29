@@ -47,6 +47,8 @@ class SchemaVersionMigrationTest {
         SQLiteDataSource sds = new SQLiteDataSource();
         sds.setUrl("jdbc:sqlite:" + tempDir.resolve("test.db").toString());
         this.dataSource = sds;
+        execSql("CREATE TABLE user (id TEXT PRIMARY KEY, username TEXT)",
+                "INSERT INTO user VALUES ('legacy', 'legacy')");
 
         this.config = new DataSourceConfig();
         this.executeMigrations = DataSourceConfig.class
@@ -196,7 +198,7 @@ class SchemaVersionMigrationTest {
 
         runMigration();
 
-        assertEquals(7, readSchemaVersion(), "全新库应记录 schema_version=7（v1 至 v7）");
+        assertEquals(8, readSchemaVersion(), "全新库应记录 schema_version=7（v1 至 v7）");
         assertTrue(columnExists("api_definition", "description"),
                 "description 列应已存在（全新库 schema.sql 已建出）");
         assertTrue(columnExists("api_definition", "group_id"),
@@ -230,10 +232,37 @@ class SchemaVersionMigrationTest {
 
         runMigration();
 
-        assertEquals(7, readSchemaVersion(), "兼容补列不应改变 schema_version");
+        assertEquals(8, readSchemaVersion(), "兼容补列不应改变 schema_version");
         assertTrue(columnExists("ai_settings", "vendor"), "旧 v7 库缺 vendor 时应自动补列");
         assertTrue(columnExists("api_response", "conditions"), "旧库缺 conditions 时应自动补列");
         assertTrue(columnExists("api_definition", "scenarios"), "旧库缺 scenarios 时应自动补列");
+    }
+
+    @Test
+    void v8PreservesDisabledAccountsAndVersionsAcrossRepeatedUpgrade() throws Exception {
+        setupFullSchema();
+        runMigration();
+        assertTrue(columnExists("user", "status"));
+        assertTrue(columnExists("user", "auth_version"));
+        execSql("UPDATE user SET status='DISABLED', auth_version=7 WHERE id='legacy'");
+        runMigration();
+        try (Connection conn = dataSource.getConnection(); Statement st = conn.createStatement();
+             ResultSet rs = st.executeQuery("SELECT status, auth_version FROM user WHERE id='legacy'")) {
+            assertTrue(rs.next());
+            assertEquals("DISABLED", rs.getString(1));
+            assertEquals(7, rs.getLong(2));
+        }
+    }
+
+    @Test
+    void v8FailureRollsBackAndPreventsStartup() throws Exception {
+        setupFullSchema();
+        execSql("CREATE VIEW auth_session AS SELECT id FROM user");
+        java.lang.reflect.InvocationTargetException failure = org.junit.jupiter.api.Assertions.assertThrows(
+                java.lang.reflect.InvocationTargetException.class, this::runMigration);
+        assertTrue(failure.getCause() instanceof IllegalStateException);
+        assertEquals(0, countSchemaVersionRows());
+        org.junit.jupiter.api.Assertions.assertFalse(columnExists("user", "status"));
     }
 
     // ---------- case2：v1.4.3 发版老库 ----------
@@ -255,7 +284,7 @@ class SchemaVersionMigrationTest {
                 "api_response.body_type 列应在 v4 迁移后存在");
         assertTrue(columnExists("api_definition", "response_mode"),
                 "api_definition.response_mode 列应在 v5 迁移后存在");
-        assertEquals(7, readSchemaVersion(), "迁移完成后 schema_version 应记为 6（v1 至 v7）");
+        assertEquals(8, readSchemaVersion(), "迁移完成后 schema_version 应记为 6（v1 至 v7）");
     }
 
     // ---------- case3：已跑过 soap-mock-enhancement 的本地库 ----------
@@ -278,7 +307,7 @@ class SchemaVersionMigrationTest {
         runMigration();
 
         assertEquals(1, countApiResponse(), "已迁移的数据不应被重复插入");
-        assertEquals(7, readSchemaVersion());
+        assertEquals(8, readSchemaVersion());
     }
 
     // ---------- case4：二次启动幂等 ----------
@@ -293,8 +322,8 @@ class SchemaVersionMigrationTest {
 
         assertEquals(firstRunResponseCount, countApiResponse(),
                 "二次迁移不应新增 api_response 数据");
-        assertEquals(7, readSchemaVersion());
-        assertEquals(7, countSchemaVersionRows(),
+        assertEquals(8, readSchemaVersion());
+        assertEquals(8, countSchemaVersionRows(),
                 "schema_version 应有六条记录：version=1 至 7，二次执行不重复写入");
     }
 }
