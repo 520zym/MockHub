@@ -34,6 +34,7 @@ public class McpAuthService {
         Map<String, Object> details = new HashMap<String, Object>();
         details.put("userId", user.getUserId()); details.put("username", user.getUsername());
         details.put("globalRole", user.getGlobalRole()); details.put("teamIds", user.getTeamIds());
+        details.put(McpRequestContext.KEY, new McpRequestContext(token));
         UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                 user.getUserId(), null, Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + user.getGlobalRole())));
         authentication.setDetails(details);

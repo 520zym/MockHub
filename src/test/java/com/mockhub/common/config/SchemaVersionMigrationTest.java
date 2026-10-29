@@ -198,7 +198,7 @@ class SchemaVersionMigrationTest {
 
         runMigration();
 
-        assertEquals(10, readSchemaVersion(), "全新库应记录 schema_version=10（v1 至 v10）");
+        assertEquals(11, readSchemaVersion(), "全新库应记录 schema_version=10（v1 至 v10）");
         assertTrue(columnExists("api_definition", "description"),
                 "description 列应已存在（全新库 schema.sql 已建出）");
         assertTrue(columnExists("api_definition", "group_id"),
@@ -232,7 +232,7 @@ class SchemaVersionMigrationTest {
 
         runMigration();
 
-        assertEquals(10, readSchemaVersion(), "兼容补列不应改变 schema_version");
+        assertEquals(11, readSchemaVersion(), "兼容补列不应改变 schema_version");
         assertTrue(columnExists("ai_settings", "vendor"), "旧 v7 库缺 vendor 时应自动补列");
         assertTrue(columnExists("api_response", "conditions"), "旧库缺 conditions 时应自动补列");
         assertTrue(columnExists("api_definition", "scenarios"), "旧库缺 scenarios 时应自动补列");
@@ -247,12 +247,35 @@ class SchemaVersionMigrationTest {
         execSql("INSERT INTO schema_version(version,description) VALUES(7,'old v7')");
         runMigration();
         schema.invoke(config, jdbc);
-        assertEquals(10, readSchemaVersion());
+        assertEquals(11, readSchemaVersion());
         assertEquals("ACTIVE", jdbc.queryForObject("SELECT status FROM user WHERE id='legacy'", String.class));
         assertEquals(0, jdbc.queryForObject("SELECT auth_version FROM user WHERE id='legacy'", Integer.class));
         assertTrue(columnExists("auth_session", "expires_at"));
         runMigration();
-        assertEquals(4, countSchemaVersionRows());
+        assertEquals(5, countSchemaVersionRows());
+    }
+
+    @Test
+    void v11LegacyTokensAreRevokedAndPendingSourceCannotBeInventedOnUpgrade() throws Exception {
+        setupFullSchema();
+        execSql("CREATE TABLE mcp_token(id TEXT PRIMARY KEY, revoked_at TEXT)",
+                "INSERT INTO mcp_token VALUES('old',NULL)",
+                "CREATE TABLE ai_pending_action(id TEXT PRIMARY KEY)",
+                "INSERT INTO ai_pending_action VALUES('unbound')");
+        runMigration();
+        try(Connection conn=dataSource.getConnection();Statement st=conn.createStatement()){
+            try(ResultSet rs=st.executeQuery("SELECT scope_version,team_ids,scopes,revoked_at FROM mcp_token WHERE id='old'")){
+                assertTrue(rs.next());assertEquals(0,rs.getInt(1));org.junit.jupiter.api.Assertions.assertNull(rs.getString(2));org.junit.jupiter.api.Assertions.assertNull(rs.getString(3));org.junit.jupiter.api.Assertions.assertNotNull(rs.getString(4));
+            }
+            try(ResultSet rs=st.executeQuery("SELECT source_type,source_token_id,source_scope_json FROM ai_pending_action WHERE id='unbound'")){
+                assertTrue(rs.next());assertEquals("LEGACY",rs.getString(1));org.junit.jupiter.api.Assertions.assertNull(rs.getString(2));org.junit.jupiter.api.Assertions.assertNull(rs.getString(3));
+            }
+            st.execute("UPDATE mcp_token SET scope_version=1,team_ids='[\"a\"]',scopes='{\"a\":[\"API_READ\"]}',revoked_at=NULL WHERE id='old'");
+        }
+        runMigration();
+        try(Connection conn=dataSource.getConnection();Statement st=conn.createStatement();ResultSet rs=st.executeQuery("SELECT revoked_at FROM mcp_token WHERE id='old'")){
+            assertTrue(rs.next());org.junit.jupiter.api.Assertions.assertNull(rs.getString(1));
+        }
     }
 
     @Test
@@ -292,7 +315,7 @@ class SchemaVersionMigrationTest {
                 "INSERT INTO user_team VALUES('legacy','orphan','MEMBER')");
         runMigration();
         runMigration();
-        assertEquals(10, readSchemaVersion());
+        assertEquals(11, readSchemaVersion());
         assertTrue(columnExists("team", "status"));
         assertTrue(columnExists("team", "description"));
         try (Connection conn = dataSource.getConnection(); Statement st = conn.createStatement()) {
@@ -349,7 +372,7 @@ class SchemaVersionMigrationTest {
                 "api_response.body_type 列应在 v4 迁移后存在");
         assertTrue(columnExists("api_definition", "response_mode"),
                 "api_definition.response_mode 列应在 v5 迁移后存在");
-        assertEquals(10, readSchemaVersion(), "迁移完成后 schema_version 应记为 10（v1 至 v10）");
+        assertEquals(11, readSchemaVersion(), "迁移完成后 schema_version 应记为 10（v1 至 v10）");
     }
 
     // ---------- case3：已跑过 soap-mock-enhancement 的本地库 ----------
@@ -372,7 +395,7 @@ class SchemaVersionMigrationTest {
         runMigration();
 
         assertEquals(1, countApiResponse(), "已迁移的数据不应被重复插入");
-        assertEquals(10, readSchemaVersion());
+        assertEquals(11, readSchemaVersion());
     }
 
     // ---------- case4：二次启动幂等 ----------
@@ -387,8 +410,8 @@ class SchemaVersionMigrationTest {
 
         assertEquals(firstRunResponseCount, countApiResponse(),
                 "二次迁移不应新增 api_response 数据");
-        assertEquals(10, readSchemaVersion());
-        assertEquals(10, countSchemaVersionRows(),
+        assertEquals(11, readSchemaVersion());
+        assertEquals(11, countSchemaVersionRows(),
                 "schema_version 应有六条记录：version=1 至 7，二次执行不重复写入");
     }
 }

@@ -43,6 +43,8 @@ class McpAuthAccountStateTest {
         jdbc.update("INSERT INTO user_team VALUES('u','t','TEAM_ADMIN')");
         jdbc.update("INSERT INTO mcp_token(id,name,token_hash,token_prefix,user_id,created_at) "
                 + "VALUES('mcp','MCP',?,'mhk_test','u','before')", McpTokenService.sha256("mhk_test"));
+        jdbc.update("UPDATE mcp_token SET scope_version=1,team_ids=?,scopes=?,expires_at=? WHERE id='mcp'",
+                "[\"t\"]", "{\"t\":[\"API_READ\"]}", java.time.Instant.now().plusSeconds(3600).toString());
         users = new UserRepository(); ReflectionTestUtils.setField(users, "jdbcTemplate", jdbc);
         AuthSessionRepository sessions = new AuthSessionRepository(jdbc);
         McpTokenRepository tokens = new McpTokenRepository(jdbc);

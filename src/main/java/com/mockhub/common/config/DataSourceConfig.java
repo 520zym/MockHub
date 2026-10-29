@@ -221,6 +221,8 @@ public class DataSourceConfig {
                     migrateV10(conn);
                     recordSchemaVersion(conn, 10, "接口聚合版本、并发校验与30天回收站");
                 }
+                migrateV11(conn);
+                if (current < 11) recordSchemaVersion(conn, 11, "MCP个人凭证显式团队能力范围与草稿来源");
                 conn.commit();
                 log.info("DB 迁移完成");
             } catch (Exception e) {
@@ -440,6 +442,23 @@ public class DataSourceConfig {
      * 老用户可能来自任意历史版本，甚至没有完整的版本记录；这里只做幂等补列，
      * 不修改已有数据，保证升级后不用手工改库。
      */
+    /** Fail closed: no implicit full-team upgrade for old credentials or unbound pending actions. */
+    private void migrateV11(Connection conn) throws SQLException {
+        if (tableExists(conn, "mcp_token")) {
+            addColumnIfNotExists(conn, "mcp_token", "scope_version", "INTEGER NOT NULL DEFAULT 0");
+            addColumnIfNotExists(conn, "mcp_token", "team_ids", "TEXT");
+            addColumnIfNotExists(conn, "mcp_token", "scopes", "TEXT");
+            try (Statement st = conn.createStatement()) {
+                st.execute("UPDATE mcp_token SET revoked_at=COALESCE(revoked_at, datetime('now')) WHERE scope_version<>1 OR team_ids IS NULL OR scopes IS NULL");
+            }
+        }
+        if (tableExists(conn, "ai_pending_action")) {
+            addColumnIfNotExists(conn, "ai_pending_action", "source_type", "TEXT NOT NULL DEFAULT 'LEGACY'");
+            addColumnIfNotExists(conn, "ai_pending_action", "source_token_id", "TEXT");
+            addColumnIfNotExists(conn, "ai_pending_action", "source_scope_json", "TEXT");
+        }
+    }
+
     private void ensureCompatibilityColumns(Connection conn) throws SQLException {
         migrateV8(conn);
         migrateV9(conn);

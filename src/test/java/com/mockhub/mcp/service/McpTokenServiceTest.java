@@ -31,13 +31,26 @@ class McpTokenServiceTest {
     void setUp() {
         repository = mock(McpTokenRepository.class);
         service = new McpTokenService(repository);
+        com.mockhub.system.repository.UserRepository users=mock(com.mockhub.system.repository.UserRepository.class);
+        com.mockhub.system.repository.TeamRepository teams=mock(com.mockhub.system.repository.TeamRepository.class);
+        com.mockhub.system.model.entity.User owner=new com.mockhub.system.model.entity.User();owner.setId("user-1");owner.setGlobalRole("USER");
+        com.mockhub.system.model.entity.Team team=new com.mockhub.system.model.entity.Team();team.setId("team-1");
+        when(users.findById("user-1")).thenReturn(owner);when(users.findUserTeamRole("user-1","team-1")).thenReturn("EDITOR");when(teams.findById("team-1")).thenReturn(team);
+        org.springframework.test.util.ReflectionTestUtils.setField(service,"scopeService",new McpScopeService(users,teams));
+        org.springframework.security.authentication.UsernamePasswordAuthenticationToken auth=new org.springframework.security.authentication.UsernamePasswordAuthenticationToken("user-1",null,java.util.Collections.emptyList());
+        java.util.Map<String,Object> details=new java.util.HashMap<String,Object>();details.put("userId","user-1");auth.setDetails(details);org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(auth);
     }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearContext(){org.springframework.security.core.context.SecurityContextHolder.clearContext();}
 
     @Test
     void createReturnsPlaintextOnceAndStoresHash() {
         McpTokenCreateRequest request = new McpTokenCreateRequest();
         request.setName("Cursor");
         request.setExpiresInDays(30);
+        request.setTeamIds(java.util.Collections.singletonList("team-1"));
+        request.setScopes(java.util.Collections.singletonList("API_READ"));
 
         McpTokenCreateResult result = service.create("user-1", request);
 
@@ -55,6 +68,9 @@ class McpTokenServiceTest {
         McpToken token = new McpToken();
         token.setId("t1");
         token.setRevokedAt(null);
+        token.setExpiresAt(java.time.Instant.now().plusSeconds(3600).toString());
+        java.util.Map<String,java.util.Set<com.mockhub.mcp.model.McpScope>> scopes=new java.util.LinkedHashMap<String,java.util.Set<com.mockhub.mcp.model.McpScope>>();
+        scopes.put("team-1",java.util.Collections.singleton(com.mockhub.mcp.model.McpScope.API_READ));McpScopeCodec.encode(token,scopes);
         when(repository.findByHash(anyString())).thenReturn(token);
 
         McpToken result = service.authenticate("mhk_valid");
