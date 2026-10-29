@@ -211,7 +211,11 @@ public class DataSourceConfig {
                     migrateV8(conn);
                     recordSchemaVersion(conn, 8, "账号状态、认证版本与网页认证会话");
                 }
-                // 后续版本从 V9 追加。
+                if (current < 9) {
+                    migrateV9(conn);
+                    recordSchemaVersion(conn, 9, "团队角色、归档状态与管理员安全写锁");
+                }
+                // 后续版本从 V10 追加。
 
                 ensureCompatibilityColumns(conn);
                 conn.commit();
@@ -397,6 +401,36 @@ public class DataSourceConfig {
         }
     }
 
+    /** V9 不随机修复孤儿团队；保留全部成员关系，由超管明确指派管理员。 */
+    private void migrateV9(Connection conn) throws SQLException {
+        try (Statement st = conn.createStatement()) {
+            st.execute("CREATE TABLE IF NOT EXISTS security_guard (id INTEGER PRIMARY KEY CHECK(id = 1), revision INTEGER NOT NULL DEFAULT 0)");
+            st.execute("INSERT OR IGNORE INTO security_guard(id, revision) VALUES(1, 0)");
+        }
+        if (tableExists(conn, "team")) {
+            addColumnIfNotExists(conn, "team", "status", "TEXT NOT NULL DEFAULT 'ACTIVE' CHECK(status IN ('ACTIVE', 'ARCHIVED'))");
+            addColumnIfNotExists(conn, "team", "description", "TEXT");
+            addColumnIfNotExists(conn, "team", "created_by", "TEXT");
+        }
+        if (tableExists(conn, "user_team")) {
+            try (Statement st = conn.createStatement()) {
+                st.execute("UPDATE user_team SET role = 'EDITOR' WHERE role = 'MEMBER'");
+            }
+        }
+        // 极老版本测试/数据库可能没有 global_role 列。
+        if (tableExists(conn, "user")) {
+            boolean hasRole = false;
+            try (Statement st = conn.createStatement(); ResultSet rs = st.executeQuery("PRAGMA table_info(user)")) {
+                while (rs.next()) { if ("global_role".equals(rs.getString("name"))) hasRole = true; }
+            }
+            if (hasRole) {
+                try (Statement st = conn.createStatement()) {
+                    st.execute("UPDATE user SET global_role = 'USER' WHERE global_role IN ('MEMBER', 'TEAM_ADMIN')");
+                }
+            }
+        }
+    }
+
     /**
      * 老版本兼容兜底：不依赖 schema_version，逐列补齐当前代码会读取的字段。
      * <p>
@@ -405,6 +439,7 @@ public class DataSourceConfig {
      */
     private void ensureCompatibilityColumns(Connection conn) throws SQLException {
         migrateV8(conn);
+        migrateV9(conn);
         ensureColumns(conn, "api_definition", new String[][]{
                 {"description", "TEXT"}, {"group_id", "TEXT"}, {"scenarios", "TEXT"},
                 {"response_mode", "TEXT NOT NULL DEFAULT 'CONDITION'"},

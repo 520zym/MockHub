@@ -198,7 +198,7 @@ class SchemaVersionMigrationTest {
 
         runMigration();
 
-        assertEquals(8, readSchemaVersion(), "全新库应记录 schema_version=7（v1 至 v7）");
+        assertEquals(9, readSchemaVersion(), "全新库应记录 schema_version=7（v1 至 v7）");
         assertTrue(columnExists("api_definition", "description"),
                 "description 列应已存在（全新库 schema.sql 已建出）");
         assertTrue(columnExists("api_definition", "group_id"),
@@ -232,7 +232,7 @@ class SchemaVersionMigrationTest {
 
         runMigration();
 
-        assertEquals(8, readSchemaVersion(), "兼容补列不应改变 schema_version");
+        assertEquals(9, readSchemaVersion(), "兼容补列不应改变 schema_version");
         assertTrue(columnExists("ai_settings", "vendor"), "旧 v7 库缺 vendor 时应自动补列");
         assertTrue(columnExists("api_response", "conditions"), "旧库缺 conditions 时应自动补列");
         assertTrue(columnExists("api_definition", "scenarios"), "旧库缺 scenarios 时应自动补列");
@@ -282,6 +282,33 @@ class SchemaVersionMigrationTest {
         org.junit.jupiter.api.Assertions.assertFalse(columnExists("user", "status"));
     }
 
+    @Test
+    void v9MapsLegacyRolesWithoutLosingRelationshipsOrPromotingOrphans() throws Exception {
+        setupFullSchema();
+        execSql("ALTER TABLE user ADD COLUMN global_role TEXT DEFAULT 'MEMBER'",
+                "CREATE TABLE team(id TEXT PRIMARY KEY, identifier TEXT)",
+                "INSERT INTO team VALUES('orphan', 'OLD')",
+                "CREATE TABLE user_team(user_id TEXT, team_id TEXT, role TEXT, PRIMARY KEY(user_id,team_id))",
+                "INSERT INTO user_team VALUES('legacy','orphan','MEMBER')");
+        runMigration();
+        runMigration();
+        assertEquals(9, readSchemaVersion());
+        assertTrue(columnExists("team", "status"));
+        assertTrue(columnExists("team", "description"));
+        try (Connection conn = dataSource.getConnection(); Statement st = conn.createStatement()) {
+            try (ResultSet rs = st.executeQuery("SELECT ut.role, u.global_role, t.status FROM user_team ut JOIN user u ON u.id=ut.user_id JOIN team t ON t.id=ut.team_id")) {
+                assertTrue(rs.next());
+                assertEquals("EDITOR", rs.getString(1));
+                assertEquals("USER", rs.getString(2));
+                assertEquals("ACTIVE", rs.getString(3));
+                org.junit.jupiter.api.Assertions.assertFalse(rs.next());
+            }
+            try (ResultSet rs = st.executeQuery("SELECT count(*) FROM security_guard WHERE id=1")) {
+                assertTrue(rs.next()); assertEquals(1, rs.getInt(1));
+            }
+        }
+    }
+
     // ---------- case2：v1.4.3 发版老库 ----------
 
     @Test
@@ -301,7 +328,7 @@ class SchemaVersionMigrationTest {
                 "api_response.body_type 列应在 v4 迁移后存在");
         assertTrue(columnExists("api_definition", "response_mode"),
                 "api_definition.response_mode 列应在 v5 迁移后存在");
-        assertEquals(8, readSchemaVersion(), "迁移完成后 schema_version 应记为 6（v1 至 v7）");
+        assertEquals(9, readSchemaVersion(), "迁移完成后 schema_version 应记为 6（v1 至 v7）");
     }
 
     // ---------- case3：已跑过 soap-mock-enhancement 的本地库 ----------
@@ -324,7 +351,7 @@ class SchemaVersionMigrationTest {
         runMigration();
 
         assertEquals(1, countApiResponse(), "已迁移的数据不应被重复插入");
-        assertEquals(8, readSchemaVersion());
+        assertEquals(9, readSchemaVersion());
     }
 
     // ---------- case4：二次启动幂等 ----------
@@ -339,8 +366,8 @@ class SchemaVersionMigrationTest {
 
         assertEquals(firstRunResponseCount, countApiResponse(),
                 "二次迁移不应新增 api_response 数据");
-        assertEquals(8, readSchemaVersion());
-        assertEquals(8, countSchemaVersionRows(),
+        assertEquals(9, readSchemaVersion());
+        assertEquals(9, countSchemaVersionRows(),
                 "schema_version 应有六条记录：version=1 至 7，二次执行不重复写入");
     }
 }

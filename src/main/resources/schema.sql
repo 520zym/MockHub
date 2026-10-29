@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS user (
     username     TEXT NOT NULL,
     password_hash TEXT NOT NULL,
     display_name TEXT NOT NULL,
-    global_role  TEXT NOT NULL DEFAULT 'MEMBER',  -- SUPER_ADMIN / TEAM_ADMIN / MEMBER
+    global_role  TEXT NOT NULL DEFAULT 'USER',  -- SUPER_ADMIN / USER
     first_login  INTEGER NOT NULL DEFAULT 1,      -- 0=false, 1=true
     status       TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'DISABLED')),
     auth_version INTEGER NOT NULL DEFAULT 0 CHECK (auth_version >= 0),
@@ -40,18 +40,28 @@ CREATE TABLE IF NOT EXISTS team (
     name       TEXT NOT NULL,
     identifier TEXT NOT NULL,   -- 团队短标识，全局唯一，2~8 大写字母/数字
     color      TEXT NOT NULL DEFAULT '#185FA5',
+    description TEXT,
+    status     TEXT NOT NULL DEFAULT 'ACTIVE' CHECK(status IN ('ACTIVE', 'ARCHIVED')),
+    created_by TEXT,
     created_at TEXT NOT NULL
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_team_identifier ON team(identifier);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_team_name ON team(name);
 
+-- 所有管理员敏感写操作在事务内先更新本行，取得 SQLite 写锁再读取最终状态。
+CREATE TABLE IF NOT EXISTS security_guard (
+    id INTEGER PRIMARY KEY CHECK(id = 1),
+    revision INTEGER NOT NULL DEFAULT 0
+);
+INSERT OR IGNORE INTO security_guard(id, revision) VALUES(1, 0);
+
 -- ========== 用户-团队关联 ==========
 
 CREATE TABLE IF NOT EXISTS user_team (
     user_id TEXT NOT NULL,
     team_id TEXT NOT NULL,
-    role    TEXT NOT NULL DEFAULT 'MEMBER',  -- TEAM_ADMIN / MEMBER
+    role    TEXT NOT NULL DEFAULT 'EDITOR',  -- TEAM_ADMIN / EDITOR / VIEWER
     PRIMARY KEY (user_id, team_id),
     FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE,
     FOREIGN KEY (team_id) REFERENCES team(id) ON DELETE CASCADE
