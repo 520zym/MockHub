@@ -4,23 +4,7 @@
     <div class="page-header">
       <div class="page-header__left">
         <h2 class="page-title">动态变量</h2>
-        <el-select
-          v-model="selectedTeamId"
-          placeholder="选择团队"
-          size="default"
-          class="team-picker"
-          @change="handleTeamChange"
-        >
-          <el-option
-            v-for="team in accessibleTeams"
-            :key="team.id"
-            :label="team.name"
-            :value="team.id"
-          >
-            <TeamTag :identifier="team.identifier" :color="team.color" />
-            <span style="margin-left: 8px">{{ team.name }}</span>
-          </el-option>
-        </el-select>
+        <span class="team-context">{{ appStore.currentTeam?.name || '未选择团队' }}</span>
       </div>
       <div class="page-header__right">
         <el-tag v-if="canWrite" type="success" effect="light">可编辑</el-tag>
@@ -28,8 +12,11 @@
       </div>
     </div>
 
+    <p class="page-description">当前团队的变量、候选值与分组。可编辑成员可维护内容，只读成员仅查看。</p>
+    <div v-if="loadError" class="resource-state panel" role="alert"><strong>变量加载失败</strong><p>{{ loadError }}</p><el-button @click="loadVariables">重试</el-button></div>
+    <p v-if="writeError" class="resource-error" role="alert">{{ writeError }}</p>
     <!-- 三栏主内容 -->
-    <div v-if="selectedTeamId" class="panels">
+    <div v-if="canRead && !loadError" v-loading="loading" class="panels">
       <!-- 左栏：变量列表 -->
       <section class="panel panel--left">
         <div class="panel__header">
@@ -37,7 +24,7 @@
           <el-button
             type="primary"
             size="small"
-            :disabled="!canWrite"
+            :disabled="!canWrite || writing"
             @click="openVariableDialog(null)"
           >
             <el-icon><Plus /></el-icon>
@@ -45,11 +32,12 @@
           </el-button>
         </div>
         <div class="panel__body">
-          <div v-if="variables.length === 0" class="empty-hint">暂无变量</div>
+          <div v-if="variables.length === 0" class="empty-hint">{{ loading ? '正在读取变量…' : '当前团队暂无变量' }}</div>
           <div
             v-for="v in variables"
             :key="v.id"
-            class="variable-item"
+            class="variable-item" role="button" tabindex="0"
+            @keydown.enter.prevent="currentVariableId = v.id" @keydown.space.prevent="currentVariableId = v.id"
             :class="{ 'variable-item--active': currentVariableId === v.id }"
             @click="currentVariableId = v.id"
           >
@@ -57,16 +45,16 @@
             <div v-if="v.description" class="variable-item__desc">{{ v.description }}</div>
             <div class="variable-item__actions" @click.stop>
               <el-button
-                type="text"
+                text
                 size="small"
-                :disabled="!canWrite"
+                :disabled="!canWrite || writing"
                 @click="openVariableDialog(v)"
               >编辑</el-button>
               <el-button
-                type="text"
+                text
                 size="small"
                 style="color: var(--el-color-danger)"
-                :disabled="!canWrite"
+                :disabled="!canWrite || writing"
                 @click="handleDeleteVariable(v)"
               >删除</el-button>
             </div>
@@ -91,13 +79,13 @@
             />
             <el-button
               size="small"
-              :disabled="!canWrite || !currentVariable"
-              @click="showBatchDialog = true"
+              :disabled="!canWrite || writing || !currentVariable"
+              @click="openBatchDialog"
             >批量粘贴</el-button>
             <el-button
               type="primary"
               size="small"
-              :disabled="!canWrite || !currentVariable"
+              :disabled="!canWrite || writing || !currentVariable"
               @click="openValueDialog(null)"
             >
               <el-icon><Plus /></el-icon>
@@ -132,13 +120,13 @@
                   <el-button
                     link
                     type="primary"
-                    :disabled="!canWrite"
+                    :disabled="!canWrite || writing"
                     @click="openValueDialog(row)"
                   >编辑</el-button>
                   <el-button
                     link
                     type="danger"
-                    :disabled="!canWrite"
+                    :disabled="!canWrite || writing"
                     @click="handleDeleteValue(row)"
                   >删除</el-button>
                 </div>
@@ -156,7 +144,7 @@
           <el-button
             type="primary"
             size="small"
-            :disabled="!canWrite || !currentVariable"
+            :disabled="!canWrite || writing || !currentVariable"
             @click="openGroupDialog(null)"
           >
             <el-icon><Plus /></el-icon>
@@ -178,16 +166,16 @@
             <div v-if="g.description" class="group-item__desc">{{ g.description }}</div>
             <div class="group-item__actions">
               <el-button
-                type="text"
+                text
                 size="small"
-                :disabled="!canWrite"
+                :disabled="!canWrite || writing"
                 @click="openGroupDialog(g)"
               >编辑</el-button>
               <el-button
-                type="text"
+                text
                 size="small"
                 style="color: var(--el-color-danger)"
-                :disabled="!canWrite"
+                :disabled="!canWrite || writing"
                 @click="handleDeleteGroup(g)"
               >删除</el-button>
             </div>
@@ -196,8 +184,8 @@
       </section>
     </div>
 
-    <div v-else class="empty-hint" style="padding: 48px 0; text-align: center">
-      请选择一个团队查看动态变量
+    <div v-else-if="!canRead" class="empty-hint" style="padding: 48px 0; text-align: center">
+      请在侧栏选择有访问权限的团队。不会加载其它团队变量。
     </div>
 
     <!-- 变量新建/编辑对话框 -->
@@ -206,7 +194,8 @@
       :title="editingVariable ? '编辑变量' : '新建变量'"
       width="480px"
     >
-      <el-form :model="variableForm" label-width="80px">
+      <p v-if="writeError" class="resource-error" role="alert">{{ writeError }}</p>
+      <el-form :model="variableForm" label-position="top" :disabled="!canWrite || writing">
         <el-form-item label="变量名" required>
           <el-input
             v-model="variableForm.name"
@@ -225,7 +214,7 @@
       </el-form>
       <template #footer>
         <el-button @click="showVariableDialog = false">取消</el-button>
-        <el-button type="primary" @click="handleSubmitVariable">保存</el-button>
+        <el-button type="primary" :disabled="!canWrite" :loading="writing" @click="handleSubmitVariable">保存</el-button>
       </template>
     </el-dialog>
 
@@ -235,7 +224,8 @@
       :title="editingValue ? '编辑候选值' : '新增候选值'"
       width="480px"
     >
-      <el-form :model="valueForm" label-width="80px">
+      <p v-if="writeError" class="resource-error" role="alert">{{ writeError }}</p>
+      <el-form :model="valueForm" label-position="top" :disabled="!canWrite || writing">
         <el-form-item label="值" required>
           <el-input v-model="valueForm.value" placeholder="如 旺财" maxlength="256" />
         </el-form-item>
@@ -249,25 +239,26 @@
       </el-form>
       <template #footer>
         <el-button @click="showValueDialog = false">取消</el-button>
-        <el-button type="primary" @click="handleSubmitValue">保存</el-button>
+        <el-button type="primary" :disabled="!canWrite" :loading="writing" @click="handleSubmitValue">保存</el-button>
       </template>
     </el-dialog>
 
     <!-- 批量粘贴对话框 -->
     <el-dialog v-model="showBatchDialog" title="批量粘贴候选值" width="640px">
+      <p v-if="writeError" class="resource-error" role="alert">{{ writeError }}</p>
       <div class="batch-hint">
         每行一条，用<strong>英文逗号</strong>分隔 <code>值</code> 和 <code>描述</code>，
         描述可省略。重复值将被跳过。
       </div>
       <el-input
-        v-model="batchText"
+        v-model="batchText" :disabled="!canWrite || writing"
         type="textarea"
         :rows="10"
         placeholder="旺财,拉布拉多&#10;小黑,金毛&#10;咪咪,英短&#10;豆豆,柯基"
       />
       <template #footer>
         <el-button @click="showBatchDialog = false">取消</el-button>
-        <el-button type="primary" @click="handleBatchInsert">导入</el-button>
+        <el-button type="primary" :disabled="!canWrite" :loading="writing" @click="handleBatchInsert">导入</el-button>
       </template>
     </el-dialog>
 
@@ -277,7 +268,8 @@
       :title="editingGroup ? '编辑分组' : '新建分组'"
       width="720px"
     >
-      <el-form :model="groupForm" label-width="80px">
+      <p v-if="writeError" class="resource-error" role="alert">{{ writeError }}</p>
+      <el-form :model="groupForm" label-position="top" :disabled="!canWrite || writing">
         <el-form-item label="分组名" required>
           <el-input
             v-model="groupForm.name"
@@ -314,576 +306,185 @@
       </el-form>
       <template #footer>
         <el-button @click="showGroupDialog = false">取消</el-button>
-        <el-button type="primary" @click="handleSubmitGroup">保存</el-button>
+        <el-button type="primary" :disabled="!canWrite" :loading="writing" @click="handleSubmitGroup">保存</el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
-/**
- * 团队动态变量维护页
- *
- * 三栏布局：左侧变量列表，中间候选值表格，右侧分组列表。
- * 顶部团队选择器：超管可切所有团队，其他人只看自己所在团队。
- * 所有写入按钮按角色禁用（canWrite = 团队管理员 或 超管）。
- */
-import { computed, onMounted, reactive, ref, watch, nextTick } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import TeamTag from '@/components/TeamTag.vue'
 import { useAppStore } from '@/stores/app'
 import { useUserStore } from '@/stores/user'
-import {
-  getTeamVariables,
-  createVariable, updateVariable, deleteVariable,
-  addValue, updateValue, deleteValue, batchInsertValues,
-  createGroup, updateGroup, deleteGroup
-} from '@/api/customVariable'
+import { getTeamVariables, createVariable, updateVariable, deleteVariable, addValue, updateValue, deleteValue, batchInsertValues, createGroup, updateGroup, deleteGroup } from '@/api/customVariable'
 
 const appStore = useAppStore()
 const userStore = useUserStore()
-
-// ---------- 团队选择 ----------
-const selectedTeamId = ref(null)
-
-// 当前用户可访问的团队列表（超管看全部，其他人按 userTeamIds 过滤）
-const accessibleTeams = computed(() => {
-  if (userStore.isSuperAdmin) {
-    return appStore.teams
-  }
-  const ids = new Set(userStore.userTeamIds)
-  return appStore.teams.filter(t => ids.has(t.id))
-})
-
-// 当前团队是否可写入（团队管理员或超管）
-const canWrite = computed(() => {
-  if (!selectedTeamId.value) return false
-  return userStore.isTeamAdmin(selectedTeamId.value)
-})
-
-// ---------- 变量列表 ----------
+const selectedTeamId = computed(() => appStore.currentTeamId || null)
+const canRead = computed(() => !!selectedTeamId.value && userStore.identityReady && userStore.hasCapability(selectedTeamId.value, 'read'))
+const canWrite = computed(() => canRead.value && appStore.currentTeam?.status !== 'ARCHIVED' && userStore.hasCapability(selectedTeamId.value, 'write'))
 const variables = ref([])
 const currentVariableId = ref(null)
-const currentVariable = computed(() =>
-  variables.value.find(v => v.id === currentVariableId.value) || null
-)
-
-async function loadVariables() {
-  if (!selectedTeamId.value) {
-    variables.value = []
-    return
-  }
-  try {
-    variables.value = await getTeamVariables(selectedTeamId.value)
-    // 保持选中或默认选第一个
-    if (variables.value.length > 0) {
-      if (!variables.value.find(v => v.id === currentVariableId.value)) {
-        currentVariableId.value = variables.value[0].id
-      }
-    } else {
-      currentVariableId.value = null
-    }
-  } catch (e) {
-    // 全局拦截器会弹错，这里静默
-  }
-}
-
-function handleTeamChange() {
-  currentVariableId.value = null
-  loadVariables()
-}
-
-// ---------- 值搜索 ----------
+const currentVariable = computed(() => variables.value.find(v => v.id === currentVariableId.value) || null)
+const loading = ref(false)
+const writing = ref(false)
+const loadError = ref('')
+const writeError = ref('')
 const valueSearchKeyword = ref('')
-const filteredValues = computed(() => {
-  if (!currentVariable.value) return []
-  const kw = valueSearchKeyword.value.trim().toLowerCase()
-  if (!kw) return currentVariable.value.values
-  return currentVariable.value.values.filter(v =>
-    v.value.toLowerCase().includes(kw) ||
-    (v.description && v.description.toLowerCase().includes(kw))
-  )
-})
-
-// ---------- 变量对话框 ----------
 const showVariableDialog = ref(false)
 const editingVariable = ref(null)
 const variableForm = reactive({ name: '', description: '' })
-
-function openVariableDialog(v) {
-  editingVariable.value = v
-  variableForm.name = v ? v.name : ''
-  variableForm.description = v ? (v.description || '') : ''
-  showVariableDialog.value = true
-}
-
-async function handleSubmitVariable() {
-  const payload = { name: variableForm.name, description: variableForm.description }
-  try {
-    if (editingVariable.value) {
-      await updateVariable(selectedTeamId.value, editingVariable.value.id, payload)
-      ElMessage.success('已更新')
-    } else {
-      const created = await createVariable(selectedTeamId.value, payload)
-      currentVariableId.value = created.id
-      ElMessage.success('已创建')
-    }
-    showVariableDialog.value = false
-    await loadVariables()
-  } catch (e) {
-    // 全局拦截器已弹错
-  }
-}
-
-async function handleDeleteVariable(v) {
-  try {
-    await ElMessageBox.confirm(
-      `确定删除变量「${v.name}」？将同时清理所有候选值和分组。`,
-      '确认删除',
-      { type: 'warning' }
-    )
-    await deleteVariable(selectedTeamId.value, v.id)
-    ElMessage.success('已删除')
-    if (currentVariableId.value === v.id) {
-      currentVariableId.value = null
-    }
-    await loadVariables()
-  } catch (e) {
-    // 用户取消或后端报错
-  }
-}
-
-// ---------- 值对话框 ----------
 const showValueDialog = ref(false)
 const editingValue = ref(null)
 const valueForm = reactive({ value: '', description: '' })
-
-function openValueDialog(row) {
-  editingValue.value = row
-  valueForm.value = row ? row.value : ''
-  valueForm.description = row ? (row.description || '') : ''
-  showValueDialog.value = true
-}
-
-async function handleSubmitValue() {
-  const payload = { value: valueForm.value, description: valueForm.description }
-  try {
-    if (editingValue.value) {
-      await updateValue(
-        selectedTeamId.value,
-        currentVariable.value.id,
-        editingValue.value.id,
-        payload
-      )
-      ElMessage.success('已更新')
-    } else {
-      await addValue(selectedTeamId.value, currentVariable.value.id, payload)
-      ElMessage.success('已新增')
-    }
-    showValueDialog.value = false
-    await loadVariables()
-  } catch (e) {
-    // 全局拦截器已弹错
-  }
-}
-
-async function handleDeleteValue(row) {
-  try {
-    await ElMessageBox.confirm(`确定删除候选值「${row.value}」？`, '确认删除', { type: 'warning' })
-    await deleteValue(selectedTeamId.value, currentVariable.value.id, row.id)
-    ElMessage.success('已删除')
-    await loadVariables()
-  } catch (e) {
-    // ignore
-  }
-}
-
-// ---------- 批量粘贴 ----------
 const showBatchDialog = ref(false)
 const batchText = ref('')
-
-async function handleBatchInsert() {
-  const lines = batchText.value.split('\n')
-  const values = []
-  for (const raw of lines) {
-    const line = raw.trim()
-    if (!line) continue
-    // 按首个英文逗号分隔：逗号前为值，之后全部作为描述（允许描述里再含逗号）
-    const commaIdx = line.indexOf(',')
-    let value, description
-    if (commaIdx === -1) {
-      value = line
-      description = ''
-    } else {
-      value = line.substring(0, commaIdx).trim()
-      description = line.substring(commaIdx + 1).trim()
-    }
-    if (value) {
-      values.push({ value, description })
-    }
-  }
-  if (values.length === 0) {
-    ElMessage.warning('没有可导入的条目')
-    return
-  }
-  try {
-    const result = await batchInsertValues(
-      selectedTeamId.value,
-      currentVariable.value.id,
-      values
-    )
-    ElMessage.success(`导入完成：新增 ${result.inserted}，跳过 ${result.skipped}`)
-    showBatchDialog.value = false
-    batchText.value = ''
-    await loadVariables()
-  } catch (e) {
-    // ignore
-  }
-}
-
-// ---------- 分组对话框 ----------
 const showGroupDialog = ref(false)
 const editingGroup = ref(null)
 const groupForm = reactive({ name: '', description: '', valueIds: [] })
 const groupValueSearch = ref('')
 const groupValueTableRef = ref(null)
-
-// 分组对话框里的候选值表格（过滤+选择）
+let version = 0, listSequence = 0, disposed = false, syncingSelection = false, confirmationOpen = false
+let dialogContext = null, dialogVariableId = null
+function snapshot() { return { teamId: selectedTeamId.value, version } }
+function current(ctx) { return !disposed && canRead.value && ctx?.teamId === selectedTeamId.value && ctx.version === version }
+function errorMessage(error, fallback) { return error?.response?.data?.msg || error?.msg || error?.message || fallback }
+function closeDialogs() { showVariableDialog.value = false; showValueDialog.value = false; showBatchDialog.value = false; showGroupDialog.value = false; dialogContext = null; dialogVariableId = null; batchText.value = ''; editingVariable.value = null; editingValue.value = null; editingGroup.value = null; variableForm.name = ''; variableForm.description = ''; valueForm.value = ''; valueForm.description = ''; groupForm.name = ''; groupForm.description = ''; groupForm.valueIds = [] }
+function beginDialog(needsVariable = false) {
+  if (!canWrite.value || writing.value || (needsVariable && !currentVariable.value)) return false
+  dialogContext = snapshot(); dialogVariableId = currentVariableId.value; writeError.value = ''; return true
+}
+function matchesDialog() { return current(dialogContext) && canWrite.value && (!dialogVariableId || currentVariableId.value === dialogVariableId) }
+watch([selectedTeamId, canRead, canWrite, () => userStore.user?.id], () => {
+  if (confirmationOpen) ElMessageBox.close()
+  version++; listSequence++; closeDialogs(); variables.value = []; currentVariableId.value = null; valueSearchKeyword.value = ''; loadError.value = ''; writeError.value = ''; loading.value = false; writing.value = false
+  if (canRead.value) loadVariables()
+}, { immediate: true, flush: 'sync' })
+onBeforeUnmount(() => { disposed = true; version++; listSequence++; closeDialogs() })
+async function loadVariables() {
+  const ctx = snapshot(), sequence = ++listSequence
+  if (!canRead.value) { variables.value = []; currentVariableId.value = null; return }
+  loading.value = true; loadError.value = ''
+  try {
+    const data = await getTeamVariables(ctx.teamId)
+    if (!current(ctx) || sequence !== listSequence) return
+    variables.value = (data || []).map(v => ({ ...v, values: v.values || [], groups: v.groups || [] }))
+    if (!variables.value.some(v => v.id === currentVariableId.value)) currentVariableId.value = variables.value[0]?.id || null
+  } catch (error) { if (current(ctx) && sequence === listSequence) { variables.value = []; currentVariableId.value = null; loadError.value = errorMessage(error, '变量加载失败。') } }
+  finally { if (current(ctx) && sequence === listSequence) loading.value = false }
+}
+async function executeWrite(ctx, work, success) {
+  if (!current(ctx) || !canWrite.value || writing.value) return
+  writing.value = true; writeError.value = ''
+  try {
+    const result = await work(ctx.teamId)
+    if (!current(ctx) || !canWrite.value) return
+    success?.(result); await loadVariables()
+  } catch (error) { if (current(ctx)) writeError.value = errorMessage(error, '操作失败，请重试。') }
+  finally { if (current(ctx)) writing.value = false }
+}
+async function confirmDelete(text) { confirmationOpen = true; try { await ElMessageBox.confirm(text, '确认删除', { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消', closeOnClickModal: false }); return true } catch { return false } finally { confirmationOpen = false } }
+function nameValid(value) { return /^[A-Za-z0-9_]{1,32}$/.test(value) }
+const filteredValues = computed(() => {
+  const values = currentVariable.value?.values || [], kw = valueSearchKeyword.value.trim().toLowerCase()
+  return kw ? values.filter(v => String(v.value).toLowerCase().includes(kw) || (v.description || '').toLowerCase().includes(kw)) : values
+})
+function openVariableDialog(v) { if (!beginDialog()) return; editingVariable.value = v; variableForm.name = v?.name || ''; variableForm.description = v?.description || ''; showVariableDialog.value = true }
+async function handleSubmitVariable() {
+  if (!matchesDialog()) return
+  if (!nameValid(variableForm.name)) { writeError.value = '变量名只允许 1–32 个字母、数字或下划线。'; return }
+  const ctx = dialogContext, id = editingVariable.value?.id, payload = { name: variableForm.name, description: variableForm.description }
+  await executeWrite(ctx, team => id ? updateVariable(team, id, payload) : createVariable(team, payload), result => { if (!id && result?.id) currentVariableId.value = result.id; showVariableDialog.value = false; ElMessage.success(id ? '已更新变量' : '已创建变量') })
+}
+async function handleDeleteVariable(v) {
+  if (!canWrite.value || writing.value) return
+  const ctx = snapshot()
+  if (!await confirmDelete('确定删除变量「' + v.name + '」？将同时清理所有候选值和分组。')) return
+  await executeWrite(ctx, team => deleteVariable(team, v.id), () => { if (currentVariableId.value === v.id) currentVariableId.value = null; ElMessage.success('已删除变量') })
+}
+function openValueDialog(row) { if (!beginDialog(true)) return; editingValue.value = row; valueForm.value = row?.value || ''; valueForm.description = row?.description || ''; showValueDialog.value = true }
+async function handleSubmitValue() {
+  if (!matchesDialog() || !dialogVariableId) return
+  if (!valueForm.value || valueForm.value.length > 256 || valueForm.description.length > 256) { writeError.value = '请填写 1–256 字符的值，描述最多 256 字符。'; return }
+  const ctx = dialogContext, variableId = dialogVariableId, id = editingValue.value?.id, payload = { value: valueForm.value, description: valueForm.description }
+  await executeWrite(ctx, team => id ? updateValue(team, variableId, id, payload) : addValue(team, variableId, payload), () => { showValueDialog.value = false; ElMessage.success(id ? '已更新候选值' : '已新增候选值') })
+}
+async function handleDeleteValue(row) {
+  if (!canWrite.value || writing.value || !currentVariable.value) return
+  const ctx = snapshot(), variableId = currentVariableId.value
+  if (!await confirmDelete('确定删除候选值「' + row.value + '」？')) return
+  await executeWrite(ctx, team => deleteValue(team, variableId, row.id), () => ElMessage.success('已删除候选值'))
+}
+function openBatchDialog() { if (!beginDialog(true)) return; batchText.value = ''; showBatchDialog.value = true }
+async function handleBatchInsert() {
+  if (!matchesDialog() || !dialogVariableId) return
+  const values = []
+  for (const raw of batchText.value.split('\n')) {
+    const line = raw.trim(); if (!line) continue
+    const index = line.indexOf(','), value = (index < 0 ? line : line.slice(0, index)).trim(), description = index < 0 ? '' : line.slice(index + 1).trim()
+    if (value) values.push({ value, description })
+  }
+  if (!values.length) { writeError.value = '没有可导入的条目。'; return }
+  if (values.some(v => v.value.length > 256 || v.description.length > 256)) { writeError.value = '每项的值与描述均不得超过 256 字符。'; return }
+  const ctx = dialogContext, variableId = dialogVariableId
+  await executeWrite(ctx, team => batchInsertValues(team, variableId, values), result => { showBatchDialog.value = false; batchText.value = ''; ElMessage.success('导入完成：新增 ' + result.inserted + '，跳过 ' + result.skipped) })
+}
 const filteredGroupValues = computed(() => {
-  if (!currentVariable.value) return []
-  const kw = groupValueSearch.value.trim().toLowerCase()
-  if (!kw) return currentVariable.value.values
-  return currentVariable.value.values.filter(v =>
-    v.value.toLowerCase().includes(kw) ||
-    (v.description && v.description.toLowerCase().includes(kw))
-  )
+  const values = currentVariable.value?.values || [], kw = groupValueSearch.value.trim().toLowerCase()
+  return kw ? values.filter(v => String(v.value).toLowerCase().includes(kw) || (v.description || '').toLowerCase().includes(kw)) : values
 })
-
 function openGroupDialog(g) {
-  editingGroup.value = g
-  groupForm.name = g ? g.name : ''
-  groupForm.description = g ? (g.description || '') : ''
-  groupForm.valueIds = g ? [...g.valueIds] : []
-  groupValueSearch.value = ''
-  showGroupDialog.value = true
-  // 等 dialog + table 渲染完再勾选已有成员
-  nextTick(() => {
-    syncGroupSelection()
-  })
+  if (!beginDialog(true)) return
+  syncingSelection = true
+  editingGroup.value = g; groupForm.name = g?.name || ''; groupForm.description = g?.description || ''; groupForm.valueIds = [...(g?.valueIds || [])]; groupValueSearch.value = ''; showGroupDialog.value = true; nextTick(syncGroupSelection)
 }
-
-// 把 groupForm.valueIds 同步到表格的 selection（用于编辑时回显选中态）
 function syncGroupSelection() {
-  if (!groupValueTableRef.value || !currentVariable.value) return
-  const selectedSet = new Set(groupForm.valueIds)
-  for (const row of currentVariable.value.values) {
-    groupValueTableRef.value.toggleRowSelection(row, selectedSet.has(row.id))
-  }
+  if (!groupValueTableRef.value || !showGroupDialog.value) return
+  syncingSelection = true
+  groupValueTableRef.value.clearSelection()
+  const ids = new Set(groupForm.valueIds)
+  for (const row of filteredGroupValues.value) groupValueTableRef.value.toggleRowSelection(row, ids.has(row.id))
+  nextTick(() => { syncingSelection = false })
 }
-
 function handleGroupSelectionChange(rows) {
-  groupForm.valueIds = rows.map(r => r.id)
+  if (syncingSelection) return
+  const visible = new Set(filteredGroupValues.value.map(v => v.id))
+  groupForm.valueIds = [...new Set([...groupForm.valueIds.filter(id => !visible.has(id)), ...rows.map(r => r.id)])]
 }
-
 async function handleSubmitGroup() {
-  const payload = {
-    name: groupForm.name,
-    description: groupForm.description,
-    valueIds: groupForm.valueIds
-  }
-  try {
-    if (editingGroup.value) {
-      await updateGroup(
-        selectedTeamId.value,
-        currentVariable.value.id,
-        editingGroup.value.id,
-        payload
-      )
-      ElMessage.success('已更新')
-    } else {
-      await createGroup(selectedTeamId.value, currentVariable.value.id, payload)
-      ElMessage.success('已创建')
-    }
-    showGroupDialog.value = false
-    await loadVariables()
-  } catch (e) {
-    // ignore
-  }
+  if (!matchesDialog() || !dialogVariableId) return
+  if (!nameValid(groupForm.name)) { writeError.value = '分组名只允许 1–32 个字母、数字或下划线。'; return }
+  const ctx = dialogContext, variableId = dialogVariableId, id = editingGroup.value?.id, payload = { name: groupForm.name, description: groupForm.description, valueIds: [...groupForm.valueIds] }
+  await executeWrite(ctx, team => id ? updateGroup(team, variableId, id, payload) : createGroup(team, variableId, payload), () => { showGroupDialog.value = false; ElMessage.success(id ? '已更新分组' : '已创建分组') })
 }
-
 async function handleDeleteGroup(g) {
-  try {
-    await ElMessageBox.confirm(`确定删除分组「${g.name}」？`, '确认删除', { type: 'warning' })
-    await deleteGroup(selectedTeamId.value, currentVariable.value.id, g.id)
-    ElMessage.success('已删除')
-    await loadVariables()
-  } catch (e) {
-    // ignore
-  }
+  if (!canWrite.value || writing.value || !currentVariable.value) return
+  const ctx = snapshot(), variableId = currentVariableId.value
+  if (!await confirmDelete('确定删除分组「' + g.name + '」？')) return
+  await executeWrite(ctx, team => deleteGroup(team, variableId, g.id), () => ElMessage.success('已删除分组'))
 }
-
-// ---------- 初始化 ----------
-onMounted(async () => {
-  if (appStore.teams.length === 0) {
-    await appStore.loadTeams()
-  }
-  if (accessibleTeams.value.length > 0) {
-    selectedTeamId.value = accessibleTeams.value[0].id
-    await loadVariables()
-  }
-})
-
-watch(currentVariableId, () => {
-  valueSearchKeyword.value = ''
-})
+watch(currentVariableId, () => { valueSearchKeyword.value = ''; closeDialogs() })
+watch(filteredGroupValues, () => { if (showGroupDialog.value) { syncingSelection = true; nextTick(syncGroupSelection) } }, { flush: 'sync' })
 </script>
 
 <style scoped>
-.team-variables {
-  padding: 24px 32px;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  overflow: hidden;
-}
-
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.page-header__left {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.page-title {
-  font-size: 22px;
-  font-weight: 700;
-  color: #1B2559;
-  margin: 0;
-}
-
-.team-picker {
-  width: 240px;
-}
-
-.page-header__right {
-  display: flex;
-  gap: 8px;
-}
-
-.panels {
-  flex: 1;
-  display: grid;
-  grid-template-columns: 260px 1fr 300px;
-  gap: 16px;
-  min-height: 0;
-}
-
-/* 扁平化：去阴影 + 去边框，靠页面底色与白色卡片色差区分；圆角收紧到 12px */
-.panel {
-  background: #fff;
-  border-radius: 12px;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.panel__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 16px 12px;
-  border-bottom: 1px solid #F1F5F9;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.panel__title {
-  font-size: 15px;
-  font-weight: 600;
-  color: #1B2559;
-}
-
-.panel__subtitle {
-  font-size: 13px;
-  color: #A3AED0;
-  font-weight: 400;
-}
-
-.panel__header-actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.panel__body {
-  flex: 1;
-  padding: 8px;
-  overflow: auto;
-  min-height: 0;
-}
-
-/* 表格型面板：去掉内边距让 el-table 顶格撑满 */
-.panel__body--table {
-  padding: 0 8px 8px;
-}
-
-/* 候选值行：高度与 ApiList 的 .api-row 对齐，cell 垂直居中 */
-.panel__body--table :deep(.value-row) {
-  height: 48px;
-}
-
-.panel__body--table :deep(.value-row td .cell) {
-  display: flex;
-  align-items: center;
-  min-height: 32px;
-}
-
-.panel__body--table :deep(.value-row td.is-right .cell) {
-  justify-content: flex-end;
-}
-
-.value-text {
-  font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
-  font-size: 13px;
-  color: #1B2559;
-  font-weight: 500;
-}
-
-.desc-text {
-  font-size: 13px;
-  color: #4A5568;
-}
-
-.desc-muted {
-  font-size: 13px;
-  color: #CBD5E1;
-}
-
-.empty-hint {
-  padding: 24px 16px;
-  text-align: center;
-  color: #A3AED0;
-  font-size: 13px;
-}
-
-.variable-item {
-  padding: 10px 12px;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: background 0.15s;
-  margin-bottom: 4px;
-}
-
-.variable-item:hover {
-  background: #F7F8FA;
-}
-
-.variable-item--active {
-  background: #E0E7FF;
-}
-
-.variable-item--active .variable-item__name {
-  color: #6366F1;
-}
-
-.variable-item__name {
-  font-size: 14px;
-  font-weight: 600;
-  color: #1B2559;
-  font-family: 'SFMono-Regular', Consolas, Menlo, monospace;
-}
-
-.variable-item__desc {
-  font-size: 12px;
-  color: #64748B;
-  margin-top: 2px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.variable-item__actions {
-  display: flex;
-  gap: 4px;
-  margin-top: 4px;
-}
-
-.group-item {
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: #F7F8FA;
-  margin-bottom: 8px;
-}
-
-.group-item__main {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.group-item__name {
-  font-size: 14px;
-  font-weight: 600;
-  color: #1B2559;
-  font-family: 'SFMono-Regular', Consolas, Menlo, monospace;
-}
-
-.group-item__count {
-  font-size: 12px;
-  color: #6366F1;
-}
-
-.group-item__desc {
-  font-size: 12px;
-  color: #64748B;
-  margin-top: 4px;
-}
-
-.group-item__actions {
-  display: flex;
-  gap: 4px;
-  margin-top: 6px;
-}
-
-.batch-hint {
-  font-size: 12px;
-  color: #64748B;
-  margin-bottom: 12px;
-}
-
-.batch-hint code {
-  background: #F1F5F9;
-  padding: 1px 6px;
-  border-radius: 4px;
-  color: #6366F1;
-}
-
-.selected-count {
-  margin-top: 8px;
-  font-size: 12px;
-  color: #6366F1;
-}
-
-/**
- * 候选值表格操作列：强制两个 link 按钮横向排列
- * 背景：Element Plus 的 el-button--link 在某些 table 单元格里可能被外部样式
- * 影响成块级布局，此处显式 flex + nowrap 保证横排。
- */
-.row-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  white-space: nowrap;
-}
-
-.row-actions .el-button + .el-button {
-  margin-left: 0;
-}
+.team-variables { min-width: 0; display: flex; flex-direction: column; gap: 16px; color: var(--app-text-primary); }
+.page-header, .page-header__left, .page-header__right { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }.page-header { justify-content: space-between; }
+.page-title { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -.025em; color: var(--app-text-primary); }.page-description { margin: 0; font-size: 13px; color: var(--app-text-secondary); }
+.team-context { font-size: 12px; color: var(--app-text-secondary); padding: 7px 10px; background: var(--app-bg-surface); border-radius: 8px; }
+.panels { display: grid; grid-template-columns: minmax(180px, 230px) minmax(0, 1fr) minmax(200px, 260px); gap: 14px; min-width: 0; align-items: start; }
+.panel { min-width: 0; background: var(--app-bg-surface); border-radius: 16px; display: flex; flex-direction: column; }
+.panel__header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 18px 16px 12px; gap: 10px; }.panel__title { font-size: 15px; font-weight: 600; }.panel__subtitle { font-size: 12px; color: var(--app-text-secondary); font-weight: 400; overflow-wrap: anywhere; }
+.panel__header-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; }.panel__body { min-width: 0; padding: 8px 12px 12px; }.panel__body--table { padding: 0 12px 12px; }
+.value-text { font: 13px var(--app-font-mono); color: var(--app-text-primary); }.desc-text { font-size: 13px; color: var(--app-text-regular); }.desc-muted, .empty-hint { font-size: 13px; color: var(--app-text-secondary); }.empty-hint { padding: 24px 16px; text-align: center; }
+.variable-item { padding: 12px; border-radius: 10px; cursor: pointer; margin-bottom: 4px; }.variable-item:hover { background: var(--app-bg-control); }.variable-item:focus-visible { outline: 2px solid var(--app-focus-color); outline-offset: 1px; }.variable-item--active { background: var(--app-bg-selected); }.variable-item--active .variable-item__name { color: var(--app-accent); }
+.variable-item__name, .group-item__name { font: 500 14px var(--app-font-mono); color: var(--app-text-primary); overflow-wrap: anywhere; }.variable-item__desc, .group-item__desc { font-size: 12px; color: var(--app-text-secondary); margin-top: 5px; overflow-wrap: anywhere; }
+.variable-item__actions, .group-item__actions, .row-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; }.row-actions { margin-top: 0; flex-wrap: nowrap; }.row-actions .el-button + .el-button { margin-left: 0; }
+.group-item { padding: 12px; background: var(--app-bg-control); border-radius: 10px; margin-bottom: 10px; }.group-item__main { display: flex; justify-content: space-between; gap: 10px; align-items: center; }.group-item__count, .selected-count { font-size: 12px; color: var(--app-accent); }.selected-count { margin-top: 10px; }
+.batch-hint { font-size: 13px; line-height: 1.8; color: var(--app-text-secondary); margin-bottom: 12px; }.batch-hint code { padding: 2px 6px; background: var(--app-bg-control); border-radius: 8px; color: var(--app-accent); }
+.resource-state { text-align: center; color: var(--app-text-secondary); padding: 32px 20px; }.resource-state p { margin: 10px 0; }.resource-error { color: var(--el-color-danger); background: var(--el-color-danger-light-9); border-radius: 10px; padding: 12px 16px; margin: 0 0 12px; font-size: 13px; overflow-wrap: anywhere; }
+@media (max-width: 1200px) { .panels { grid-template-columns: minmax(180px, 230px) minmax(0, 1fr); }.panel--right { grid-column: 1 / -1; } }
+@media (max-width: 760px) { .panels { grid-template-columns: minmax(0, 1fr); }.panel--right { grid-column: auto; }.page-title { font-size: 24px; }.panel__header-actions { width: 100%; }.panel__header-actions :deep(.el-input) { width: 100% !important; margin-right: 0 !important; } }
 </style>
