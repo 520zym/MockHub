@@ -22,6 +22,14 @@ test('both JSON and exported-style DEFLATE ZIP manifests are really parsed', asy
   assert.equal(json.data.apis[0].revision, 999)
   for (const method of [0, 8]) { const zip = await readImportManifest(zipJson(manifest, method)); assert.equal(zip.format, 'ZIP'); assert.equal(zip.data.apis[0].id, 'source') }
 })
+test('portable SOAP bundle 2.3 keeps explicit WSDL attachment metadata in JSON and ZIP preview', async () => {
+  const data = { ...manifest, version: '2.3', apiWsdlFiles: { source: 'wsdl/11111111-1111-4111-8111-111111111111.wsdl' } }
+  for (const file of [new File([JSON.stringify(data)], 'soap.json'), zipJson(data)]) {
+    const parsed = await readImportManifest(file)
+    assert.equal(parsed.data.version, '2.3'); assert.deepEqual(parsed.data.apiWsdlFiles, data.apiWsdlFiles)
+    assert.deepEqual(planImport(parsed.data, [target], 'override').expectedRevisions, { target: 7 })
+  }
+})
 test('unavailable local ZIP preview never invents counts or weakens target version mapping', async () => {
   const result = await readImportManifest(zipJson(manifest), { decompressor: null })
   assert.equal(result.data, null); assert.ok(result.warning)

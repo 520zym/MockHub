@@ -1,14 +1,18 @@
 <template>
   <!-- 接口编辑/新建页面：分区式卡片布局 -->
   <div class="page-api-edit" v-loading="pageLoading">
-    <!-- 页面标题 -->
-    <div class="page-header">
-      <el-button class="back-button" text @click="goBack">
-        <el-icon><ArrowLeft /></el-icon>
-      </el-button>
-      <span class="page-title">{{ isEdit ? '编辑接口' : '新建接口' }}</span>
-    </div>
-
+    <header class="editor-page-header">
+      <div class="editor-page-heading">
+        <el-button text class="back-button" aria-label="返回接口列表" @click="goBack"><el-icon><ArrowLeft /></el-icon></el-button>
+        <div><div class="editor-eyebrow">{{ isEdit ? 'API WORKSPACE' : 'NEW API' }}</div><h1>{{ form.name || (isEdit ? '接口详情' : '新建接口') }}<span v-if="rulesWorkspace"> · 匹配规则</span></h1><p class="editor-path"><code>{{ form.method }} {{ form.path || '/path' }}</code><span v-if="loadedRevision" class="editor-version">v{{ loadedRevision }}</span><span :class="{ 'editor-unsaved': isDirty }">{{ readOnly ? (isDirty ? '只读 · 保留未提交草稿' : '只读查看') : (isDirty ? '未保存' : '可编辑') }}</span></p></div>
+      </div>
+      <div class="editor-page-actions">
+        <el-button v-if="isDirty" @click="downloadDraft">导出本地草稿</el-button>
+        <el-button v-if="loadedApiId" @click="historyVisible = true"><FilledIcon name="history" :size="15" />变更记录</el-button>
+        <el-button v-if="!readOnly" type="primary" :loading="saving" :disabled="pageLoading || !!detailError || (isEdit && !loadedApiId)" @click="handleSave"><el-icon><DocumentChecked /></el-icon>{{ isEdit ? '保存' : '创建接口' }}</el-button>
+      </div>
+    </header>
+    <p class="editor-attribution" v-if="loadedApiId">{{ appStore.teams.find(team => team.id === form.teamId)?.name || '当前团队' }} · 创建者 {{ persistedMeta.createdByName || '未记录' }} · 最后修改 {{ persistedMeta.updatedByName || '未记录' }}<span v-if="persistedMeta.updatedAt"> · {{ persistedMeta.updatedAt.replace('T', ' ') }}</span></p>
     <el-alert v-if="revisionConflict" title="版本已变化，当前草稿仍然保留" type="warning" :closable="false" show-icon>
       <p>请先复制需要保留的编辑，再重新加载最新版本。不会自动用新版本号覆盖队友的修改。</p>
       <el-button size="small" @click="copyDraft">复制当前草稿</el-button><el-button size="small" @click="reloadCurrentVersion">重新加载</el-button>
@@ -16,142 +20,33 @@
     <el-alert v-if="readOnly && !pageLoading && !detailError" title="当前为只读查看，未提交草稿仍然保留，可继续查看和复制。" type="info" :closable="false" show-icon />
     <el-result v-if="detailError" icon="warning" title="接口详情暂时不可用" :sub-title="detailError"><template #extra><el-button @click="reloadCurrentVersion">重新加载</el-button><el-button @click="goBack">返回列表</el-button></template></el-result>
     <template v-else>
-    <!-- 卡片 1：基本信息 -->
-    <div class="soft-card section-card">
-      <h3 class="section-title">基本信息</h3>
-
-      <el-form :model="form" label-width="100px" label-position="top" :disabled="readOnly || pageLoading">
-        <!-- 接口类型切换 -->
-        <el-form-item label="接口类型">
-          <el-radio-group v-model="form.type">
-            <el-radio-button value="REST">REST</el-radio-button>
-            <el-radio-button value="SOAP">SOAP</el-radio-button>
-          </el-radio-group>
-        </el-form-item>
-
-        <el-row :gutter="20">
-          <!-- 接口名称 -->
-          <el-col :span="16">
-            <el-form-item label="接口名称" required>
-              <el-input v-model="form.name" placeholder="如：获取用户信息" />
-            </el-form-item>
-          </el-col>
-
-          <!-- 所属团队 -->
-          <el-col :span="8">
-            <el-form-item label="所属团队" required>
-              <el-select
-                v-model="form.teamId"
-                :disabled="isEdit || readOnly"
-                placeholder="选择团队"
-                style="width: 100%"
-              >
-                <el-option
-                  v-for="team in (isEdit ? appStore.teams : writableTeams)"
-                  :key="team.id"
-                  :label="team.name"
-                  :value="team.id"
-                >
-                  <span style="display: flex; align-items: center; gap: 8px">
-                    <TeamTag :identifier="team.identifier" :color="team.color" />
-                    {{ team.name }}
-                  </span>
-                </el-option>
-              </el-select>
-            </el-form-item>
-          </el-col>
-
-        </el-row>
-
-        <!-- 分组（可选）：选择已有分组或就地新建；切换团队后会重置并重新加载 -->
-        <el-row :gutter="20">
-          <el-col :span="8">
-            <el-form-item label="分组">
-              <el-select
-                v-model="form.groupId"
-                placeholder="未分组"
-                clearable
-                :disabled="!form.teamId"
-                style="width: 100%"
-                @change="handleGroupSelectChange"
-              >
-                <el-option
-                  v-for="g in availableGroups"
-                  :key="g.id"
-                  :label="g.name"
-                  :value="g.id"
-                />
-                <!-- 就地新建（仅团队管理员/超管可见） -->
-                <el-option
-                  v-if="canCreateGroup"
-                  key="__new__"
-                  label="+ 新建分组..."
-                  value="__new__"
-                >
-                  <span style="color: #6366F1; font-weight: 500;">+ 新建分组...</span>
-                </el-option>
-              </el-select>
-            </el-form-item>
-          </el-col>
-        </el-row>
-
-        <!-- REST 模式下的方法 + 路径 -->
-        <el-row :gutter="20" v-if="form.type === 'REST'">
-          <el-col :span="4">
-            <el-form-item label="HTTP 方法" required>
-              <el-select v-model="form.method" style="width: 100%">
-                <el-option v-for="m in httpMethods" :key="m" :label="m" :value="m" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="20">
-            <el-form-item label="路径" required :error="pathConflictError">
-              <el-input v-model="form.path" placeholder="/api/user/{id}">
-                <template #prepend>/mock/{{ currentTeamIdentifier }}</template>
-                <template #suffix>
-                  <el-icon v-if="pathChecking" class="path-check-icon"><Loading /></el-icon>
-                  <el-icon v-else-if="pathConflictError" class="path-check-icon path-check-icon--error"><CircleClose /></el-icon>
-                  <el-icon v-else-if="form.path && pathChecked" class="path-check-icon path-check-icon--ok"><CircleCheck /></el-icon>
-                </template>
-              </el-input>
-            </el-form-item>
-          </el-col>
-        </el-row>
-
-        <!-- SOAP 模式下的路径 -->
-        <el-row :gutter="20" v-if="form.type === 'SOAP'">
-          <el-col :span="24">
-            <el-form-item label="路径" required :error="pathConflictError">
-              <el-input v-model="form.path" placeholder="/ws/notice">
-                <template #prepend>/mock/{{ currentTeamIdentifier }}</template>
-                <template #suffix>
-                  <el-icon v-if="pathChecking" class="path-check-icon"><Loading /></el-icon>
-                  <el-icon v-else-if="pathConflictError" class="path-check-icon path-check-icon--error"><CircleClose /></el-icon>
-                  <el-icon v-else-if="form.path && pathChecked" class="path-check-icon path-check-icon--ok"><CircleCheck /></el-icon>
-                </template>
-              </el-input>
-            </el-form-item>
-          </el-col>
-        </el-row>
-
-        <!-- Mock 地址展示 -->
-        <el-form-item label="Mock 地址" v-if="form.path">
-          <div class="mock-url-display">
-            <code class="mock-url">{{ mockUrl }}</code>
-            <CopyButton :text="mockUrl" />
-          </div>
-        </el-form-item>
+    <div class="editor-layout" :class="{ 'editor-layout--rules': rulesWorkspace }">
+    <section class="soft-card section-card basic-card">
+      <h2 class="section-title"><span></span>基础信息 <small>BASIC</small></h2>
+      <el-form :model="form" label-position="top">
+        <el-form-item label="接口名称" required><el-input v-model="form.name" :readonly="readOnly" placeholder="如：订单详情" /></el-form-item>
+        <div class="basic-pair">
+          <el-form-item label="所属团队" required><el-select v-model="form.teamId" :disabled="isEdit || readOnly" placeholder="选择团队"><el-option v-for="team in (isEdit ? appStore.teams : writableTeams)" :key="team.id" :label="team.name" :value="team.id" /></el-select></el-form-item>
+          <el-form-item label="分组"><el-select v-model="form.groupId" :disabled="readOnly || !form.teamId" clearable placeholder="未分组" @change="handleGroupSelectChange"><el-option v-for="g in availableGroups" :key="g.id" :label="g.name" :value="g.id" /><el-option v-if="canCreateGroup" key="__new__" label="+ 新建分组" value="__new__" /></el-select></el-form-item>
+        </div>
+        <div class="basic-pair">
+          <el-form-item label="接口类型"><el-radio-group v-model="form.type" :disabled="readOnly || pageLoading"><el-radio-button value="REST">REST</el-radio-button><el-radio-button value="SOAP">SOAP</el-radio-button></el-radio-group></el-form-item>
+          <el-form-item label="HTTP 方法"><el-select v-model="form.method" :disabled="readOnly || form.type === 'SOAP'"><el-option v-for="method in ['GET','POST','PUT','DELETE','PATCH','HEAD','OPTIONS']" :key="method" :label="method" :value="method" /></el-select></el-form-item>
+        </div>
+        <el-form-item label="路径" required :error="pathConflictError"><el-input v-model="form.path" :readonly="readOnly" placeholder="/api/order 或 /service.asmx"><template #suffix><el-icon v-if="pathChecking" class="path-status-icon"><Loading /></el-icon><el-icon v-else-if="pathConflictError" class="path-status-icon path-status-icon--error"><CircleClose /></el-icon><el-icon v-else-if="pathChecked" class="path-status-icon path-status-icon--ok"><CircleCheck /></el-icon></template></el-input><p class="field-hint">路径只包含路由；按 Query / Header / Body 返回不同内容，请配置匹配规则。</p></el-form-item>
+        <el-form-item v-if="form.path" label="Mock 地址"><div class="mock-url-display"><code class="mock-url">{{ mockUrl }}</code><CopyButton :text="mockUrl" :show-label="false" /></div></el-form-item>
+        <div class="editor-enable"><div><b>接口启用</b><small>状态变更随保存提交</small></div><el-switch v-model="form.enabled" :disabled="readOnly || pageLoading" aria-label="接口启用状态" /></div>
       </el-form>
-    </div>
+    </section>
 
     <!-- 卡片：接口描述（REST 和 SOAP 都显示） -->
-    <div class="soft-card section-card">
-      <h3 class="section-title">接口描述</h3>
-      <RichTextEditor v-model="form.description" placeholder="输入接口描述..." />
+    <div class="soft-card section-card description-card">
+      <h3 class="section-title"><span></span>说明与归因 <small>META</small></h3>
+      <RichTextEditor v-model="form.description" :read-only="readOnly" :height="150" placeholder="输入接口描述..." />
     </div>
 
     <!-- SOAP 模式：WSDL 上传及 Operation 配置 -->
-    <div class="soft-card section-card" v-if="form.type === 'SOAP'">
+    <div class="soft-card section-card response-card soap-card" v-if="form.type === 'SOAP'">
       <h3 class="section-title">SOAP / WSDL 配置</h3>
 
       <!-- WSDL 上传 -->
@@ -239,6 +134,7 @@
               :operation-name="op.operationName"
               :team-id="form.teamId"
               :api-context="aiApiContext"
+        :api-id="loadedApiId"
         :read-only="readOnly"
               default-content-type="text/xml"
               editor-language="xml"
@@ -253,26 +149,27 @@
     </div>
 
     <!-- 卡片：返回体配置（REST 模式，使用 ResponseTabs 组件） -->
-    <div class="soft-card section-card" v-if="form.type === 'REST'">
-      <h3 class="section-title">返回体配置</h3>
+    <div class="soft-card section-card response-card" v-if="form.type === 'REST'">
       <ResponseTabs
         v-model="form.responses"
+        @panel-change="bodyPanel = $event"
         v-model:selection-mode="form.responseMode"
         :team-id="form.teamId"
         :api-context="aiApiContext"
+        :api-id="loadedApiId"
         :read-only="readOnly"
       />
     </div>
 
     <!-- 卡片：标签 -->
-    <div class="soft-card section-card">
+    <div class="soft-card section-card tags-card">
       <h3 class="section-title">标签</h3>
       <TagInput v-model="form.tagIds" :team-id="form.teamId" :read-only="readOnly" />
     </div>
 
     <!-- 卡片：高级配置 -->
-    <div class="soft-card section-card">
-      <h3 class="section-title">高级配置</h3>
+    <div class="soft-card section-card advanced-card">
+      <h3 class="section-title">响应头覆盖</h3>
 
       <el-form label-position="top" :disabled="readOnly || pageLoading">
         <!-- 全局响应头覆盖 -->
@@ -298,9 +195,12 @@
       </el-form>
     </div>
 
+    </div>
     </template>
     <!-- 底部操作栏 -->
+    <ApiHistoryDrawer v-model="historyVisible" :api-id="loadedApiId" :team-id="form.teamId" :current-revision="loadedRevision" :read-only="readOnly || isDirty" @changed="historyChanged" />
     <div class="bottom-actions">
+      <span>{{ readOnly ? '只读查看不会写入接口；本地草稿可导出保存。' : '修改属于团队共享配置；保存后队友将看到新版本。' }}</span>
       <el-button @click="goBack">取消</el-button>
       <el-button type="primary" :loading="saving" :disabled="saving || pageLoading || !!detailError || readOnly || (isEdit && !loadedApiId)" @click="handleSave">
         {{ isEdit ? '保存' : '创建' }}
@@ -323,6 +223,8 @@ import { ref, computed, onMounted, onBeforeUnmount, reactive, watch } from 'vue'
 import { useRoute, useRouter, onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAppStore } from '@/stores/app'
+import FilledIcon from '@/components/FilledIcon.vue'
+import ApiHistoryDrawer from '@/components/ApiHistoryDrawer.vue'
 import { useUserStore } from '@/stores/user'
 import { getApiDetail, createApi, updateApi, checkApiPath } from '@/api/apis'
 import { getGroups, createGroup } from '@/api/groups'
@@ -360,6 +262,9 @@ const detailError = ref('')
 let detailRequest = 0, disposed = false
 const readOnly = computed(() => !userStore.canWriteTeam(form.teamId))
 const writableTeams = computed(() => appStore.teams.filter(team => userStore.canWriteTeam(team.id)))
+const bodyPanel = ref('body'), historyVisible = ref(false)
+const rulesWorkspace = computed(() => form.type === 'REST' && bodyPanel.value === 'conditions')
+const persistedMeta = reactive({ createdByName: '', updatedByName: '', updatedAt: '' })
 
 /**
  * v1.4.4 性能：SOAP operation 折叠态管理。
@@ -592,9 +497,9 @@ const currentTeamIdentifier = computed(() => {
   return team ? team.identifier : '{team}'
 })
 
-/** 完整 Mock 地址（优先使用服务器局域网地址） */
+/** 使用当前可访问来源，兼容 loopback 监听和反向代理；不生成不可达的内网链接。 */
 const mockUrl = computed(() => {
-  const base = serverAddress.value || window.location.origin
+  const base = window.location.origin
   return `${base}/mock/${currentTeamIdentifier.value}${normalizeApiPathInput(form.path) || '/'}`
 })
 
@@ -622,6 +527,7 @@ async function loadApiDetail() {
     const data = await getApiDetail(id)
     if (disposed || sequence !== detailRequest || route.params.id !== id) return
     loadedApiId.value = id
+    Object.assign(persistedMeta, { createdByName: data.createdByName || data.createdBy || '', updatedByName: data.updatedByName || data.updatedBy || '', updatedAt: data.updatedAt || '' })
     loadedRevision.value = data.revision
     appStore.setFilter(data.teamId)
     revisionConflict.value = false
@@ -828,8 +734,11 @@ async function handleUploadWsdl() {
   wsdlUploading.value = true
   try {
     const formData = new FormData()
+    const teamId = form.teamId
     formData.append('file', wsdlFile.value)
+    formData.append('teamId', teamId)
     const res = await uploadWsdl(formData)
+    if (disposed || readOnly.value || teamId !== form.teamId || form.type !== 'SOAP') return
 
     // 合并策略：
     // - 已存在且有 responses（用户编辑过）→ 保留原 responses，只更新 soapAction
@@ -940,6 +849,16 @@ function isConditionsEmptyLocal(json) {
   }
 }
 
+function downloadDraft() {
+  const blob = new Blob([JSON.stringify({ ...form, expectedRevision: loadedRevision.value, _note: '本地未提交草稿，不是完整备份' }, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob), link = document.createElement('a')
+  link.href = url; link.download = 'mockhub-api-draft.json'; link.click(); URL.revokeObjectURL(url)
+}
+async function historyChanged(change) {
+  if (change.apiId !== loadedApiId.value || change.teamId !== form.teamId) return
+  if (isDirty.value) { revisionConflict.value = true; return }
+  await loadApiDetail(); captureSnapshot(); appStore.bumpApiRevision()
+}
 async function copyDraft() {
   try { await navigator.clipboard.writeText(JSON.stringify({ ...form, expectedRevision: loadedRevision.value }, null, 2)); ElMessage.success('当前草稿已复制') }
   catch { ElMessage.warning('浏览器未授权剪贴板，请手动复制需要保留的内容') }
@@ -1207,224 +1126,19 @@ onBeforeUnmount(() => {
 </script>
 
 <style lang="scss" scoped>
-.page-api-edit {
-  max-width: 960px;
-  margin: 0 auto;
-}
-
-.page-header {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-bottom: 24px;
-}
-
-.back-button {
-  flex-shrink: 0;
-  font-size: 20px;
-  color: #4A5568;
-  padding: 0;
-  height: auto;
-  line-height: 1;
-  vertical-align: middle;
-
-  &:hover {
-    color: #6366F1;
-  }
-}
-
-.page-title {
-  font-size: 22px;
-  font-weight: 700;
-  color: #1B2559;
-  margin: 0;
-  padding: 0;
-  line-height: 1;
-}
-
-// 分区卡片
-.section-card {
-  margin-bottom: 24px;
-  padding: 24px;
-}
-
-.section-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: #1B2559;
-  margin: 0 0 20px 0;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #F1F5F9;
-}
-
-// 路径输入框右侧的实时校验图标
-.path-check-icon {
-  font-size: 16px;
-
-  // 加载中：转圈
-  animation: path-check-spin 1.2s linear infinite;
-
-  &--ok {
-    color: #10B981;
-    animation: none;
-  }
-  &--error {
-    color: #EF4444;
-    animation: none;
-  }
-}
-
-@keyframes path-check-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-// Mock 地址展示
-.mock-url-display {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: #F7F8FA;
-  padding: 8px 12px;
-  border-radius: 10px;
-}
-
-.mock-url {
-  font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
-  font-size: 13px;
-  color: #6366F1;
-  word-break: break-all;
-}
-
-// SOAP Operation 相关
-.wsdl-upload-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.wsdl-filename {
-  font-size: 13px;
-  color: #10B981;
-}
-
-.operations-list {
-  margin-top: 16px;
-}
-
-.operations-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #4A5568;
-  margin-bottom: 0;
-}
-
-/* v1.4.4：Operations 区头部工具条（标题 + 展开/折叠全部） */
-.operations-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
-.operations-actions {
-  display: flex;
-  gap: 4px;
-}
-
-.operation-card {
-  margin-bottom: 16px;
-  padding: 16px;
-  transition: padding 0.2s ease;
-}
-
-/* v1.4.4：折叠态的卡片内边距减小，视觉更紧凑 */
-.operation-card--collapsed {
-  padding: 12px 16px;
-}
-
-.operation-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
-  cursor: pointer;
-  user-select: none;
-}
-
-/* 折叠态下 header 本身就是唯一可见区，去掉 margin-bottom 避免额外空白 */
-.operation-card--collapsed .operation-header {
-  margin-bottom: 0;
-}
-
-/* 展开/折叠指示箭头 */
-.operation-chevron {
-  color: #8392AB;
-  font-size: 14px;
-}
-
-.operation-name {
-  font-weight: 600;
-  color: #1B2559;
-  font-size: 14px;
-}
-
-.operation-action {
-  font-size: 12px;
-  color: #A3AED0;
-  font-family: monospace;
-  flex-shrink: 0;
-}
-
-/* v1.4.4：折叠态下标题行右侧的描述首行预览 */
-.operation-desc-preview {
-  color: #8392AB;
-  font-size: 12px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  flex: 1;
-  min-width: 0;
-}
-
-/* v1.4.4：operation 级描述输入区 */
-.operation-description {
-  margin-bottom: 12px;
-}
-
-.empty-operations {
-  padding: 20px;
-  text-align: center;
-  color: #A3AED0;
-  font-size: 13px;
-}
-
-// 全局响应头覆盖
-.header-overrides {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.header-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.header-key {
-  width: 200px;
-}
-
-.header-value {
-  flex: 1;
-}
-
-// 底部操作栏
-.bottom-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  padding: 20px 0 40px;
-}
+.page-api-edit { min-width: 0; width: 100%; padding: 7px 0 0; }
+.editor-page-header { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 8px 6px 0; margin-bottom: 10px; }.editor-page-heading { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }.back-button { padding: 7px; height: 30px; flex-shrink: 0; }.editor-page-heading h1 { font-size: 25px; font-weight: 600; line-height: 1.4; letter-spacing: -.5px; overflow-wrap: anywhere; margin: 6px 0 7px; }.editor-eyebrow { color: var(--app-text-secondary); letter-spacing: .1em; font: 9px var(--app-font-mono); }.editor-path { display: flex; flex-wrap: wrap; gap: 9px; align-items: center; margin: 0; font-size: 10px; color: var(--app-text-secondary); }.editor-path code { padding: 5px 8px; border-radius: 7px; background: var(--app-bg-control); color: var(--app-text-regular); overflow-wrap: anywhere; font: 11px var(--app-font-mono); }.editor-version { color: var(--app-accent); }.editor-unsaved { color: var(--app-accent); }.editor-page-actions { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; flex-shrink: 0; }.editor-page-actions .el-button { margin: 0; font-size: 11px; gap: 5px; }.editor-attribution { color: var(--app-text-secondary); font-size: 10px; line-height: 1.8; padding: 0 10px; margin: 12px 0 16px; overflow-wrap: anywhere; }
+.page-api-edit > .el-alert { margin: 12px 0; }.editor-layout { display: grid; grid-template-columns: minmax(265px, 310px) minmax(0, 1fr); gap: 14px; align-items: start; }
+.section-card { border: 0; padding: 20px; margin: 0; border-radius: 16px; min-width: 0; box-shadow: none; background: var(--app-bg-surface); }.basic-card { grid-column: 1; grid-row: 1; }.description-card { grid-column: 1; grid-row: 2; }.tags-card { grid-column: 1; grid-row: 3; }.advanced-card { grid-column: 1; grid-row: 4; }.response-card { grid-column: 2; grid-row: 1 / span 4; min-height: 640px; }
+.section-title { font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 7px; margin: 0 0 17px; }.section-title > span { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: var(--app-accent); }.section-title small { margin-left: 3px; color: var(--app-text-secondary); letter-spacing: .08em; font: 9px var(--app-font-mono); }
+.basic-card :deep(.el-form-item__label),.advanced-card :deep(.el-form-item__label) { color: var(--app-text-secondary); font-size: 10px; line-height: 1.6; padding-bottom: 6px; }.basic-card :deep(.el-form-item) { margin-bottom: 15px; }.basic-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; min-width: 0; }.basic-pair > * { min-width: 0; }.basic-pair :deep(.el-radio-button__inner) { padding: 8px 9px; font-size: 10px; }.field-hint { color: var(--app-text-secondary); font-size: 9px; line-height: 1.6; margin: 7px 0 0; }.editor-enable { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding-top: 7px; }.editor-enable b { font-size: 11px; font-weight: 500; }.editor-enable small { display: block; font-size: 9px; color: var(--app-text-secondary); margin-top: 4px; }
+.mock-url-display { display: flex; align-items: center; gap: 5px; width: 100%; padding: 9px; background: var(--app-bg-control); border-radius: 10px; min-width: 0; }.mock-url { font: 10px/1.7 var(--app-font-mono); color: var(--app-text-secondary); word-break: break-all; flex: 1; min-width: 0; }
+.header-overrides { display: grid; gap: 9px; width: 100%; }.header-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 6px; min-width: 0; }.header-row > * { min-width: 0; }.header-row :deep(.el-input__inner) { font-size: 10px; }.header-overrides > .el-button { margin: 0; justify-self: start; font-size: 10px; }
+.wsdl-upload-row { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; min-width: 0; }.wsdl-filename { color: var(--app-text-secondary); font-size: 10px; max-width: 100%; overflow-wrap: anywhere; }.operations-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; }.operations-title { font-size: 12px; margin: 0; }.operations-actions { display: flex; gap: 5px; }.operation-card { background: var(--app-bg-control); border-radius: 12px; padding: 14px; margin-bottom: 12px; }.operation-header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; cursor: pointer; margin-bottom: 10px; }.operation-name { font: 600 12px var(--app-font-mono); }.soap-action,.op-desc-preview { font-size: 10px; color: var(--app-text-secondary); overflow-wrap: anywhere; }.op-desc-preview { flex: 1; }.operation-description { margin-bottom: 12px; }.operation-card .operation-card { background: white; }.empty-operations { padding: 35px; text-align: center; color: var(--app-text-secondary); font-size: 12px; }
+.path-status-icon { font-size: 13px; color: var(--app-text-secondary); animation: path-spin 1.2s linear infinite; }.path-status-icon--error { color: var(--el-color-danger); animation: none; }.path-status-icon--ok { color: var(--el-color-success); animation: none; }@keyframes path-spin { to { transform: rotate(360deg); } }
+.bottom-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 14px; padding: 13px 6px; flex-wrap: wrap; }.bottom-actions > span { margin-right: auto; color: var(--app-text-secondary); font-size: 10px; line-height: 1.7; }.bottom-actions .el-button { margin: 0; }
+.editor-layout--rules { grid-template-columns: minmax(0, 1fr); }.editor-layout--rules .basic-card,.editor-layout--rules .description-card,.editor-layout--rules .tags-card,.editor-layout--rules .advanced-card { display: none; }.editor-layout--rules .response-card { grid-column: 1; grid-row: 1; min-height: 600px; }
+@media(max-width: 1150px) { .editor-layout { grid-template-columns: minmax(235px, 270px) minmax(0, 1fr); }.section-card { padding: 16px; }.editor-page-header { align-items: flex-start; }.editor-page-heading h1 { font-size: 22px; }.editor-page-actions { max-width: 40%; justify-content: flex-end; }.editor-layout--rules { grid-template-columns: minmax(0, 1fr); } }
+@media(max-width: 960px) { .editor-layout { display: flex; flex-direction: column; }.section-card { width: 100%; }.response-card { order: 2; min-height: 0; }.basic-card { order: 1; }.description-card { order: 3; }.tags-card { order: 4; }.advanced-card { order: 5; }.editor-layout--rules .response-card { min-height: 0; }.editor-page-actions { max-width: none; }.editor-page-header { flex-wrap: wrap; gap: 12px; }.basic-card .basic-pair { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+@media(max-width: 560px) { .editor-page-heading h1 { font-size: 20px; }.editor-page-header { padding-left: 0; padding-right: 0; }.editor-page-actions { width: 100%; justify-content: flex-start; }.section-card { padding: 14px; }.editor-page-actions .el-button { padding: 8px 10px; }.editor-attribution { padding: 0; font-size: 9px; }.basic-pair { grid-template-columns: minmax(0, 1fr); }.header-row { grid-template-columns: minmax(0, 1fr) auto; }.header-value { grid-column: 1; grid-row: 2; }.header-row .el-button { grid-column: 2; grid-row: 1 / span 2; }.bottom-actions > span { flex-basis: 100%; }.basic-card .basic-pair { grid-template-columns: minmax(0, 1fr); } }
 </style>

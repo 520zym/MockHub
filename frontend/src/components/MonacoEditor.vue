@@ -209,6 +209,7 @@ onMounted(() => {
 
   const isLargeText = (props.modelValue || '').length > LARGE_TEXT_THRESHOLD
 
+  monaco.editor.defineTheme('mockhub-flat', { base: 'vs', inherit: true, rules: [], colors: { 'editor.background': '#F4F6F9', 'editorGutter.background': '#F4F6F9', 'editorLineNumber.foreground': '#9EA5AF', 'editor.lineHighlightBackground': '#EEF2F7', 'editor.selectionBackground': '#DCE7FB', 'widget.shadow': '#00000000' } })
   editor = monaco.editor.create(editorContainer.value, {
     value: props.modelValue || '',
     language: props.language,
@@ -221,7 +222,7 @@ onMounted(() => {
     scrollBeyondLastLine: false,
     wordWrap: 'on',
     tabSize: 2,
-    theme: 'vs',
+    theme: 'mockhub-flat',
     renderWhitespace: 'selection',
     bracketPairColorization: { enabled: true },
     scrollbar: {
@@ -348,6 +349,8 @@ defineExpose({ insertAtCursor })
   height: 400px;
   border-radius: 10px;
   overflow: hidden;
-  border: 2px solid #F1F5F9;
+  border: 0;
+  background: var(--app-bg-control);
 }
+.monaco-editor-container :deep(.monaco-hover),.monaco-editor-container :deep(.suggest-widget),.monaco-editor-container :deep(.parameter-hints-widget) { box-shadow: none; border: 0; }
 </style>

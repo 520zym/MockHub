@@ -352,7 +352,7 @@ onBeforeUnmount(() => {
   background: #fff;
   border: 1px solid #E7EAF3;
   border-radius: 10px;
-  box-shadow: 0 12px 30px rgba(27, 37, 89, .14);
+  box-shadow: none;
   z-index: 30;
   overflow: hidden;
 }

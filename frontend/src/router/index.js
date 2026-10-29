@@ -7,6 +7,7 @@ const routes = [
   { path: '/', component: () => import('@/components/layout/AppLayout.vue'), meta: { requiresAuth: true }, children: [
     { path: '', redirect: '/apis' },
     { path: 'apis', name: 'ApiList', component: () => import('@/views/ApiList.vue'), meta: { title: '接口管理', teamRequired: true } },
+    { path: 'apis/trash', name: 'ApiTrash', component: () => import('@/views/ApiTrash.vue'), meta: { title: '接口回收站', teamRequired: true } },
     { path: 'apis/new', name: 'ApiNew', component: () => import('@/views/ApiEdit.vue'), meta: { title: '新建接口', teamRequired: true, requiresTeamWrite: true } },
     { path: 'apis/:id/edit', name: 'ApiEdit', component: () => import('@/views/ApiEdit.vue'), meta: { title: '接口详情', teamRequired: true } },
     { path: 'team', name: 'TeamSettings', component: () => import('@/views/TeamSettings.vue'), meta: { title: '团队设置', teamRequired: true } },

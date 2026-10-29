@@ -121,7 +121,7 @@ test('Monaco completions are model-scoped and readonly blocks programmatic inser
   const editors = [], providers = new Map()
   const monaco = {
     languages: { CompletionItemKind: { Variable: 1 }, CompletionItemInsertTextRule: { InsertAsSnippet: 1 }, registerCompletionItemProvider(language, provider) { providers.set(language, provider); return { dispose() {} } } },
-    editor: { setModelMarkers() {}, setModelLanguage() {}, create(_, options) {
+    editor: { defineTheme() {}, setModelMarkers() {}, setModelLanguage() {}, create(_, options) {
       let value = options.value, changed = () => {}, disposed = false
       const model = { getValueInRange: range => range.startColumn === 1 ? '{{' : '', isDisposed: () => disposed, dispose() { disposed = true }, getValue: () => value }
       const instance = { model, options, inserts: 0, getModel: () => model, getValue: () => value, setValue(v) { value = v; changed() }, updateOptions(o) { Object.assign(options, o) }, onDidChangeModelContent(fn) { changed = fn }, layout() {}, dispose() {}, focus() {}, getPosition: () => ({ lineNumber: 1, column: 3 }), executeEdits() { this.inserts++ } }
@@ -140,6 +140,28 @@ test('Monaco completions are model-scoped and readonly blocks programmatic inser
   assert.equal(editors[0].options.readOnly, true); assert.equal(editors[0].inserts, 0)
   propsA.modelValue = 'external update'; await nextTick(); assert.equal(a.events.length, 0)
   unit.unmount(); assert.equal(editors[0].model.isDisposed(), true); assert.equal(editors[1].model.isDisposed(), true)
+})
+
+test('rich descriptions stay readonly and initial normalization cannot dirty the form', async () => {
+  const props = reactive({ modelValue: '<p>saved</p>', placeholder: '', height: 150, readOnly: false })
+  const unit = await loadSetup('frontend/src/components/RichTextEditor.vue'), { state: s, events } = unit.setup(props)
+  let disabled = 0, enabled = 0
+  const editor = { getHtml: () => '<p>normalized</p>', disable() { disabled++ }, enable() { enabled++ }, destroy() {} }
+  s.handleCreated(editor); s.handleChange(editor); assert.equal(events.length, 0)
+  s.markUserEditing(); s.handleChange(editor); assert.equal(events.length, 1)
+  props.readOnly = true; await nextTick(); s.handleChange(editor)
+  assert.equal(disabled, 1); assert.equal(events.length, 1)
+  props.readOnly = false; await nextTick(); assert.equal(enabled, 1)
+  unit.unmount()
+})
+
+test('clipboard failure never displays a false copy success', async () => {
+  const notices = [], documentBefore = globalThis.document, navigatorBefore = Object.getOwnPropertyDescriptor(globalThis, 'navigator')
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { clipboard: { writeText: async () => { throw new Error('denied') } } } })
+  globalThis.document = { createElement: () => ({ style: {}, select() {} }), body: { appendChild() {}, removeChild() {} }, execCommand: () => false }
+  const unit = await loadSetup('frontend/src/components/CopyButton.vue', { 'element-plus': { ElMessage: { success: m => notices.push(['success',m]), warning: m => notices.push(['warning',m]) } } }), { state: s } = unit.setup({ text: 'safe fixture', showLabel: true })
+  try { await s.handleCopy(); assert.equal(s.copied.value, false); assert.equal(notices.filter(n => n[0] === 'success').length, 0); assert.equal(notices.filter(n => n[0] === 'warning').length, 1) }
+  finally { unit.unmount(); globalThis.document = documentBefore; if (navigatorBefore) Object.defineProperty(globalThis,'navigator',navigatorBefore); else delete globalThis.navigator }
 })
 
 test('late tag results from the former team cannot populate the current team', async () => {

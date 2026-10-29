@@ -12,6 +12,13 @@ if (!statePath) throw new Error('Pass --state=path/to/temporary-instance-state.j
 const state = JSON.parse(await readFile(statePath, 'utf8'))
 const base = new URL(state.url)
 if (!['127.0.0.1', 'localhost'].includes(base.hostname) || !state.dataDirectory.includes('/target/ui-smoke.')) throw new Error('Refusing non-isolated instance')
+// Wait for HTTP readiness, not for the long-running server job to finish.
+let ready = false
+for (let attempt = 0; attempt < 15 && !ready; attempt++) {
+  try { const response = await fetch(state.url + '/', { signal: AbortSignal.timeout(1500) }); ready = response.ok } catch {}
+  if (!ready) await new Promise(resolve => setTimeout(resolve, 100 + attempt * 50))
+}
+if (!ready) throw new Error('Isolated application did not become HTTP-ready')
 const output = path.resolve('target/browser-shell-smoke')
 await mkdir(output, { recursive: true })
 const chrome = process.env.CHROME || path.join(os.homedir(), 'Library/Caches/ms-playwright/chromium_headless_shell-1223/chrome-headless-shell-mac-arm64/chrome-headless-shell')

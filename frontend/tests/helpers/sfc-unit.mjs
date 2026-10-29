@@ -12,7 +12,7 @@ export async function loadSetup(file, stubs = {}) {
   const filename = path.resolve(workspaceRoot, file), source = await readFile(filename, 'utf8')
   const { descriptor } = parse(source, { filename })
   let content = compileScript(descriptor, { id: 'unit-' + counter, inlineTemplate: false }).content
-  const key = 'sfc-' + counter++, hooks = { mounted: [], unmounted: [] }
+  const key = 'sfc-' + counter++, hooks = { mounted: [], unmounted: [] }, scopes = []
   const vue = { ...Vue, onMounted: fn => hooks.mounted.push(fn), onBeforeUnmount: fn => hooks.unmounted.push(fn) }
   globalThis.__mockhubSfcUnits ||= new Map()
   const modules = { vue, ...stubs }
@@ -32,8 +32,8 @@ export async function loadSetup(file, stubs = {}) {
   const component = (await import('data:text/javascript;base64,' + Buffer.from(content).toString('base64'))).default
   return {
     hooks,
-    setup(props) { const events = []; let exposed; const state = component.setup(Vue.reactive(props), { expose: value => { exposed = value }, emit: (...args) => events.push(args) }); return { state, events, get exposed() { return exposed } } },
+    setup(props) { const events = []; let exposed; const scope = Vue.effectScope(); scopes.push(scope); const state = scope.run(() => component.setup(Vue.reactive(props), { expose: value => { exposed = value }, emit: (...args) => events.push(args) })); return { state, events, get exposed() { return exposed } } },
     async mount() { for (const fn of hooks.mounted) await fn(); await settle() },
-    unmount() { for (const fn of hooks.unmounted) fn(); globalThis.__mockhubSfcUnits.delete(key) }
+    unmount() { for (const fn of hooks.unmounted) fn(); for (const scope of scopes) scope.stop(); globalThis.__mockhubSfcUnits.delete(key) }
   }
 }

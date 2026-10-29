@@ -1,5 +1,13 @@
 <template>
-  <div class="response-tabs">
+  <div class="response-tabs" :class="{ 'response-tabs--rules': activePanel === 'conditions' }">
+    <div class="response-panel-nav" aria-label="返回体与匹配规则视图">
+      <div class="response-panel-switch">
+        <button type="button" :aria-pressed="activePanel === 'body'" :class="{ selected: activePanel === 'body' }" @click="setActivePanel('body')">返回体 <small>{{ responses.length }}</small></button>
+        <button type="button" :aria-pressed="activePanel === 'conditions'" :class="{ selected: activePanel === 'conditions' }" @click="setActivePanel('conditions')">匹配规则 <small>{{ ruleResponseCount }}</small></button>
+      </div>
+      <el-button v-if="readOnly && currentResponse && !isCurrentFileResponse" text @click="openFullEditor">全文查看</el-button>
+      <span v-if="readOnly" class="response-readonly">只读查看</span>
+    </div>
     <div class="response-mode-bar">
       <span class="response-mode-label">选择方式</span>
       <el-radio-group :model-value="normalizedSelectionMode" :disabled="readOnly" size="small" @change="changeSelectionMode">
@@ -22,6 +30,8 @@
           active: activeIndex === idx,
           disabled: !resp.isActive
         }"
+        role="button" tabindex="0" :aria-pressed="activeIndex === idx"
+        @keydown.enter="activeIndex = idx" @keydown.space.prevent="activeIndex = idx"
         @click="activeIndex = idx"
       >
         <!-- 启用/禁用指示点：启用=绿，禁用=灰 -->
@@ -40,7 +50,9 @@
         <span v-if="editingTabIndex !== idx" class="tab-name" @dblclick="startEditTabName(idx)">
           {{ resp.name || 'Response ' + (idx + 1) }}
         </span>
+        <span class="tab-status">{{ resp.responseCode || 200 }}</span>
         <span v-if="editingTabIndex !== idx && !resp.isActive" class="disabled-badge">未启用</span>
+        <small v-if="activePanel === 'conditions'" class="tab-rule-summary">{{ isEmptyConditions(resp.conditions) ? '无条件 · 兜底候选' : conditionCount(resp.conditions) + ' 条条件' }}</small>
         <el-input
           v-if="editingTabIndex === idx"
           v-model="resp.name"
@@ -59,24 +71,41 @@
     <!-- 当前 Tab 内容 -->
     <div v-if="currentResponse" class="tab-content">
       <!-- 响应规则面板：REST 按接口匹配，SOAP 按当前 operation 独立匹配 -->
+      <div v-show="activePanel === 'conditions'" class="conditions-workspace">
       <ConditionPanel
-        v-if="normalizedSelectionMode === 'CONDITION'"
         v-model="currentResponse.conditions"
         :body-sample-kind="operationName ? 'xml' : 'json'"
         :team-id="teamId"
         :api-context="apiContext"
         :response-name="currentResponse.name"
         :read-only="readOnly"
-      />
+        :api-id="apiId"
+        :responses="responses"
+        :selected-response-index="activeIndex"
+        :selection-mode="normalizedSelectionMode"
+        :operation-name="operationName"
+        @edit-response="setActivePanel('body')"
+      >
+        <template #return-preview>
+          <section class="condition-return-preview">
+            <div><b>命中后返回</b><el-button text @click="setActivePanel('body')">{{ readOnly ? '查看返回体' : '编辑返回体' }} →</el-button></div>
+            <p>{{ currentResponse.responseCode || 200 }} · {{ currentResponse.contentType || 'application/json' }} · 延迟 {{ currentResponse.delayMs || 0 }} ms</p>
+            <pre v-if="!isCurrentFileResponse">{{ (currentResponse.responseBody || '').slice(0, 800) }}</pre>
+            <p v-else>文件响应：{{ currentResponse.fileName || '尚未选择文件' }} · {{ formatSize(currentResponse.fileSize || 0) }}</p>
+            <small>{{ (currentResponse.responseBody || '').length > 800 ? '模板预览已截断，全文请切回返回体查看。' : '仅展示响应模板；动态变量在真实 Mock 请求时生成。' }}</small>
+          </section>
+        </template>
+      </ConditionPanel>
+      </div>
       <el-alert
-        v-else
+        v-if="normalizedSelectionMode === 'RANDOM' && activePanel === 'body'"
         type="info"
         :closable="false"
         show-icon
         title="随机模式会忽略本返回体已保存的命中条件。切回按条件匹配时，原条件会继续保留。"
         class="random-mode-alert"
       />
-      <el-form label-position="top" :disabled="readOnly">
+      <el-form v-show="activePanel === 'body'" label-position="top" :disabled="readOnly">
         <el-row :gutter="16">
           <!-- 名称 -->
           <el-col :span="6">
@@ -343,7 +372,7 @@
         </div>
       </el-dialog>
 
-      <AiResponseDrawer
+      <AiResponseDrawer :read-only="readOnly"
         v-model="aiDrawerVisible"
         :team-id="teamId"
         :api-context="apiContext"
@@ -353,7 +382,7 @@
       />
 
       <!-- 底部操作栏 -->
-      <div v-if="!readOnly" class="tab-actions">
+      <div v-if="!readOnly && activePanel === 'body'" class="tab-actions">
         <!-- 启用/禁用切换（取代原"设为生效"单选语义；多条可同时启用） -->
         <el-button
           v-if="!currentResponse.isActive"
@@ -413,6 +442,7 @@ import { getTeamVariables } from '@/api/customVariable'
 import { uploadResponseFile } from '@/api/apis'
 
 const props = defineProps({
+  apiId: { type: String, default: null },
   readOnly: { type: Boolean, default: false },
   /** 返回体数组 (v-model) */
   modelValue: {
@@ -451,7 +481,11 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['update:modelValue', 'update:selectionMode'])
+const emit = defineEmits(['update:modelValue', 'update:selectionMode', 'panel-change'])
+const activePanel = ref('body')
+function setActivePanel(panel) { activePanel.value = panel === 'conditions' ? 'conditions' : 'body'; emit('panel-change', activePanel.value) }
+function conditionCount(json) { try { const conditions = JSON.parse(json || '{}').conditions; return Array.isArray(conditions) ? conditions.length : 0 } catch { return 0 } }
+const ruleResponseCount = computed(() => props.modelValue.filter(response => conditionCount(response.conditions) > 0).length)
 
 const aiStore = useAiStore()
 const aiDrawerVisible = ref(false)
@@ -615,6 +649,7 @@ watch(() => props.teamId, () => {
 
 // 当前选中的 Tab 索引
 const activeIndex = ref(0)
+watch(() => props.modelValue.length, length => { if (activeIndex.value >= length) activeIndex.value = Math.max(0, length - 1) })
 
 // 正在编辑名称的 Tab 索引
 const editingTabIndex = ref(-1)
@@ -1053,300 +1088,41 @@ async function handleUploadFile(uploadFile) {
 </script>
 
 <style scoped>
-.response-tabs {
-  width: 100%;
-}
-
-.response-mode-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-
-.response-mode-label {
-  font-size: 13px;
-  color: #334155;
-  white-space: nowrap;
-}
-
-.response-mode-help {
-  font-size: 12px;
-  color: #64748B;
-}
-
-.random-mode-alert {
-  margin-bottom: 16px;
-}
-
-/* Tab 栏 */
-.tabs-header {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  border-bottom: 2px solid #F1F5F9;
-  padding-bottom: 0;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
-}
-
-.tab-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  cursor: pointer;
-  border-radius: 10px 10px 0 0;
-  font-size: 14px;
-  color: #A3AED0;
-  transition: all 0.2s;
-  border: 2px solid transparent;
-  border-bottom: none;
-  position: relative;
-  bottom: -2px;
-}
-
-.tab-item:hover {
-  color: #1B2559;
-  background: #F8FAFC;
-}
-
-.tab-item.active {
-  color: #1B2559;
-  background: #fff;
-  border-color: #F1F5F9;
-  font-weight: 500;
-}
-
-.active-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  transition: background 0.2s;
-}
-.active-dot.on { background: #22C55E; }
-.active-dot.off { background: #D1D5DB; }
-
-/* v1.4.3：序号角标 */
-.tab-index {
-  font-size: 11px;
-  color: #6366F1;
-  font-weight: 600;
-  user-select: none;
-}
-
-/* v1.4.3：兜底 ⭐ */
-.fallback-star {
-  color: #F59E0B;
-  font-size: 14px;
-}
-
-/* v1.4.3：未启用 Tab 视觉 */
-.tab-item.disabled .tab-name {
-  color: #9CA3AF;
-  text-decoration: line-through dashed;
-  text-decoration-color: #D1D5DB;
-}
-.disabled-badge {
-  font-size: 10px;
-  padding: 1px 6px;
-  background: #F3F4F6;
-  color: #9CA3AF;
-  border-radius: 8px;
-  margin-left: 2px;
-}
-
-.tab-name {
-  user-select: none;
-}
-
-.tab-name-input {
-  width: 120px;
-}
-
-.tab-add {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  cursor: pointer;
-  border-radius: 8px;
-  color: #A3AED0;
-  transition: all 0.2s;
-}
-
-.tab-add:hover {
-  background: #F1F5F9;
-  color: #6366F1;
-}
-
-/* Tab 内容区 */
-.tab-content {
-  padding: 0;
-}
-
-/* Content-Type 栏 */
-.content-type-bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.content-type-auto {
-  font-size: 13px;
-  color: #A3AED0;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.check-icon {
-  color: #22C55E;
-}
-
-/* 编辑器工具栏 */
-.editor-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-  flex-wrap: wrap;
-}
-
-/* Monaco 编辑器 */
-.response-editor {
-  height: 350px;
-}
-
-.file-response-panel {
-  display: grid;
-  gap: 14px;
-}
-
-.file-response-card {
-  min-height: 76px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
-  border: 1px solid #D1D5DB;
-  border-radius: 6px;
-  background: #F8FAFC;
-}
-
-.file-response-card.empty {
-  border-style: dashed;
-  color: #64748B;
-}
-
-.file-response-main {
-  min-width: 0;
-  flex: 1;
-}
-
-.file-response-name {
-  color: #111827;
-  font-size: 14px;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.file-response-meta {
-  margin-top: 4px;
-  color: #64748B;
-  font-size: 12px;
-}
-
-/* v1.4.4：超大响应体降级预览卡 */
-.oversize-preview {
-  border: 2px dashed #F1F5F9;
-  border-radius: 10px;
-  padding: 16px;
-  background: #F8FAFC;
-}
-
-.oversize-meta {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: #B45309;
-  margin-bottom: 12px;
-}
-
-.oversize-head {
-  max-height: 200px;
-  overflow: auto;
-  margin: 0 0 12px 0;
-  padding: 12px;
-  background: #fff;
-  border: 1px solid #E2E8F0;
-  border-radius: 8px;
-  font-family: 'SFMono-Regular', Consolas, Menlo, monospace;
-  font-size: 12px;
-  color: #1B2559;
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-
-.oversize-actions {
-  display: flex;
-  gap: 8px;
-}
-
-/* v1.4.4：全屏 Dialog 内的编辑器 */
-.full-editor-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.full-editor-meta {
-  font-size: 12px;
-  color: #A3AED0;
-}
-
-.full-editor-monaco {
-  /* 填充 Dialog 剩余高度：Dialog 默认内容区有自己的滚动容器，
-     这里显式指定高度保证 Monaco 正确 layout */
-  height: calc(100vh - 180px);
-  min-height: 400px;
-}
-
-/* AI 生成按钮：白底 + 淡紫描边，避免与普通工具按钮混淆 */
-.ai-gen-btn {
-  background: #fff;
-  border: 1px solid #E7E3FD;
-  color: #4F46E5;
-}
-
-.ai-gen-btn:hover,
-.ai-gen-btn:focus {
-  background: #F5F3FF;
-  border-color: #C7D2FE;
-  color: #4F46E5;
-}
-
-/* 底部操作栏 */
-.tab-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid #F1F5F9;
-}
-
-.active-tag {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
+.response-tabs { min-width: 0; display: grid; gap: 15px; }
+.response-panel-nav { display: flex; justify-content: space-between; align-items: center; gap: 10px; min-width: 0; grid-column: 1 / -1; }
+.response-panel-switch { display: flex; gap: 3px; padding: 4px; background: var(--app-bg-control); border-radius: 11px; }
+.response-panel-switch button { border: 0; background: transparent; color: var(--app-text-secondary); border-radius: 8px; padding: 8px 12px; font: inherit; font-size: 12px; cursor: pointer; }
+.response-panel-switch button.selected { background: white; color: var(--app-accent); } .response-panel-switch small { font-size: 10px; opacity: .65; margin-left: 4px; }
+.response-readonly { color: var(--app-text-secondary); font-size: 10px; }
+.response-mode-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; min-width: 0; }
+.response-mode-label { font-size: 11px; color: var(--app-text-secondary); }.response-mode-help { font-size: 10px; line-height: 1.6; color: var(--app-text-secondary); flex: 1; min-width: 180px; }
+.tabs-header { display: flex; gap: 7px; align-items: stretch; overflow-x: auto; min-width: 0; padding-bottom: 3px; }
+.tab-item { display: flex; align-items: center; gap: 6px; padding: 9px 11px; color: var(--app-text-secondary); background: var(--app-bg-control); border-radius: 9px; font-size: 11px; cursor: pointer; flex-shrink: 0; }
+.tab-item.active { color: var(--app-accent); background: var(--app-bg-selected); }.tab-item.disabled { opacity: .72; }
+.tab-index { font: 10px var(--app-font-mono); opacity: .6; }.tab-name { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.tab-status { font: 10px var(--app-font-mono); color: var(--el-color-success); }.disabled-badge { font-size: 9px; color: var(--app-text-secondary); }.tab-name-input { width: 125px; }
+.active-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }.active-dot.on { background: var(--el-color-success); }.active-dot.off { background: var(--app-text-secondary); }.fallback-star { color: var(--app-accent); font-size: 10px; }
+.tab-add { display: grid; place-items: center; border: 0; background: var(--app-bg-control); color: var(--app-accent); border-radius: 9px; width: 34px; min-height: 34px; flex-shrink: 0; cursor: pointer; }
+.tab-rule-summary { display: none; }.tab-content { min-width: 0; }
+.random-mode-alert { margin-bottom: 15px; }
+.tab-content :deep(.el-form-item) { margin-bottom: 16px; }.tab-content :deep(.el-form-item__label) { color: var(--app-text-secondary); font-size: 11px; }
+.body-toolbar,.editor-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; margin-bottom: 10px; }
+.editor-container { width: 100%; height: 420px; min-width: 0; background: var(--app-bg-control); border-radius: 12px; overflow: hidden; }
+.tab-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }.tab-actions .el-button { margin-left: 0; }
+.content-type-badge,.body-type-badge { color: var(--app-text-secondary); font: 10px var(--app-font-mono); background: var(--app-bg-control); border-radius: 7px; padding: 4px 7px; }
+.file-info,.file-response-card { padding: 14px; background: var(--app-bg-control); border-radius: 10px; min-width: 0; overflow-wrap: anywhere; }.file-info code { word-break: break-all; }
+.file-hint,.upload-hint,.variable-hint,.editor-size-hint { color: var(--app-text-secondary); font-size: 10px; line-height: 1.6; }
+.variable-list { display: flex; flex-wrap: wrap; gap: 7px; }.variable-item,.group-pick-item { display: flex; align-items: center; gap: 9px; padding: 8px 10px; border-radius: 8px; background: var(--app-bg-control); cursor: pointer; font-size: 11px; }.variable-item code,.group-pick-item code { color: var(--app-accent); }.variable-item:hover,.group-pick-item:hover { background: var(--app-bg-selected); }
+.full-editor-toolbar { display: flex; align-items: center; gap: 12px; padding-bottom: 12px; }.full-editor-meta { font-size: 10px; color: var(--app-text-secondary); }.full-editor-monaco { flex: 1; min-height: 0; }.group-pick-list { display: grid; gap: 8px; }
+.condition-return-preview { padding: 16px; border-radius: 12px; background: var(--app-bg-control); margin-top: 18px; min-width: 0; }.condition-return-preview > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; }.condition-return-preview b { font-size: 12px; }.condition-return-preview p,.condition-return-preview small { color: var(--app-text-secondary); font-size: 10px; line-height: 1.7; overflow-wrap: anywhere; }.condition-return-preview pre { white-space: pre-wrap; word-break: break-word; font: 11px/1.8 var(--app-font-mono); max-height: 230px; overflow: auto; }
+.response-tabs--rules { grid-template-columns: 165px minmax(0, 1fr); align-items: start; }
+.response-tabs--rules .tabs-header { grid-column: 1; grid-row: 2; display: flex; flex-direction: column; align-items: stretch; overflow: visible; }
+.response-tabs--rules .tab-item { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; align-items: center; padding: 12px 10px; }
+.response-tabs--rules .tab-index { display: none; }.response-tabs--rules .tab-rule-summary { grid-column: 2 / -1; display: block; color: var(--app-text-secondary); font-size: 10px; padding-top: 4px; }.response-tabs--rules .tab-name { font-weight: 600; max-width: none; }.response-tabs--rules .disabled-badge { grid-column: 2 / -1; }.response-tabs--rules .tab-add { width: 100%; }
+.response-tabs--rules .response-mode-bar { grid-column: 1; grid-row: 3; padding: 12px; background: var(--app-bg-control); border-radius: 11px; flex-direction: column; align-items: stretch; }.response-tabs--rules .response-mode-help { min-width: 0; }.response-tabs--rules .response-mode-bar :deep(.el-radio-group) { display: flex; flex-direction: column; gap: 7px; }.response-tabs--rules .response-mode-bar :deep(.el-radio-button__inner) { border-radius: 8px; width: 100%; border: 0; box-shadow: none; font-size: 10px; }
+.response-tabs--rules .tab-content { grid-column: 2; grid-row: 2 / span 2; }
+@media(max-width: 1100px) { .response-tabs--rules { grid-template-columns: 135px minmax(0, 1fr); gap: 12px; } .tab-content :deep(.el-col) { flex: 0 0 50%; max-width: 50%; } }
+@media(max-width: 760px) { .response-tabs--rules { grid-template-columns: minmax(0, 1fr); } .response-tabs--rules .tabs-header { grid-column: 1; grid-row: auto; flex-direction: row; overflow-x: auto; }.response-tabs--rules .tab-item { min-width: 145px; }.response-tabs--rules .response-mode-bar { grid-column: 1; grid-row: auto; }.response-tabs--rules .tab-content { grid-column: 1; grid-row: auto; }.response-tabs--rules .response-mode-bar :deep(.el-radio-group) { flex-direction: row; }.response-mode-help { min-width: 0; flex-basis: 100%; }.response-panel-switch button { padding: 8px; }.response-readonly { display: none; }.editor-container { height: 360px; } }
+@media(max-width: 500px) { .tab-content :deep(.el-col) { flex: 0 0 100%; max-width: 100%; }.condition-return-preview > div { align-items: flex-start; flex-wrap: wrap; } }
 </style>
 
 <!-- 动态变量 popover 样式（非 scoped，因 popover 渲染在 body 下） -->
@@ -1404,7 +1180,7 @@ async function handleUploadFile(uploadFile) {
 .group-pick-item code {
   font-family: 'SFMono-Regular', Consolas, Menlo, monospace;
   font-size: 13px;
-  color: #6366F1;
+  color: var(--app-accent);
 }
 
 .group-pick-item span {
@@ -1430,7 +1206,7 @@ async function handleUploadFile(uploadFile) {
 .dynamic-var-popover .dynamic-var-name {
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
   font-size: 13px;
-  color: #6366F1;
+  color: var(--app-accent);
   background: transparent;
   padding: 0;
 }
@@ -1455,6 +1231,6 @@ async function handleUploadFile(uploadFile) {
   padding: 1px 4px;
   border-radius: 3px;
   font-family: 'SFMono-Regular', Consolas, monospace;
-  color: #6366F1;
+  color: var(--app-accent);
 }
 </style>
