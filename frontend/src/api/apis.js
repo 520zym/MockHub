@@ -3,7 +3,17 @@ import { requireRevision } from '@/utils/revisions'
 
 export const getApis = (params) => request.get('/apis', { params })
 
-export const getApiDetail = (id) => request.get(`/apis/${id}`)
+export const getApiDetail = id => request.get('/apis/' + encodeURIComponent(id))
+
+export const getApiRevisions = id => request.get('/apis/' + encodeURIComponent(id) + '/revisions')
+export const getApiRevision = (id, revisionId) => request.get('/apis/' + encodeURIComponent(id) + '/revisions/' + encodeURIComponent(revisionId))
+export const rollbackApiRevision = (id, revisionId, revision) => request.post('/apis/' + encodeURIComponent(id) + '/revisions/' + encodeURIComponent(revisionId) + '/rollback', { expectedRevision: requireRevision(revision) })
+export const getApiTrash = params => {
+  if (!params?.teamId) throw new Error('请先选择当前团队')
+  return request.get('/apis/trash', { params })
+}
+export const restoreApi = (id, data) => request.post('/apis/' + encodeURIComponent(id) + '/restore', { expectedRevision: requireRevision(data.expectedRevision), ...(data.newPath ? { newPath: data.newPath } : {}) })
+export const purgeApi = (id, revision) => request.delete('/apis/' + encodeURIComponent(id) + '/purge', { params: { expectedRevision: requireRevision(revision) } })
 
 export const createApi = (data) => request.post('/apis', data, { skipGlobalNetworkError: true })
 
