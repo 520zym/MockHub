@@ -312,7 +312,9 @@ class ApiLifecycleIntegrationTest {
     }
     private PermissionCheckerImpl permission() {
         UserRepository users=new UserRepository();ReflectionTestUtils.setField(users,"jdbcTemplate",jdbc);
-        PermissionCheckerImpl permission=new PermissionCheckerImpl();ReflectionTestUtils.setField(permission,"userRepository",users);return permission;
+        PermissionCheckerImpl permission=new PermissionCheckerImpl();ReflectionTestUtils.setField(permission,"userRepository",users);
+        com.mockhub.system.repository.TeamRepository teams=new com.mockhub.system.repository.TeamRepository();
+        ReflectionTestUtils.setField(teams,"jdbcTemplate",jdbc);ReflectionTestUtils.setField(permission,"teamRepository",teams);return permission;
     }
 
     private ApiDefinitionDTO dto(String path,String body) {
