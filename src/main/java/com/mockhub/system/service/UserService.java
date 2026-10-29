@@ -26,6 +26,9 @@ public interface UserService {
      */
     User findById(String id);
 
+    /** Super-admin only; status mutation, administrator validation and credential revocation are atomic. */
+    User updateStatus(String id, com.mockhub.system.model.dto.UpdateUserStatusRequest request);
+
     /**
      * 更新用户的 firstLogin 标志
      *

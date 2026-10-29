@@ -40,6 +40,12 @@ public class UserController {
     @Autowired
     private TeamRepository teamRepository;
 
+    @org.springframework.web.bind.annotation.PatchMapping("/{id}/status")
+    public Result<Map<String, Object>> updateStatus(@PathVariable String id,
+            @RequestBody com.mockhub.system.model.dto.UpdateUserStatusRequest request) {
+        return Result.ok(buildUserVO(userService.updateStatus(id, request)));
+    }
+
     /**
      * GET /api/users — 用户列表（不分页）
      *
@@ -133,6 +139,7 @@ public class UserController {
         vo.put("displayName", user.getDisplayName());
         vo.put("globalRole", user.getGlobalRole());
         vo.put("firstLogin", user.isFirstLogin());
+        vo.put("status", user.getStatus());
         vo.put("createdAt", user.getCreatedAt());
 
         // 填充团队角色信息

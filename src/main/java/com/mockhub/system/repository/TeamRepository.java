@@ -48,12 +48,14 @@ public class TeamRepository {
     private static final RowMapper<TeamMemberVO> MEMBER_ROW_MAPPER = new RowMapper<TeamMemberVO>() {
         @Override
         public TeamMemberVO mapRow(ResultSet rs, int rowNum) throws SQLException {
-            return new TeamMemberVO(
+            TeamMemberVO member = new TeamMemberVO(
                     rs.getString("id"),
                     rs.getString("username"),
                     rs.getString("display_name"),
                     rs.getString("role")
             );
+            member.setStatus(rs.getString("status"));
+            return member;
         }
     };
 
@@ -198,7 +200,7 @@ public class TeamRepository {
      */
     public List<TeamMemberVO> findMembers(String teamId) {
         return jdbcTemplate.query(
-                "SELECT u.id, u.username, u.display_name, ut.role FROM user u INNER JOIN user_team ut ON u.id = ut.user_id WHERE ut.team_id = ? ORDER BY ut.role ASC, u.username ASC",
+                "SELECT u.id, u.username, u.display_name, u.status, ut.role FROM user u INNER JOIN user_team ut ON u.id = ut.user_id WHERE ut.team_id = ? ORDER BY ut.role ASC, u.username ASC",
                 MEMBER_ROW_MAPPER,
                 teamId
         );

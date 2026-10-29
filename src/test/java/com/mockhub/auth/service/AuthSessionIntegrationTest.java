@@ -264,6 +264,7 @@ class AuthSessionIntegrationTest {
 
     @Configuration @EnableTransactionManagement(proxyTargetClass = true)
     @Import({AuthService.class, UserServiceImpl.class, UserRepository.class, TeamRepository.class,
+            com.mockhub.system.service.AdminSafetyService.class, com.mockhub.system.repository.AdminSafetyRepository.class,
             AuthSessionRepository.class, CredentialRevocationService.class, McpTokenRepository.class,
             JwtUtil.class, AuthController.class, MeController.class})
     static class Config {

@@ -153,7 +153,9 @@ class UserServiceImplResetPasswordTransactionTest {
 
     @Configuration
     @EnableTransactionManagement(proxyTargetClass = true)
-    @Import({UserServiceImpl.class, CredentialRevocationService.class, AuthSessionRepository.class, McpTokenRepository.class})
+    @Import({UserServiceImpl.class, CredentialRevocationService.class, AuthSessionRepository.class, McpTokenRepository.class,
+            AdminSafetyService.class, com.mockhub.system.repository.AdminSafetyRepository.class,
+            com.mockhub.system.repository.TeamRepository.class})
     static class TransactionConfig {
 
         @Bean
