@@ -493,7 +493,10 @@ public class DataSourceConfig {
         addColumnIfNotExists(conn, "api_definition", "deleted_at", "TEXT");
         addColumnIfNotExists(conn, "api_definition", "deleted_by", "TEXT");
         addColumnIfNotExists(conn, "api_definition", "purge_after", "TEXT");
-        if (tableExists(conn, "ai_pending_action")) addColumnIfNotExists(conn,"ai_pending_action","base_revision","INTEGER");
+        if (tableExists(conn, "ai_pending_action")) {
+            addColumnIfNotExists(conn,"ai_pending_action","base_revision","INTEGER");
+            addColumnIfNotExists(conn,"ai_pending_action","target_api_id","TEXT");
+        }
         try (Statement st=conn.createStatement()) {
             st.execute("CREATE TABLE IF NOT EXISTS api_revision (\n    id TEXT PRIMARY KEY, api_id TEXT NOT NULL, team_id TEXT NOT NULL, revision INTEGER NOT NULL,\n    action TEXT NOT NULL, actor_id TEXT, actor_name_snapshot TEXT NOT NULL, created_at TEXT NOT NULL,\n    source TEXT NOT NULL, snapshot_json TEXT NOT NULL, snapshot_schema_version INTEGER NOT NULL DEFAULT 1,\n    restored_from_revision_id TEXT, UNIQUE(api_id, revision)\n)");
             st.execute("CREATE TABLE IF NOT EXISTS api_tombstone (api_id TEXT PRIMARY KEY, team_id TEXT NOT NULL, name TEXT, method TEXT, path TEXT, revision INTEGER NOT NULL, deleted_at TEXT, deleted_by TEXT, purged_at TEXT NOT NULL, purged_by TEXT)");
@@ -517,6 +520,7 @@ public class DataSourceConfig {
     }
 
     private void migrateV10(Connection conn) throws SQLException {
+        backfillLegacyDraftTargets(conn);
         java.util.List<java.util.Map<String,Object>> apis = com.mockhub.mock.lifecycle.ApiSnapshot.query(conn,
                 "SELECT id,team_id,revision FROM api_definition");
         for (java.util.Map<String,Object> api : apis) {
@@ -530,6 +534,24 @@ public class DataSourceConfig {
                 ps.setObject(3,api.get("team_id")); ps.setObject(4,api.get("revision"));
                 ps.setString(5,java.time.Instant.now().toString()); ps.setString(6,snapshot); ps.executeUpdate();
                 com.mockhub.mock.lifecycle.ApiSnapshot.protectBlobs(conn,api.get("team_id").toString(),id,revisionId,snapshot);
+            }
+        }
+    }
+
+    private void backfillLegacyDraftTargets(Connection conn) throws SQLException {
+        if(!tableExists(conn,"ai_pending_action")) return;
+        for(Map<String,Object> row:com.mockhub.mock.lifecycle.ApiSnapshot.query(conn,
+                "SELECT id,payload FROM ai_pending_action WHERE action_type IN ('UPDATE_API','UPDATE_API_FULL') AND target_api_id IS NULL")) {
+            try {
+                String target=new ObjectMapper().readTree(row.get("payload").toString()).path("apiId").asText(null);
+                if(target!=null) try(PreparedStatement ps=conn.prepareStatement("UPDATE ai_pending_action SET target_api_id=? WHERE id=?")) {
+                    ps.setString(1,target);ps.setObject(2,row.get("id"));ps.executeUpdate();
+                }
+            } catch(com.fasterxml.jackson.core.JsonProcessingException invalid) {
+                log.warn("旧AI草稿 {} 内容损坏，取消并清除不可解析正文",row.get("id"));
+                try(PreparedStatement ps=conn.prepareStatement("UPDATE ai_pending_action SET status='CANCELLED',payload='{}' WHERE id=?")) {
+                    ps.setObject(1,row.get("id"));ps.executeUpdate();
+                }
             }
         }
     }

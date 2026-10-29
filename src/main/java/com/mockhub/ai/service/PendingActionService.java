@@ -61,13 +61,15 @@ public class PendingActionService {
     /**
      * 保存一个创建接口草稿，返回给前端渲染确认卡片的字段。
      */
-    public Map<String, Object> createApiDraft(ApiDefinitionDTO dto, String summary) {
+    public Map<String, Object> createApiDraft(ApiDefinitionDTO dto, String summary) { return repository.write(() -> createApiDraftInternal(dto,summary)); }
+    private Map<String,Object> createApiDraftInternal(ApiDefinitionDTO dto, String summary) {
         permissionChecker.checkTeamWrite(dto.getTeamId());
         AiPendingAction action = new AiPendingAction();
         action.setId(UUID.randomUUID().toString());
         action.setUserId(SecurityContextUtil.getCurrentUserId());
         action.setTeamId(dto.getTeamId());
         action.setActionType("CREATE_API");
+        action.setBaseRevision(0L);
         action.setSummary(summary);
         action.setStatus("PENDING");
         action.setCreatedAt(now());
@@ -85,13 +87,16 @@ public class PendingActionService {
     /**
      * 保存一个「修改已有接口」草稿。
      */
-    public Map<String, Object> createApiUpdateDraft(AiApiUpdateDraft draft, String summary) {
+    public Map<String, Object> createApiUpdateDraft(AiApiUpdateDraft draft, String summary) { return repository.write(() -> createApiUpdateDraftInternal(draft,summary)); }
+    private Map<String,Object> createApiUpdateDraftInternal(AiApiUpdateDraft draft, String summary) {
         permissionChecker.checkTeamWrite(draft.getTeamId());
         AiPendingAction action = new AiPendingAction();
         action.setId(UUID.randomUUID().toString());
         action.setUserId(SecurityContextUtil.getCurrentUserId());
         action.setTeamId(draft.getTeamId());
         action.setActionType("UPDATE_API");
+        validateDraftBase(draft.getApiId(),draft.getTeamId(),draft.getBaseRevision());
+        action.setBaseRevision(draft.getBaseRevision());action.setTargetApiId(draft.getApiId());
         action.setSummary(summary);
         action.setStatus("PENDING");
         action.setCreatedAt(now());
@@ -110,13 +115,17 @@ public class PendingActionService {
     /**
      * 保存一个「整体修改已有接口」草稿（MCP 多返回体）。
      */
-    public Map<String, Object> createApiFullUpdateDraft(AiApiFullUpdateDraft draft, String summary) {
+    public Map<String, Object> createApiFullUpdateDraft(AiApiFullUpdateDraft draft, String summary) { return repository.write(() -> createApiFullUpdateDraftInternal(draft,summary)); }
+    private Map<String,Object> createApiFullUpdateDraftInternal(AiApiFullUpdateDraft draft, String summary) {
         permissionChecker.checkTeamWrite(draft.getTeamId());
         AiPendingAction action = new AiPendingAction();
         action.setId(UUID.randomUUID().toString());
         action.setUserId(SecurityContextUtil.getCurrentUserId());
         action.setTeamId(draft.getTeamId());
         action.setActionType("UPDATE_API_FULL");
+        validateDraftBase(draft.getApiId(),draft.getTeamId(),draft.getBaseRevision());
+        draft.getDto().setExpectedRevision(draft.getBaseRevision());
+        action.setBaseRevision(draft.getBaseRevision());action.setTargetApiId(draft.getApiId());
         action.setSummary(summary);
         action.setStatus("PENDING");
         action.setCreatedAt(now());
@@ -134,9 +143,19 @@ public class PendingActionService {
     /**
      * 确认并落库。
      */
-    public Map<String, Object> confirm(String id) {
+    public Map<String,Object> confirm(String id) {
+        try {
+            return com.mockhub.mock.lifecycle.ApiMutationSource.withSource(com.mockhub.mock.lifecycle.ApiMutationSource.effective("AI"),
+                    () -> repository.write(() -> confirmInternal(id)));
+        } catch(BizException error) {
+            if(error.getCode()==40901) repository.write(() -> { repository.expire(id,now());return null; });
+            throw error;
+        }
+    }
+    private Map<String, Object> confirmInternal(String id) {
         AiPendingAction action = requireAction(id);
         checkOwner(action);
+        if(action.getBaseRevision()==null) throw new BizException(40920,"DRAFT_REGENERATION_REQUIRED: 草稿已升级，请重新生成");
         if (!"PENDING".equals(action.getStatus())) {
             throw new BizException(40902, "该操作已处理，请刷新确认状态");
         }
@@ -176,6 +195,7 @@ public class PendingActionService {
             result.put("method", created.getMethod());
             result.put("path", created.getPath());
             result.put("status", "CONFIRMED");
+            result.put("revision", created.getRevision());
             return result;
         } catch (BizException e) {
             repository.release(id);
@@ -198,7 +218,7 @@ public class PendingActionService {
         try {
             permissionChecker.checkTeamWrite(draft.getTeamId());
             ApiDefinition updated = apiService.updateResponseBody(
-                    draft.getApiId(), draft.getResponseId(), draft.getNewBody());
+                    draft.getApiId(), draft.getResponseId(), draft.getNewBody(),action.getBaseRevision());
             repository.complete(action.getId(), updated.getId(), now);
             recordAudit(action, updated, "CONFIRM");
             Map<String, Object> result = new LinkedHashMap<String, Object>();
@@ -207,6 +227,7 @@ public class PendingActionService {
             result.put("method", updated.getMethod());
             result.put("path", updated.getPath());
             result.put("status", "CONFIRMED");
+            result.put("revision", updated.getRevision());
             return result;
         } catch (BizException e) {
             repository.release(action.getId());
@@ -228,6 +249,7 @@ public class PendingActionService {
         }
         try {
             permissionChecker.checkTeamWrite(draft.getTeamId());
+            draft.getDto().setExpectedRevision(action.getBaseRevision());
             ApiDefinition updated = apiService.update(draft.getApiId(), draft.getDto());
             repository.complete(action.getId(), updated.getId(), now);
             recordAudit(action, updated, "CONFIRM");
@@ -237,6 +259,7 @@ public class PendingActionService {
             result.put("method", updated.getMethod());
             result.put("path", updated.getPath());
             result.put("status", "CONFIRMED");
+            result.put("revision", updated.getRevision());
             return result;
         } catch (BizException e) {
             repository.release(action.getId());
@@ -251,9 +274,17 @@ public class PendingActionService {
     /**
      * 取消草稿。
      */
-    public Map<String, Object> cancel(String id) {
+    public Map<String,Object> cancel(String id) {
+        try { return repository.write(() -> cancelInternal(id)); }
+        catch(BizException error) {
+            if(error.getCode()==40901)repository.write(() -> {repository.expire(id,now());return null;});
+            throw error;
+        }
+    }
+    private Map<String, Object> cancelInternal(String id) {
         AiPendingAction action = requireAction(id);
         checkOwner(action);
+        if(action.getBaseRevision()==null) throw new BizException(40920,"DRAFT_REGENERATION_REQUIRED: 草稿已升级，请重新生成");
         if (!"PENDING".equals(action.getStatus())) {
             throw new BizException(40902, "该操作已处理，无法取消");
         }
@@ -274,7 +305,7 @@ public class PendingActionService {
         checkOwner(action);
         permissionChecker.checkTeamAccess(action.getTeamId());
         if ("PENDING".equals(action.getStatus()) && now().compareTo(action.getExpiresAt()) > 0) {
-            repository.expire(id, now());
+            repository.write(() -> { repository.expire(id,now());return null; });
             action.setStatus("EXPIRED");
         }
         Map<String, Object> result = new LinkedHashMap<String, Object>();
@@ -284,6 +315,9 @@ public class PendingActionService {
         result.put("teamId", action.getTeamId());
         result.put("expiresAt", action.getExpiresAt());
         result.put("resultApiId", action.getResultApiId());
+        result.put("baseRevision",action.getBaseRevision());
+        if(action.getBaseRevision()==null) {result.put("requiresRegeneration",true);return result;}
+        if(action.getTargetApiId()!=null) apiService.getById(action.getTargetApiId());
         if ("UPDATE_API_FULL".equals(action.getActionType())) {
             try {
                 AiApiFullUpdateDraft draft = objectMapper.readValue(action.getPayload(), AiApiFullUpdateDraft.class);
@@ -297,8 +331,8 @@ public class PendingActionService {
                 result.put("responses", responseSummaries(draft.getDto()));
                 String preview = draft.getDto().getResponseBody() == null ? "" : draft.getDto().getResponseBody();
                 result.put("preview", preview.length() > 8000 ? preview.substring(0, 8000) + "…" : preview);
-            } catch (Exception ignored) {
-                // 草稿内容损坏时仍返回状态
+            } catch (Exception error) {
+                log.warn("草稿内容损坏: {}",action.getId(),error);result.put("payloadInvalid",true);
             }
             return result;
         }
@@ -324,8 +358,8 @@ public class PendingActionService {
                 result.put("responses", responses);
                 String oldPreview = draft.getOldBody() == null ? "" : draft.getOldBody();
                 result.put("oldPreview", oldPreview.length() > 2000 ? oldPreview.substring(0, 2000) + "…" : oldPreview);
-            } catch (Exception ignored) {
-                // 草稿内容损坏时仍返回状态
+            } catch (Exception error) {
+                log.warn("草稿内容损坏: {}",action.getId(),error);result.put("payloadInvalid",true);
             }
             return result;
         }
@@ -341,8 +375,8 @@ public class PendingActionService {
             result.put("responses", responseSummaries(dto));
             String preview = dto.getResponseBody() == null ? "" : dto.getResponseBody();
             result.put("preview", preview.length() > 8000 ? preview.substring(0, 8000) + "…" : preview);
-        } catch (Exception ignored) {
-            // 草稿内容损坏时仍返回状态，确认时会给出明确错误
+        } catch (Exception error) {
+            log.warn("草稿内容损坏: {}",action.getId(),error);result.put("payloadInvalid",true);
         }
         return result;
     }
@@ -379,6 +413,7 @@ public class PendingActionService {
         card.put("actionType", action.getActionType());
         card.put("status", action.getStatus());
         card.put("expiresAt", action.getExpiresAt());
+        card.put("baseRevision",action.getBaseRevision());
         card.put("summary", summary);
         String preview = dto.getResponseBody() == null ? "" : dto.getResponseBody();
         card.put("preview", preview.length() > 8000 ? preview.substring(0, 8000) + "…" : preview);
@@ -399,6 +434,7 @@ public class PendingActionService {
         card.put("actionType", action.getActionType());
         card.put("status", action.getStatus());
         card.put("expiresAt", action.getExpiresAt());
+        card.put("baseRevision",action.getBaseRevision());
         card.put("summary", summary);
         String preview = draft.getNewBody() == null ? "" : draft.getNewBody();
         card.put("preview", preview.length() > 8000 ? preview.substring(0, 8000) + "…" : preview);
@@ -420,6 +456,7 @@ public class PendingActionService {
         card.put("actionType", action.getActionType());
         card.put("status", action.getStatus());
         card.put("expiresAt", action.getExpiresAt());
+        card.put("baseRevision",action.getBaseRevision());
         card.put("summary", summary);
         String preview = draft.getDto().getResponseBody() == null ? "" : draft.getDto().getResponseBody();
         card.put("preview", preview.length() > 8000 ? preview.substring(0, 8000) + "…" : preview);
@@ -441,37 +478,21 @@ public class PendingActionService {
         }
     }
 
-    private void recordAudit(AiPendingAction action, ApiDefinition created, String actionName) {
-        try {
-            OperationLog opLog = new OperationLog();
-            opLog.setId(UUID.randomUUID().toString());
-            opLog.setTeamId(action.getTeamId());
-            opLog.setUserId(SecurityContextUtil.getCurrentUserId());
-            opLog.setUsername(SecurityContextUtil.getCurrentUsername());
-            opLog.setAction(actionName);
-            opLog.setTargetType("AI_ACTION");
-            opLog.setTargetId(action.getId());
-            opLog.setTargetName(created == null ? "AI 草稿" : created.getName());
-            if (created == null) {
-                opLog.setDetail("取消 AI 草稿");
-            } else if ("UPDATE_API".equals(action.getActionType())
-                    || "UPDATE_API_FULL".equals(action.getActionType())) {
-                opLog.setDetail("确认 AI 修改接口：" + created.getMethod() + " " + created.getPath());
-            } else {
-                opLog.setDetail("确认 AI 创建的接口：" + created.getMethod() + " " + created.getPath());
-            }
-            opLog.setCreatedAt(now());
-            logService.logOperation(opLog);
-        } catch (Exception e) {
-            log.warn("记录 AI 操作审计日志失败：{}", e.getMessage());
-        }
+    private void validateDraftBase(String apiId,String teamId,Long base) {
+        long revision=com.mockhub.mock.lifecycle.ApiVersions.require(base);
+        com.mockhub.mock.model.dto.ApiDefinitionDetailVO current=apiService.getById(apiId);
+        if(!current.getTeamId().equals(teamId)) throw new BizException(40102,"草稿目标不属于当前团队");
+        if(current.getRevision()!=revision) throw com.mockhub.mock.lifecycle.ApiVersions.conflict();
+    }
+    private void recordAudit(AiPendingAction action,ApiDefinition api,String event) {
+        repository.audit(action,api==null?null:api.getId(),event);
     }
 
     private String now() {
-        return new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss").format(new Date());
+        return java.time.Instant.now().toString();
     }
 
     private String format(Date date) {
-        return new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss").format(date);
+        return date.toInstant().toString();
     }
 }

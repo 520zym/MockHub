@@ -421,6 +421,8 @@ public class ApiServiceImpl implements ApiService {
 
         // 校验团队访问权限
         permissionChecker.checkTeamWrite(existing.getTeamId());
+        if(dto.getExpectedRevision()!=null && com.mockhub.mock.lifecycle.ApiVersions.require(dto.getExpectedRevision())!=existing.getRevision())
+            throw com.mockhub.mock.lifecycle.ApiVersions.conflict();
         if (dto.getTeamId() != null && !existing.getTeamId().equals(dto.getTeamId())) {
             throw new BizException(40102, "不能通过编辑接口变更所属团队");
         }
@@ -501,6 +503,7 @@ public class ApiServiceImpl implements ApiService {
             throw new BizException(40402, "接口不存在");
         }
         permissionChecker.checkTeamWrite(api.getTeamId());
+        if(expected!=null && ApiVersions.require(expected)!=api.getRevision()) throw ApiVersions.conflict();
 
         List<ApiResponse> responses = apiResponseRepository.findByApiId(apiId);
         ApiResponse target = null;

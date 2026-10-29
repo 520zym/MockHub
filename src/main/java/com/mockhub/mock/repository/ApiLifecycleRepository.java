@@ -30,6 +30,7 @@ public class ApiLifecycleRepository {
 
     public void append(String apiId,String action,String source,String restoredFrom) {
         requireTransaction();
+        source=com.mockhub.mock.lifecycle.ApiMutationSource.effective(source);
         String actor=SecurityContextUtil.getCurrentUserId();
         List<Map<String,Object>> names=jdbc.queryForList("SELECT username,display_name FROM user WHERE id=?",actor);
         String name=SecurityContextUtil.getCurrentUsername();
@@ -173,6 +174,8 @@ public class ApiLifecycleRepository {
         jdbc.update("DELETE FROM mock_blob_ref WHERE (owner_type='API' AND owner_id=?) OR (owner_type='REVISION' AND owner_id IN "
                 + "(SELECT id FROM api_revision WHERE api_id=?))",id,id);
         withHistoryDeletion(() -> jdbc.update("DELETE FROM api_revision WHERE api_id=?",id));
+        jdbc.update("DELETE FROM mock_blob_ref WHERE owner_type='DRAFT' AND owner_id IN (SELECT id FROM ai_pending_action WHERE target_api_id=?)",id);
+        jdbc.update("UPDATE ai_pending_action SET status='CANCELLED',payload='{}' WHERE target_api_id=?",id);
         jdbc.update("DELETE FROM api_tag WHERE api_id=?",id);jdbc.update("DELETE FROM api_response WHERE api_id=?",id);
         if(jdbc.update("DELETE FROM api_definition WHERE id=? AND revision=? AND deleted_at=?",id,api.getRevision(),api.getDeletedAt())!=1)
             throw com.mockhub.mock.lifecycle.ApiVersions.conflict();

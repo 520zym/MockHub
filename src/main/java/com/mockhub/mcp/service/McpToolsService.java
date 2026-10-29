@@ -314,6 +314,7 @@ public class McpToolsService {
 
         AiApiFullUpdateDraft draft = new AiApiFullUpdateDraft();
         draft.setApiId(apiId);
+        draft.setBaseRevision(detail.getRevision());
         draft.setTeamId(detail.getTeamId());
         draft.setDto(dto);
         Map<String, Object> action = pendingActionService.createApiFullUpdateDraft(

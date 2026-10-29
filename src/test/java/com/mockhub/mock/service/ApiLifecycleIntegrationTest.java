@@ -48,8 +48,7 @@ class ApiLifecycleIntegrationTest {
         jdbc.update("INSERT INTO tag(id,team_id,name,color) VALUES('tag','a','Tag','#fff')");
         UserRepository users=new UserRepository(); ReflectionTestUtils.setField(users,"jdbcTemplate",jdbc);
         PermissionCheckerImpl permission=new PermissionCheckerImpl(); ReflectionTestUtils.setField(permission,"userRepository",users);
-        com.mockhub.system.repository.TeamRepository teams=new com.mockhub.system.repository.TeamRepository();
-        ReflectionTestUtils.setField(teams,"jdbcTemplate",jdbc); ReflectionTestUtils.setField(permission,"teamRepository",teams);
+        injectRealTeamRepository(permission);
         apis=new ApiRepository(jdbc);responses=new ApiResponseRepository(jdbc);
         service=new ApiServiceImpl(apis,responses,new ApiTagRepository(jdbc),new GroupRepository(jdbc),new TagRepository(jdbc),
                 mock(TeamService.class),permission,json,mock(LogService.class),users,new MockFileStorageService(temp.toString()));
@@ -312,9 +311,87 @@ class ApiLifecycleIntegrationTest {
     }
     private PermissionCheckerImpl permission() {
         UserRepository users=new UserRepository();ReflectionTestUtils.setField(users,"jdbcTemplate",jdbc);
-        PermissionCheckerImpl permission=new PermissionCheckerImpl();ReflectionTestUtils.setField(permission,"userRepository",users);
+        PermissionCheckerImpl permission=new PermissionCheckerImpl();ReflectionTestUtils.setField(permission,"userRepository",users);injectRealTeamRepository(permission);return permission;
+    }
+
+    @Test void aiDraftUsesGenerationBaseAndStaleConfirmationLeavesNoClaimOrPhantomHistory() {
+        ApiDefinition api=service.create(dto("/ai","old"));
+        com.mockhub.ai.service.PendingActionService pending=pending();
+        com.mockhub.ai.model.dto.AiApiUpdateDraft draft=bodyDraft(api,"ai-body",1L);
+        String id=pending.createApiUpdateDraft(draft,"AI update").get("actionId").toString();
+        service.update(api.getId(),dto("/ai","manual"));
+        assertEquals(40921,assertThrows(BizException.class,()->pending.confirm(id)).getCode());
+        assertEquals("PENDING",jdbc.queryForObject("SELECT status FROM ai_pending_action WHERE id=?",String.class,id));
+        assertEquals(2,service.revisions(api.getId()).size());assertEquals("manual",apis.findById(api.getId()).getResponseBody());
+        assertEquals(40921,assertThrows(BizException.class,()->pending.createApiUpdateDraft(draft,"stale generation")).getCode());
+        com.mockhub.ai.model.dto.AiApiUpdateDraft fresh=bodyDraft(apis.findById(api.getId()),"fresh-ai",2L);
+        String freshId=pending.createApiUpdateDraft(fresh,"Fresh AI").get("actionId").toString();
+        assertEquals(3L,((Number)pending.confirm(freshId).get("revision")).longValue());
+        assertEquals("fresh-ai",apis.findById(api.getId()).getResponseBody());
+        assertEquals("AI",service.revisions(api.getId()).get(0).get("source"));
+    }
+
+    @Test void aiCreateClaimAggregateHistoryAndCompletionAreOneTransactionAndLegacyDraftsNeedRegeneration() {
+        com.mockhub.ai.service.PendingActionService pending=pending();String id=pending.createApiDraft(dto("/ai-create","new"),"Create").get("actionId").toString();
+        jdbc.execute("CREATE TRIGGER reject_ai_complete BEFORE UPDATE ON ai_pending_action WHEN NEW.status='CONFIRMED' "
+                + "BEGIN SELECT RAISE(ABORT,'completion failed'); END");
+        assertEquals(50001,assertThrows(BizException.class,()->pending.confirm(id)).getCode());
+        assertEquals("PENDING",jdbc.queryForObject("SELECT status FROM ai_pending_action WHERE id=?",String.class,id));
+        assertEquals(0,apis.countByTeamId("a"));assertEquals(0,jdbc.queryForObject("SELECT COUNT(*) FROM api_revision",Integer.class));
+        jdbc.execute("DROP TRIGGER reject_ai_complete");pending.confirm(id);
+        assertEquals(1,apis.countByTeamId("a"));assertEquals(40902,assertThrows(BizException.class,()->pending.confirm(id)).getCode());
+        jdbc.update("INSERT INTO ai_pending_action(id,user_id,team_id,action_type,payload,status,created_at,expires_at) "
+                + "VALUES('legacy','u','a','CREATE_API','{}','PENDING','before','2099-01-01T00:00:00Z')");
+        assertEquals(40920,assertThrows(BizException.class,()->pending.confirm("legacy")).getCode());
+        assertEquals(true,pending.get("legacy").get("requiresRegeneration"));assertFalse(pending.get("legacy").containsKey("preview"));
+    }
+
+    @Test void validAiDraftPinsFilesAfterHistoryPruneAndCancelOrExpiryReleasesThem() throws Exception {
+        ReflectionTestUtils.setField(service,"apiRepository",new ApiRepository(jdbc,1));
+        MockFileStorageService storage=new MockFileStorageService(temp.toString(),10485760L,new MockBlobRepository(jdbc));
+        MockFileStorageService.StoredMockFile file=storage.store("a","draft.txt","text/plain",1,new java.io.ByteArrayInputStream(new byte[]{1}));
+        ApiDefinitionDTO original=dto("/ai-file","file");ApiResponseDTO response=original.getResponses().get(0);
+        response.setBodyType("FILE");response.setFilePath(file.getFilePath());response.setFileName("draft.txt");response.setFileSize(1L);
+        ApiDefinition api=service.create(original);com.mockhub.ai.model.dto.AiApiFullUpdateDraft draft=new com.mockhub.ai.model.dto.AiApiFullUpdateDraft();
+        draft.setApiId(api.getId());draft.setTeamId("a");draft.setBaseRevision(1L);draft.setDto(original);
+        com.mockhub.ai.service.PendingActionService pending=pending();String id=pending.createApiFullUpdateDraft(draft,"Full").get("actionId").toString();
+        jdbc.update("UPDATE mock_blob SET lease_expires_at=0 WHERE file_path=?",file.getFilePath());
+        service.update(api.getId(),dto("/ai-file","text"));
+        assertTrue(responses.findAllFilePaths().contains(file.getFilePath()));assertEquals(0,storage.deleteOrphanFiles(responses.findAllFilePaths()).getDeletedCount());
+        pending.cancel(id);assertFalse(responses.findAllFilePaths().contains(file.getFilePath()));
+        assertEquals(1,storage.deleteOrphanFiles(responses.findAllFilePaths()).getDeletedCount());
+        String expiring=pending.createApiDraft(dto("/expired-ai","new"),"Expire").get("actionId").toString();
+        jdbc.update("UPDATE ai_pending_action SET expires_at='2000-01-01T00:00:00Z' WHERE id=?",expiring);
+        assertEquals(40901,assertThrows(BizException.class,()->pending.confirm(expiring)).getCode());
+        assertEquals("EXPIRED",jdbc.queryForObject("SELECT status FROM ai_pending_action WHERE id=?",String.class,expiring));
+    }
+
+    @Test void finalAiConfirmationRechecksCurrentWriteRoleAndPurgeScrubsTargetDraftContent() {
+        ApiDefinition api=service.create(dto("/ai-role","old"));com.mockhub.ai.service.PendingActionService pending=pending();
+        String id=pending.createApiUpdateDraft(bodyDraft(api,"sensitive-proposal",1L),"Update").get("actionId").toString();
+        jdbc.update("UPDATE user_team SET role='VIEWER' WHERE user_id='u'");
+        assertEquals(40104,assertThrows(BizException.class,()->pending.confirm(id)).getCode());
+        assertEquals("PENDING",jdbc.queryForObject("SELECT status FROM ai_pending_action WHERE id=?",String.class,id));
+        jdbc.update("UPDATE user_team SET role='TEAM_ADMIN' WHERE user_id='u'");
+        service.delete(api.getId(),1L);service.purge(api.getId(),2L);
+        assertEquals("{}",jdbc.queryForObject("SELECT payload FROM ai_pending_action WHERE id=?",String.class,id));
+        assertEquals("CANCELLED",jdbc.queryForObject("SELECT status FROM ai_pending_action WHERE id=?",String.class,id));
+    }
+
+    private com.mockhub.ai.service.PendingActionService pending() {
+        return new com.mockhub.ai.service.PendingActionService(new com.mockhub.ai.repository.AiPendingActionRepository(jdbc),json,service,permission(),mock(LogService.class));
+    }
+    private com.mockhub.ai.model.dto.AiApiUpdateDraft bodyDraft(ApiDefinition api,String body,Long base) {
+        com.mockhub.ai.model.dto.AiApiUpdateDraft draft=new com.mockhub.ai.model.dto.AiApiUpdateDraft();
+        draft.setApiId(api.getId());draft.setTeamId(api.getTeamId());draft.setBaseRevision(base);draft.setOldBody(api.getResponseBody());draft.setNewBody(body);
+        draft.setResponseId(responses.findByApiId(api.getId()).get(0).getId());return draft;
+    }
+
+    private void injectRealTeamRepository(PermissionCheckerImpl permission) {
+        // Exercise the real archive guard using this test database, never a mocked permission boundary.
         com.mockhub.system.repository.TeamRepository teams=new com.mockhub.system.repository.TeamRepository();
-        ReflectionTestUtils.setField(teams,"jdbcTemplate",jdbc);ReflectionTestUtils.setField(permission,"teamRepository",teams);return permission;
+        ReflectionTestUtils.setField(teams,"jdbcTemplate",jdbc);
+        ReflectionTestUtils.setField(permission,"teamRepository",teams);
     }
 
     private ApiDefinitionDTO dto(String path,String body) {

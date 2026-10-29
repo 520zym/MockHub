@@ -75,6 +75,7 @@ class DomainReadOnlyGuardTest {
         when(apis.findById("api")).thenReturn(api);
         when(apis.findByIds(Collections.singletonList("api"))).thenReturn(Collections.singletonList(api));
         drafts = mock(AiPendingActionRepository.class); files = mock(FileRepository.class);
+        when(drafts.write(any())).thenAnswer(invocation -> ((java.util.function.Supplier<?>)invocation.getArgument(0)).get());
         variables = mock(CustomVariableRepository.class); headers = mock(GlobalHeaderRepository.class);
     }
     @AfterEach void clean() { SecurityContextHolder.clearContext(); }
@@ -110,7 +111,9 @@ class DomainReadOnlyGuardTest {
         });
         verify(apis, never()).insert(any()); verify(apis, never()).update(any());
         verify(apis, never()).deleteById(anyString());
-        verifyNoInteractions(responses, apiTags, drafts, files, variables, headers);
+        verifyNoInteractions(responses, apiTags, files, variables, headers);
+        if(action.startsWith("ai-")) verify(drafts).write(any());
+        verifyNoMoreInteractions(drafts);
         verify(groups, never()).insert(any()); verify(tags, never()).insert(any());
     }
 

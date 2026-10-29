@@ -336,6 +336,7 @@ public class AiChatService {
 
         AiApiUpdateDraft draft = new AiApiUpdateDraft();
         draft.setApiId(detail.getId());
+        draft.setBaseRevision(detail.getRevision());
         draft.setResponseId(target.getId());
         draft.setTeamId(detail.getTeamId());
         draft.setApiName(detail.getName());

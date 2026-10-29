@@ -369,7 +369,9 @@ CREATE TABLE IF NOT EXISTS ai_pending_action (
     created_at    TEXT NOT NULL,
     expires_at    TEXT NOT NULL,
     confirmed_at  TEXT,
-    result_api_id TEXT
+    result_api_id TEXT,
+    base_revision INTEGER,
+    target_api_id TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_ai_pending_action_user ON ai_pending_action(user_id, status);
 CREATE INDEX IF NOT EXISTS idx_ai_pending_action_expires ON ai_pending_action(status, expires_at);
