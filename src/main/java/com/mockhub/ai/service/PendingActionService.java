@@ -311,8 +311,15 @@ public class PendingActionService {
 
     public Map<String, Object> get(String id) {
         AiPendingAction action = requireAction(id);
-        checkOwner(action);
+        // Private payload reads never grant a system-admin owner bypass. Cleanup/confirm policies stay separate.
+        if (!SecurityContextUtil.getCurrentUserId().equals(action.getUserId())) {
+            throw new BizException(40305, "无权读取他人的 AI 草稿");
+        }
+        if (action.getTeamId() == null || action.getTeamId().trim().isEmpty()) {
+            throw new BizException(40102, "历史草稿未绑定团队，不能读取");
+        }
         permissionChecker.checkTeamAccess(action.getTeamId());
+        if (!repository.teamExists(action.getTeamId())) throw new BizException(40403, "团队不存在");
         if ("PENDING".equals(action.getStatus()) && now().compareTo(action.getExpiresAt()) > 0) {
             repository.write(() -> { repository.expire(id,now());return null; });
             action.setStatus("EXPIRED");

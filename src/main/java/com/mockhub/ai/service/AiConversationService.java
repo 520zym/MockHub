@@ -6,6 +6,9 @@ import com.mockhub.ai.model.AiConversation;
 import com.mockhub.ai.model.AiConversationMessage;
 import com.mockhub.ai.repository.AiConversationRepository;
 import com.mockhub.common.model.BizException;
+import com.mockhub.common.util.PermissionChecker;
+import com.mockhub.common.util.SecurityContextUtil;
+import com.mockhub.system.repository.TeamRepository;
 import org.springframework.stereotype.Service;
 
 import java.text.SimpleDateFormat;
@@ -26,10 +29,49 @@ public class AiConversationService {
 
     private final AiConversationRepository repository;
     private final ObjectMapper objectMapper;
+    private final PermissionChecker permissions;
+    private final TeamRepository teams;
 
-    public AiConversationService(AiConversationRepository repository, ObjectMapper objectMapper) {
+    public AiConversationService(AiConversationRepository repository, ObjectMapper objectMapper,
+                                 PermissionChecker permissions, TeamRepository teams) {
         this.repository = repository;
         this.objectMapper = objectMapper;
+        this.permissions = permissions;
+        this.teams = teams;
+    }
+
+    /** Validate before provider calls, resource queries or draft creation, not just before persistence. */
+    public void validateContext(String conversationId, String userId, String teamId) {
+        requireCurrentOwner(userId);
+        requireReadableTeam(teamId);
+        if (conversationId != null && !conversationId.trim().isEmpty()) {
+            AiConversation conversation = requireReadableConversation(conversationId, userId);
+            if (!teamId.equals(conversation.getTeamId())) {
+                throw new BizException(40102, "会话不属于当前团队，请新建会话");
+            }
+        }
+    }
+
+    private AiConversation requireReadableConversation(String id, String userId) {
+        requireCurrentOwner(userId);
+        AiConversation conversation = repository.find(id, userId);
+        if (conversation == null) throw new BizException(40404, "会话不存在或已被删除");
+        requireReadableTeam(conversation.getTeamId());
+        return conversation;
+    }
+
+    private void requireCurrentOwner(String userId) {
+        if (userId == null || !SecurityContextUtil.getCurrentUserId().equals(userId)) {
+            throw new BizException(40305, "无权读取他人的 AI 会话");
+        }
+    }
+
+    private void requireReadableTeam(String teamId) {
+        if (teamId == null || teamId.trim().isEmpty()) {
+            throw new BizException(40102, "历史会话未绑定团队，不能读取或继续");
+        }
+        permissions.checkTeamAccess(teamId);
+        if (teams.findById(teamId) == null) throw new BizException(40403, "团队不存在");
     }
 
     /**
@@ -42,6 +84,7 @@ public class AiConversationService {
         if (userId == null || userId.trim().isEmpty()) {
             throw new BizException(40002, "未登录");
         }
+        validateContext(conversationId, userId, teamId);
         AiConversation conversation;
         if (conversationId == null || conversationId.trim().isEmpty()) {
             conversation = new AiConversation();
@@ -96,8 +139,17 @@ public class AiConversationService {
     }
 
     public List<AiConversation> list(String userId) {
-        List<AiConversation> list = repository.listByUser(userId, 30);
-        for (AiConversation conversation : list) {
+        requireCurrentOwner(userId);
+        List<AiConversation> list = new ArrayList<AiConversation>();
+        // Legacy callers omit teamId: return only their currently readable, team-bound history.
+        for (AiConversation conversation : repository.listByUser(userId, 30)) {
+            try {
+                requireReadableTeam(conversation.getTeamId());
+            } catch (BizException denied) {
+                if (denied.getCode() == 40102 || denied.getCode() == 40403) continue;
+                throw denied;
+            }
+            list.add(conversation);
             conversation.setPreview(preview(conversation.getPreview()));
             if (conversation.getTitle() == null || conversation.getTitle().trim().isEmpty()) {
                 conversation.setTitle("未命名会话");
@@ -107,10 +159,7 @@ public class AiConversationService {
     }
 
     public Map<String, Object> detail(String id, String userId) {
-        AiConversation conversation = repository.find(id, userId);
-        if (conversation == null) {
-            throw new BizException(40404, "会话不存在或已被删除");
-        }
+        AiConversation conversation = requireReadableConversation(id, userId);
         Map<String, Object> result = new LinkedHashMap<String, Object>();
         result.put("id", conversation.getId());
         result.put("title", conversation.getTitle());
@@ -134,6 +183,7 @@ public class AiConversationService {
     }
 
     public void delete(String id, String userId) {
+        requireCurrentOwner(userId); // Owner cleanup remains possible after leaving the team; no read/write grant required.
         AiConversation conversation = repository.find(id, userId);
         if (conversation == null) {
             throw new BizException(40404, "会话不存在或已被删除");

@@ -94,13 +94,12 @@ public class AiChatService {
             throw new BizException(40001, "问题过长，请精简到 2000 字以内");
         }
         String teamId = request.getTeamId() == null ? "" : request.getTeamId().trim();
-        if (teamId.isEmpty() && !SecurityContextUtil.isSuperAdmin()) {
+        if (teamId.isEmpty()) {
             throw new BizException(40001, "请先选择团队");
         }
-        AiSettings settings = settingsService.assertUsable(null, teamId.isEmpty() ? null : teamId);
-        if (teamId.isEmpty()) {
-            request.setTeamId(null);
-        }
+        request.setTeamId(teamId);
+        conversationService.validateContext(request.getConversationId(), SecurityContextUtil.getCurrentUserId(), teamId);
+        AiSettings settings = settingsService.assertUsable(null, teamId);
 
         log.info("AI 对话请求：teamId={}, conversationId={}, contextApiId={}, messageChars={}",
                 request.getTeamId(), request.getConversationId(), request.getContextApiId(),

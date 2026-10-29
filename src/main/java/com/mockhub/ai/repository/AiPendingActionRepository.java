@@ -41,6 +41,12 @@ public class AiPendingActionRepository {
         return list.isEmpty() ? null : list.get(0);
     }
 
+    /** Metadata-only read guard for private draft content; null is never an all-team scope. */
+    public boolean teamExists(String teamId) {
+        Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM team WHERE id = ?", Integer.class, teamId);
+        return count != null && count > 0;
+    }
+
     /**
      * 抢占执行权：只有 PENDING 才能从 CONFIRMING 状态开始执行，避免重复确认导致重复创建。
      *
