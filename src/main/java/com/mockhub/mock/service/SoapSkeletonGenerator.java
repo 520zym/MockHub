@@ -63,8 +63,7 @@ public class SoapSkeletonGenerator {
             String responseElementName = operationName + "Response";
             Element responseElement = findElementByName(wsdlDoc, responseElementName);
             if (responseElement == null) {
-                log.warn("未找到响应元素，跳过骨架生成: operationName={}, responseElement={}",
-                        operationName, responseElementName);
+                log.debug("未找到WSDL响应元素，跳过骨架生成");
                 return null;
             }
 
@@ -77,7 +76,7 @@ public class SoapSkeletonGenerator {
 
             // 校验 operationName 生成的元素名合法
             if (!isValidNCName(responseElementName)) {
-                log.warn("响应元素名非法，跳过骨架生成: operationName={}", operationName);
+                log.warn("WSDL响应元素名非法，跳过骨架生成");
                 return null;
             }
 
@@ -96,7 +95,7 @@ public class SoapSkeletonGenerator {
 
             return sb.toString();
         } catch (Exception e) {
-            log.warn("生成响应体骨架失败: operationName={}, error={}", operationName, e.getMessage());
+            log.warn("WSDL响应体骨架生成失败");
             return null;
         }
     }
@@ -207,7 +206,7 @@ public class SoapSkeletonGenerator {
             if (name == null || name.isEmpty()) continue;
             // 校验 name 是合法 XML NCName，否则跳过（来自不可信 WSDL 的畸形输入）
             if (!isValidNCName(name)) {
-                log.warn("跳过非法 XML 元素名: {}", name);
+                log.warn("跳过非法WSDL XML元素名");
                 continue;
             }
 

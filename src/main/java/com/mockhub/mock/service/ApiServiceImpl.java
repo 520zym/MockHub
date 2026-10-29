@@ -72,6 +72,8 @@ public class ApiServiceImpl implements ApiService {
     private final LogService logService;
     private final com.mockhub.system.repository.UserRepository userRepository;
     private final MockFileStorageService fileStorageService;
+    @org.springframework.beans.factory.annotation.Autowired
+    private SoapService soapService;
     @org.springframework.beans.factory.annotation.Value("${mock.api.trash-retention-days:30}")
     private int trashRetentionDays=30;
 
@@ -352,6 +354,7 @@ public class ApiServiceImpl implements ApiService {
         permissionChecker.checkTeamWrite(dto.getTeamId());
 
         validateTeamReferences(dto.getTeamId(), dto.getGroupId(), dto.getTagIds());
+        validateWsdlReference(dto.getTeamId(),dto.getSoapConfig());
         String normalizedPath = normalizeApiPath(dto.getPath());
 
         // 校验同团队内 path+method 唯一性
@@ -427,6 +430,7 @@ public class ApiServiceImpl implements ApiService {
             throw new BizException(40102, "不能通过编辑接口变更所属团队");
         }
         validateTeamReferences(existing.getTeamId(), dto.getGroupId(), dto.getTagIds());
+        validateWsdlReference(existing.getTeamId(),dto.getSoapConfig());
 
         // 如果修改了 path 或 method，校验唯一性
         String newPath = dto.getPath() != null ? normalizeApiPath(dto.getPath()) : existing.getPath();
@@ -606,6 +610,7 @@ public class ApiServiceImpl implements ApiService {
         copy.setDelayMs(source.getDelayMs());
         copy.setEnabled(false); // 副本默认禁用，避免路径冲突
         copy.setGlobalHeaderOverrides(source.getGlobalHeaderOverrides());
+        validateWsdlReference(source.getTeamId(),source.getSoapConfig());
         copy.setSoapConfig(source.getSoapConfig());
         copy.setResponseMode(source.getResponseMode());
         copy.setCreatedBy(userId);
@@ -1056,7 +1061,8 @@ public class ApiServiceImpl implements ApiService {
             String path=newPath==null?api.getPath():normalizeApiPath(newPath);
             if(!apiRepository.findByTeamIdAndPathAndMethod(api.getTeamId(),path,api.getMethod()).isEmpty())
                 throw new BizException(40922,"RESTORE_PATH_CONFLICT: 路径和方法已被占用，请使用新路径");
-            verifySnapshotFiles(apiRepository.revision(id,apiRepository.history(id).get(0).get("id").toString()).get("snapshot"));
+            verifySnapshotFiles(apiRepository.revision(id,apiRepository.history(id).get(0).get("id").toString()).get("snapshot"),api.getTeamId());
+            validateWsdlReference(api.getTeamId(),api.getSoapConfig());
             if(apiRepository.restore(id,version,path,java.time.Instant.now().toString(),SecurityContextUtil.getCurrentUserId(),api.getPurgeAfter())!=1)
                 throw ApiVersions.conflict();
             apiRepository.removeMissingTeamReferences(id,api.getTeamId());
@@ -1091,7 +1097,7 @@ public class ApiServiceImpl implements ApiService {
             if(config==null || config.get("path")==null || config.get("method")==null) throw new BizException(40924,"快照配置不完整");
             for(ApiDefinition conflict:apiRepository.findByTeamIdAndPathAndMethod(api.getTeamId(),config.get("path").toString(),config.get("method").toString()))
                 if(!id.equals(conflict.getId())) throw new BizException(40922,"RESTORE_PATH_CONFLICT: 历史路径已被占用");
-            verifySnapshotFiles(snapshot);
+            verifySnapshotFiles(snapshot,api.getTeamId());
             claim(api,expected,java.time.Instant.now().toString(),SecurityContextUtil.getCurrentUserId());
             apiRepository.applySnapshot(id,snapshot);
             apiRepository.removeMissingTeamReferences(id,api.getTeamId());
@@ -1100,12 +1106,29 @@ public class ApiServiceImpl implements ApiService {
         });
     }
     @SuppressWarnings("unchecked")
-    private void verifySnapshotFiles(Object value) {
+    private void verifySnapshotFiles(Object value,String teamId) {
         Map<String,Object> snapshot=(Map<String,Object>)value;
+        Map<String,Object> config=(Map<String,Object>)snapshot.get("config");
+        if(config!=null)validateWsdlReference(teamId,config.get("soap_config"));
         for(Map<String,Object> response:(List<Map<String,Object>>)snapshot.get("responses")) {
             if("FILE".equalsIgnoreCase(String.valueOf(response.get("body_type"))))
                 fileStorageService.loadAsResource((String)response.get("file_path"));
         }
+    }
+
+    private void validateWsdlReference(String teamId,Object value) {
+        if(value==null)return;
+        com.fasterxml.jackson.databind.JsonNode config;
+        try{config=value instanceof String?objectMapper.readTree((String)value):objectMapper.valueToTree(value);}
+        catch(Exception e){throw new BizException(40000,"SOAP配置必须为有效JSON对象");}
+        if(config==null || config.isNull())return;
+        if(!config.isObject())throw new BizException(40000,"SOAP配置必须为对象");
+        com.fasterxml.jackson.databind.JsonNode name=config.get("wsdlFileName");
+        if(name==null || name.isNull())return;
+        if(!name.isTextual())throw new BizException(40702,"WSDL引用必须为安全的团队文件key");
+        if(name.asText().isEmpty())return; // Manual SOAP metadata without a WSDL remains supported.
+        if(soapService==null)throw new BizException(50001,"WSDL安全引用校验不可用");
+        soapService.assertReference(teamId,name.asText());
     }
 
     private String userName(String id) {

@@ -36,12 +36,28 @@ class SoapServiceTest {
         props.setPath(tempDir.toString());
         Files.createDirectories(tempDir.resolve("wsdl"));
         service = new SoapService(props, new SoapSkeletonGenerator());
+        org.sqlite.SQLiteDataSource ds=new org.sqlite.SQLiteDataSource();ds.setUrl("jdbc:sqlite:"+tempDir.resolve("legacy.db"));
+        new org.springframework.jdbc.datasource.init.ResourceDatabasePopulator(new org.springframework.core.io.ClassPathResource("schema.sql")).execute(ds);
+        org.springframework.jdbc.core.JdbcTemplate jdbc=new org.springframework.jdbc.core.JdbcTemplate(ds);
+        jdbc.update("INSERT INTO team(id,name,identifier,created_at) VALUES('team','Team','TT','before')");
+        jdbc.update("INSERT INTO user(id,username,password_hash,display_name,global_role,created_at,updated_at) VALUES('u','u','hash','U','USER','before','before')");
+        jdbc.update("INSERT INTO user_team VALUES('u','team','EDITOR')");
+        for(String name:new String[]{"test.wsdl","foo.wsdl","docA.wsdl","docB.wsdl","docC.wsdl","docD.wsdl"})
+            jdbc.update("INSERT INTO api_definition(id,team_id,name,type,method,path,soap_config,created_at,updated_at) VALUES(?,'team',?,'SOAP','POST',?,?,'before','before')",name,name,"/"+name,"{\"wsdlFileName\":\""+name+"\"}");
+        com.mockhub.system.repository.TeamRepository teams=new com.mockhub.system.repository.TeamRepository();org.springframework.test.util.ReflectionTestUtils.setField(teams,"jdbcTemplate",jdbc);
+        com.mockhub.system.repository.UserRepository users=new com.mockhub.system.repository.UserRepository();org.springframework.test.util.ReflectionTestUtils.setField(users,"jdbcTemplate",jdbc);
+        com.mockhub.system.service.PermissionCheckerImpl permission=new com.mockhub.system.service.PermissionCheckerImpl();org.springframework.test.util.ReflectionTestUtils.setField(permission,"teamRepository",teams);org.springframework.test.util.ReflectionTestUtils.setField(permission,"userRepository",users);
+        org.springframework.test.util.ReflectionTestUtils.setField(service,"permissionChecker",permission);org.springframework.test.util.ReflectionTestUtils.setField(service,"teamRepository",teams);
+        org.springframework.test.util.ReflectionTestUtils.setField(service,"references",new com.mockhub.mock.repository.WsdlReferenceRepository(jdbc,new com.fasterxml.jackson.databind.ObjectMapper()));
+        java.util.Map<String,Object> details=new java.util.HashMap<>();details.put("userId","u");details.put("globalRole","USER");org.springframework.security.authentication.UsernamePasswordAuthenticationToken auth=new org.springframework.security.authentication.UsernamePasswordAuthenticationToken("u",null,java.util.Collections.emptyList());auth.setDetails(details);org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(auth);
     }
+
+    @org.junit.jupiter.api.AfterEach void clearContext(){org.springframework.security.core.context.SecurityContextHolder.clearContext();}
 
     @Test
     void getWsdlContent_replacesLocationWithMockUrl() throws IOException {
         String wsdl = "<?xml version=\"1.0\"?>\n" +
-                "<wsdl:definitions>\n" +
+                "<wsdl:definitions xmlns:wsdl=\"http://schemas.xmlsoap.org/wsdl/\" xmlns:soap=\"http://schemas.xmlsoap.org/wsdl/soap/\" xmlns:soap12=\"http://schemas.xmlsoap.org/wsdl/soap12/\">\n" +
                 "  <wsdl:service name=\"S\">\n" +
                 "    <wsdl:port>\n" +
                 "      <soap:address location=\"http://original.host/Service.asmx\"/>\n" +
@@ -52,7 +68,7 @@ class SoapServiceTest {
         Files.write(tempDir.resolve("wsdl").resolve("test.wsdl"), wsdl.getBytes("UTF-8"));
 
         String mockUrl = "http://mockhub.local:8080/mock/TEAM_B/demo/release";
-        String content = service.getWsdlContent("test.wsdl", mockUrl);
+        String content = service.getWsdlContent("team","test.wsdl", mockUrl);
 
         // SOAP 1.1 和 1.2 两个 location 都应替换为完整 mockUrl
         assertTrue(content.contains("location=\"" + mockUrl + "\""),
@@ -86,7 +102,7 @@ class SoapServiceTest {
                 "</definitions>";
         Files.write(tempDir.resolve("wsdl").resolve("foo.wsdl"), wsdl.getBytes("UTF-8"));
 
-        com.mockhub.mock.model.dto.WsdlParseResult result = service.parseOperations("foo.wsdl");
+        com.mockhub.mock.model.dto.WsdlParseResult result = service.parseOperations("team","foo.wsdl");
 
         org.junit.jupiter.api.Assertions.assertEquals(1, result.getOperations().size());
         com.mockhub.mock.model.dto.WsdlParseResult.WsdlOperation op = result.getOperations().get(0);
@@ -117,7 +133,7 @@ class SoapServiceTest {
                 "</definitions>";
         Files.write(tempDir.resolve("wsdl").resolve("docA.wsdl"), wsdl.getBytes("UTF-8"));
 
-        com.mockhub.mock.model.dto.WsdlParseResult result = service.parseOperations("docA.wsdl");
+        com.mockhub.mock.model.dto.WsdlParseResult result = service.parseOperations("team","docA.wsdl");
 
         assertEquals(1, result.getOperations().size());
         com.mockhub.mock.model.dto.WsdlParseResult.WsdlOperation op = result.getOperations().get(0);
@@ -143,7 +159,7 @@ class SoapServiceTest {
                 "</definitions>";
         Files.write(tempDir.resolve("wsdl").resolve("docB.wsdl"), wsdl.getBytes("UTF-8"));
 
-        com.mockhub.mock.model.dto.WsdlParseResult result = service.parseOperations("docB.wsdl");
+        com.mockhub.mock.model.dto.WsdlParseResult result = service.parseOperations("team","docB.wsdl");
 
         assertEquals(1, result.getOperations().size());
         assertNull(result.getOperations().get(0).getDescription(),
@@ -172,7 +188,7 @@ class SoapServiceTest {
                 "</definitions>";
         Files.write(tempDir.resolve("wsdl").resolve("docC.wsdl"), wsdl.getBytes("UTF-8"));
 
-        com.mockhub.mock.model.dto.WsdlParseResult result = service.parseOperations("docC.wsdl");
+        com.mockhub.mock.model.dto.WsdlParseResult result = service.parseOperations("team","docC.wsdl");
 
         assertEquals(1, result.getOperations().size());
         assertNull(result.getOperations().get(0).getDescription(),
@@ -203,7 +219,7 @@ class SoapServiceTest {
                 "</definitions>";
         Files.write(tempDir.resolve("wsdl").resolve("docD.wsdl"), wsdl.getBytes("UTF-8"));
 
-        com.mockhub.mock.model.dto.WsdlParseResult result = service.parseOperations("docD.wsdl");
+        com.mockhub.mock.model.dto.WsdlParseResult result = service.parseOperations("team","docD.wsdl");
 
         assertEquals(3, result.getOperations().size());
         java.util.Map<String, String> descByName = new java.util.HashMap<>();

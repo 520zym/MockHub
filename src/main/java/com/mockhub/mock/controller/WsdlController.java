@@ -15,7 +15,7 @@ import org.springframework.web.multipart.MultipartFile;
 /**
  * SOAP/WSDL 管理 Controller（管理端）
  * <p>
- * 仅保留 WSDL 上传和解析端点，需要 JWT 认证。
+ * WSDL 上传/解析均须显式团队；上传检查团队写入，解析检查团队读取，并由服务端校验文件归属。
  * WSDL 托管已迁移到 MockDispatchController 的 GET ?wsdl 分支（方案 A），
  * 支持 {@code GET /mock/{team}/{path}?wsdl} 返回动态替换 location 的 WSDL。
  */
@@ -37,9 +37,14 @@ public class WsdlController {
      * @return 解析结果（文件名 + 操作列表 + 骨架）
      */
     @PostMapping("/api/soap/wsdl/upload")
-    public Result<WsdlParseResult> uploadWsdl(@RequestParam("file") MultipartFile file) {
-        WsdlParseResult result = soapService.uploadWsdl(file);
+    public Result<WsdlParseResult> uploadWsdl(@RequestParam("teamId") String teamId, @RequestParam("file") MultipartFile file) {
+        WsdlParseResult result = soapService.uploadWsdl(teamId,file);
         return Result.ok(result);
+    }
+
+    @GetMapping("/api/soap/wsdl/operations")
+    public Result<WsdlParseResult> getOperationsByKey(@RequestParam("teamId") String teamId, @RequestParam("fileName") String fileName) {
+        return Result.ok(soapService.parseOperations(teamId,fileName));
     }
 
     /**
@@ -49,8 +54,8 @@ public class WsdlController {
      * @return 解析结果
      */
     @GetMapping("/api/soap/wsdl/{fileName}/operations")
-    public Result<WsdlParseResult> getOperations(@PathVariable String fileName) {
-        WsdlParseResult result = soapService.parseOperations(fileName);
+    public Result<WsdlParseResult> getOperations(@PathVariable String fileName, @RequestParam("teamId") String teamId) {
+        WsdlParseResult result = soapService.parseOperations(teamId,fileName);
         return Result.ok(result);
     }
 }
