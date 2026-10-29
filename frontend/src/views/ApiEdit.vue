@@ -9,6 +9,10 @@
       <span class="page-title">{{ isEdit ? '编辑接口' : '新建接口' }}</span>
     </div>
 
+    <el-alert v-if="revisionConflict" title="版本已变化，当前草稿仍然保留" type="warning" :closable="false" show-icon>
+      <p>请先复制需要保留的编辑，再重新加载最新版本。不会自动用新版本号覆盖队友的修改。</p>
+      <el-button size="small" @click="copyDraft">复制当前草稿</el-button><el-button size="small" @click="reloadCurrentVersion">重新加载</el-button>
+    </el-alert>
     <!-- 卡片 1：基本信息 -->
     <div class="soft-card section-card">
       <h3 class="section-title">基本信息</h3>
@@ -290,7 +294,7 @@
     <!-- 底部操作栏 -->
     <div class="bottom-actions">
       <el-button @click="goBack">取消</el-button>
-      <el-button type="primary" :loading="saving" :disabled="saving" @click="handleSave">
+      <el-button type="primary" :loading="saving" :disabled="saving || !userStore.canWriteTeam(form.teamId)" @click="handleSave">
         {{ isEdit ? '保存' : '创建' }}
       </el-button>
     </div>
@@ -341,6 +345,8 @@ const canCreateGroup = computed(() => {
 const isEdit = computed(() => !!route.params.id)
 const pageLoading = ref(false)
 const saving = ref(false)
+const loadedRevision = ref(null)
+const revisionConflict = ref(false)
 
 /**
  * v1.4.4 性能：SOAP operation 折叠态管理。
@@ -596,6 +602,8 @@ async function loadApiDetail() {
   pageLoading.value = true
   try {
     const data = await getApiDetail(route.params.id)
+    loadedRevision.value = data.revision
+    revisionConflict.value = false
 
     // 填充基本信息
     Object.assign(form, {
@@ -906,8 +914,16 @@ function isConditionsEmptyLocal(json) {
   }
 }
 
+async function copyDraft() {
+  try { await navigator.clipboard.writeText(JSON.stringify({ ...form, expectedRevision: loadedRevision.value }, null, 2)); ElMessage.success('当前草稿已复制') }
+  catch { ElMessage.warning('浏览器未授权剪贴板，请手动复制需要保留的内容') }
+}
+async function reloadCurrentVersion() {
+  try { await ElMessageBox.confirm('重新加载将丢弃未提交编辑，是否继续？', '重新加载', { type: 'warning' }); await loadApiDetail(); captureSnapshot() } catch {}
+}
 async function handleSave() {
   if (saving.value) return
+  if (!userStore.canWriteTeam(form.teamId)) { ElMessage.warning('当前团队角色不可修改接口'); return }
 
   // 基本校验
   if (!form.name.trim()) {
@@ -1013,7 +1029,7 @@ async function handleSave() {
     }
 
     if (isEdit.value) {
-      await updateApi(route.params.id, payload)
+      await updateApi(route.params.id, { ...payload, expectedRevision: loadedRevision.value })
       ElMessage.success('保存成功')
     } else {
       await createApi(payload)
@@ -1025,6 +1041,7 @@ async function handleSave() {
     appStore.loadTeams()
     router.push('/apis')
   } catch (e) {
+    if (Number(e?.code) === 40921 || Number(e?.code) === 40920) revisionConflict.value = true
     if (e?.isTimeout || e?.isNetworkError) {
       ElMessage.warning('保存请求超时或网络异常，服务端可能已经保存成功。请返回接口列表确认后再决定是否重试，避免重复提交。')
     } else if (e?.response && e.response.status !== 401) {

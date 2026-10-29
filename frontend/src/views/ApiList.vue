@@ -529,6 +529,7 @@ import { useUserStore } from '@/stores/user'
 import { getApis, deleteApi, copyApi, toggleApi, importApis, exportApis, batchApis } from '@/api/apis'
 import { getTags, createTag, updateTag, deleteTag } from '@/api/tags'
 import { getGroups } from '@/api/groups'
+import { selectedRevisions } from '@/utils/revisions'
 import { getServerAddress } from '@/api/settings'
 import HttpMethodTag from '@/components/HttpMethodTag.vue'
 import ApiTypeTag from '@/components/ApiTypeTag.vue'
@@ -1021,7 +1022,7 @@ async function handleCopyUrl(row) {
 /** 复制接口 */
 async function handleCopy(row) {
   try {
-    await copyApi(row.id)
+    await copyApi(row.id, row.revision)
     ElMessage.success('复制成功')
     loadApis()
     appStore.loadTeams()
@@ -1038,7 +1039,7 @@ async function handleDelete(row) {
       '删除确认',
       { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' }
     )
-    await deleteApi(row.id)
+    await deleteApi(row.id, row.revision)
     ElMessage.success('删除成功')
     loadApis()
     appStore.loadTeams()
@@ -1050,8 +1051,9 @@ async function handleDelete(row) {
 /** 启用/禁用切换 */
 async function handleToggle(row) {
   try {
-    const res = await toggleApi(row.id)
+    const res = await toggleApi(row.id, row.revision)
     row.enabled = res.enabled
+    row.revision += 1
     ElMessage.success(res.enabled ? '已启用' : '已禁用')
   } catch (e) {
     // 错误已由拦截器处理
@@ -1077,7 +1079,7 @@ async function handleBatchEnable() {
   if (!ids) return
   batchLoading.value = true
   try {
-    const res = await batchApis({ action: 'enable', ids })
+    const res = await batchApis({ action: 'enable', ids, expectedRevisions: selectedRevisions(ids, selectedRows.value) })
     ElMessage.success(`已启用 ${res.affected} 个接口`)
     handleClearSelection()
     loadApis()
@@ -1094,7 +1096,7 @@ async function handleBatchDisable() {
   if (!ids) return
   batchLoading.value = true
   try {
-    const res = await batchApis({ action: 'disable', ids })
+    const res = await batchApis({ action: 'disable', ids, expectedRevisions: selectedRevisions(ids, selectedRows.value) })
     ElMessage.success(`已禁用 ${res.affected} 个接口`)
     handleClearSelection()
     loadApis()
@@ -1111,7 +1113,7 @@ async function handleBatchDelete() {
   if (!ids) return
   try {
     await ElMessageBox.confirm(
-      `确认删除选中的 ${ids.length} 个接口？此操作不可撤销。`,
+      `确认将选中的 ${ids.length} 个接口移入回收站？保留 30 天，可在保留期内恢复。`,
       '批量删除确认',
       { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' }
     )
@@ -1120,7 +1122,7 @@ async function handleBatchDelete() {
   }
   batchLoading.value = true
   try {
-    const res = await batchApis({ action: 'delete', ids })
+    const res = await batchApis({ action: 'delete', ids, expectedRevisions: selectedRevisions(ids, selectedRows.value) })
     ElMessage.success(`已删除 ${res.affected} 个接口`)
     handleClearSelection()
     loadApis()
@@ -1154,7 +1156,7 @@ async function handleBatchMoveGroup(command) {
 
   batchLoading.value = true
   try {
-    const res = await batchApis({ action: 'move-group', ids, targetGroupId })
+    const res = await batchApis({ action: 'move-group', ids, targetGroupId, expectedRevisions: selectedRevisions(ids, selectedRows.value) })
     ElMessage.success(`已将 ${res.affected} 个接口移动到「${targetName}」`)
     handleClearSelection()
     loadApis()

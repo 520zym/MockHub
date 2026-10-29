@@ -1,4 +1,5 @@
 import request from './request'
+import { requireRevision } from '@/utils/revisions'
 
 export const getApis = (params) => request.get('/apis', { params })
 
@@ -6,13 +7,13 @@ export const getApiDetail = (id) => request.get(`/apis/${id}`)
 
 export const createApi = (data) => request.post('/apis', data, { skipGlobalNetworkError: true })
 
-export const updateApi = (id, data) => request.put(`/apis/${id}`, data, { skipGlobalNetworkError: true })
+export const updateApi = (id, data) => request.put(`/apis/${id}`, { ...data, expectedRevision: requireRevision(data.expectedRevision) }, { skipGlobalNetworkError: true })
 
-export const deleteApi = (id) => request.delete(`/apis/${id}`)
+export const deleteApi = (id, revision) => request.delete(`/apis/${id}`, { params: { expectedRevision: requireRevision(revision) } })
 
-export const copyApi = (id) => request.post(`/apis/${id}/copy`)
+export const copyApi = (id, revision) => request.post(`/apis/${id}/copy`, null, { params: { expectedRevision: requireRevision(revision) } })
 
-export const toggleApi = (id) => request.put(`/apis/${id}/toggle`)
+export const toggleApi = (id, revision) => request.put(`/apis/${id}/toggle`, null, { params: { expectedRevision: requireRevision(revision) } })
 
 export const importApis = (formData) => request.post('/apis/import', formData)
 
