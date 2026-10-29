@@ -1,89 +1,158 @@
-// ========== MockHub Soft UI 设计变量 ==========
-
-// ========== 主色 ==========
+// MockHub approved flat theme. Surfaces are opaque; separation comes from color, not elevation.
 :root {
-  --el-color-primary: #6366F1;
-  --el-color-primary-light-3: #818CF8;
-  --el-color-primary-light-5: #A5B4FC;
-  --el-color-primary-light-7: #C7D2FE;
-  --el-color-primary-light-9: #E0E7FF;
-  --el-color-primary-dark-2: #4F46E5;
+  color-scheme: light;
 
-  // ========== AI 识别色（仅用于 AI 入口与生成面板） ==========
-  --ai-gradient: linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%);
-  --ai-accent: #8B5CF6;
-  --ai-soft: #F5F3FF;
-  --ai-border: #E7E3FD;
+  --app-bg-page: #EEF1F4;
+  --app-bg-surface: #FFFFFF;
+  --app-bg-control: #F4F6F9;
+  --app-bg-hover: #E8ECF2;
+  --app-bg-selected: #EDF2FC;
+  --app-bg-disabled: #E9EDF2;
+  --app-text-primary: #17191D;
+  --app-text-regular: #3B4048;
+  --app-text-secondary: #6F757E;
+  --app-text-disabled: #626B76;
+  --app-text-inverse: #FFFFFF;
+  --app-primary: #17191D;
+  --app-primary-hover: #30343B;
+  --app-primary-active: #000000;
+  --app-accent: #3568D4;
+  --app-accent-hover: #2A53AD;
+  --app-divider: #E6E9EF;
+  --app-focus-color: #3568D4;
+  --app-radius-shell: 20px;
+  --app-radius-panel: 16px;
+  --app-radius-control: 10px;
+  --app-radius-small: 8px;
+  --app-space-page: clamp(16px, 2vw, 28px);
+  --app-space-panel: 20px;
+  --app-space-gap: 14px;
+  --app-sidebar-width: 228px;
+  --app-sidebar-collapsed-width: 64px;
+  --app-topbar-height: 60px;
+  --app-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --app-font-mono: 'SFMono-Regular', 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+  // Kept for existing consumers: cards have no decorative hairline rim.
+  --app-border-color-hairline: transparent;
 
-  // ========== 语义色 ==========
-  --el-color-success: #10B981;
-  --el-color-warning: #F59E0B;
-  --el-color-danger: #EF4444;
-  --el-color-info: #6B7280;
+  // Element Plus primary means the graphite action, not the blue auxiliary action.
+  --el-color-primary: #17191D;
+  --el-color-primary-light-3: #5D5E61;
+  --el-color-primary-light-5: #8B8C8E;
+  --el-color-primary-light-7: #B9BABB;
+  --el-color-primary-light-8: #D1D1D2;
+  --el-color-primary-light-9: #F0F1F3;
+  --el-color-primary-dark-2: #000000;
+  --el-color-success: #2E8B6A;
+  --el-color-success-light-3: #6DAD97;
+  --el-color-success-light-5: #97C5B5;
+  --el-color-success-light-7: #C0DCD2;
+  --el-color-success-light-8: #D5E8E1;
+  --el-color-success-light-9: #EDF7F2;
+  --el-color-success-dark-2: #256F55;
+  --el-color-warning: #A5782D;
+  --el-color-warning-light-3: #C0A16C;
+  --el-color-warning-light-5: #D2BC96;
+  --el-color-warning-light-7: #E4D6C0;
+  --el-color-warning-light-8: #EDE4D5;
+  --el-color-warning-light-9: #FBF5E9;
+  --el-color-warning-dark-2: #846024;
+  --el-color-danger: #B84A44;
+  --el-color-danger-light-3: #CD807C;
+  --el-color-danger-light-5: #DCA5A2;
+  --el-color-danger-light-7: #EAC9C7;
+  --el-color-danger-light-8: #F1DBDA;
+  --el-color-danger-light-9: #FBEEED;
+  --el-color-danger-dark-2: #933B36;
+  --el-color-error: var(--el-color-danger);
+  --el-color-error-light-3: var(--el-color-danger-light-3);
+  --el-color-error-light-5: var(--el-color-danger-light-5);
+  --el-color-error-light-7: var(--el-color-danger-light-7);
+  --el-color-error-light-8: var(--el-color-danger-light-8);
+  --el-color-error-light-9: var(--el-color-danger-light-9);
+  --el-color-error-dark-2: var(--el-color-danger-dark-2);
+  --el-color-info: #6F757E;
+  --el-color-info-light-3: #9A9EA5;
+  --el-color-info-light-5: #B7BABF;
+  --el-color-info-light-7: #D4D6D8;
+  --el-color-info-light-8: #E2E3E5;
+  --el-color-info-light-9: #F4F6F9;
+  --el-color-info-dark-2: #595E65;
 
-  // ========== 圆角 ==========
-  --el-border-radius-base: 10px;
-  --el-border-radius-small: 8px;
-  --el-border-radius-round: 20px;
+  --el-text-color-primary: var(--app-text-primary);
+  --el-text-color-regular: var(--app-text-regular);
+  --el-text-color-secondary: var(--app-text-secondary);
+  --el-text-color-placeholder: #6B7280;
+  --el-text-color-disabled: var(--app-text-disabled);
+  --el-bg-color: var(--app-bg-surface);
+  --el-bg-color-page: var(--app-bg-page);
+  --el-bg-color-overlay: var(--app-bg-surface);
+  --el-fill-color: #EEF1F5;
+  --el-fill-color-light: var(--app-bg-control);
+  --el-fill-color-lighter: #F8F9FB;
+  --el-fill-color-extra-light: #FAFBFC;
+  --el-fill-color-dark: #E1E6ED;
+  --el-fill-color-darker: #D4DBE5;
+  --el-fill-color-blank: var(--app-bg-surface);
+  // Functional separators and checkbox/radio outlines remain visible.
+  --el-border-color: #D4DBE5;
+  --el-border-color-light: var(--app-divider);
+  --el-border-color-lighter: #EDF0F4;
+  --el-border-color-extra-light: #F4F6F9;
+  --el-border-color-dark: #B7C0CC;
+  --el-border-color-darker: #929DAA;
+  --el-disabled-bg-color: var(--app-bg-disabled);
+  --el-disabled-text-color: var(--app-text-disabled);
+  --el-disabled-border-color: #DCE2EA;
+  --el-mask-color: rgb(23 25 29 / 40%);
+  --el-mask-color-extra-light: rgb(238 241 244 / 82%);
+  --el-overlay-color: rgb(23 25 29 / 40%);
+  --el-overlay-color-light: rgb(23 25 29 / 32%);
+  --el-overlay-color-lighter: rgb(23 25 29 / 24%);
 
-  // ========== 文字颜色 ==========
-  --el-text-color-primary: #1B2559;
-  --el-text-color-regular: #4A5568;
-  --el-text-color-secondary: #A3AED0;
-  --el-text-color-placeholder: #CBD5E0;
-
-  // ========== 边框 ==========
-  --el-border-color: transparent;
-  --el-border-color-light: #F1F5F9;
-  --el-border-color-lighter: #F8FAFC;
-
-  // 扁平化卡片专用：极淡 hairline 边框（rgba 形式以便在不同背景下都看得见但不抢戏）
-  --app-border-color-hairline: rgba(15, 23, 42, 0.06);
-
-  // ========== 背景 ==========
-  --el-bg-color: #FFFFFF;
-  --el-bg-color-page: transparent;
-  --el-fill-color-light: #F7F8FA;
-  --el-fill-color-lighter: #FAFBFC;
-
-  // ========== 阴影 ==========
-  // 扁平化设计：信息卡片不再使用阴影，下面两个 Element Plus 内部变量置空
-  // 浮层（Dialog/Drawer/Message/Dropdown）的阴影在各自组件覆盖中单独保留
+  --el-font-family: var(--app-font-sans);
+  --el-font-size-base: 14px;
+  --el-font-size-small: 13px;
+  --el-font-size-extra-small: 12px;
+  --el-component-size: 38px;
+  --el-component-size-large: 44px;
+  --el-component-size-small: 30px;
+  --el-border-radius-base: var(--app-radius-control);
+  --el-border-radius-small: var(--app-radius-small);
+  --el-border-radius-round: var(--app-radius-shell);
   --el-box-shadow: none;
   --el-box-shadow-light: none;
+  --el-box-shadow-lighter: none;
+  --el-box-shadow-dark: none;
+
+  // Legacy AI tokens resolve to a solid auxiliary blue, never a gradient.
+  --ai-gradient: #3568D4;
+  --ai-accent: #3568D4;
+  --ai-soft: #EDF2FC;
+  --ai-border: transparent;
 }
 
-// ========== 自定义设计变量 ==========
-$primary-color: #6366F1;
-$primary-light: #E0E7FF;
-$primary-dark: #4F46E5;
-
-$success-color: #10B981;
-$warning-color: #F59E0B;
-$danger-color: #EF4444;
-$info-color: #6B7280;
-
-$text-primary: #1B2559;
-$text-regular: #4A5568;
-$text-secondary: #A3AED0;
-$text-placeholder: #CBD5E0;
-
-// 扁平化：页面底色统一为中性浅灰（替代原柔和渐变），与卡片白底形成色差
-$bg-page: #F5F5F7;
-
-$radius-card: 12px;
+// Preserve the existing Sass API for components that import these tokens.
+$primary-color: #17191D;
+$primary-light: #EDF2FC;
+$primary-dark: #000000;
+$success-color: #2E8B6A;
+$warning-color: #A5782D;
+$danger-color: #B84A44;
+$info-color: #6F757E;
+$text-primary: #17191D;
+$text-regular: #3B4048;
+$text-secondary: #6F757E;
+$text-placeholder: #6B7280;
+$bg-page: #EEF1F4;
+$radius-card: 16px;
 $radius-button: 10px;
 $radius-input: 10px;
 $radius-capsule: 20px;
-
-// 扁平化设计：信息卡片不再使用阴影，仅浮层（Dialog/Drawer 等）保留
 $shadow-card: none;
 $shadow-card-hover: none;
-$shadow-dialog: 0 8px 40px rgba(0, 0, 0, 0.08);
-
-// 扁平化卡片的极淡 hairline 边框（与 :root 中 --app-border-color-hairline 一致）
-$border-hairline: rgba(15, 23, 42, 0.06);
-
-$sidebar-width: 220px;
+$shadow-dialog: none;
+$border-hairline: transparent;
+$sidebar-width: 228px;
 $sidebar-collapsed-width: 64px;
 $topbar-height: 60px;

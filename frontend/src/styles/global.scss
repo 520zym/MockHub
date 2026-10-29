@@ -1,71 +1,219 @@
-// ========== 全局样式 ==========
-
-* {
-  margin: 0;
-  padding: 0;
+// Shared document foundation. Do not constrain the application to a design-board size.
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
 html,
 body {
-  height: 100%;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
-    'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial,
-    sans-serif;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  min-height: 100%;
+  font-family: var(--app-font-sans);
   font-size: 14px;
   line-height: 1.6;
-  color: #1B2559;
+  color: var(--app-text-primary);
+  background: var(--app-bg-page);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
 }
 
 #app {
-  height: 100%;
-  // 扁平化：去除柔和渐变（Soft UI 标志），改纯色浅灰底；卡片白底靠色差自然浮起
-  background: #F5F5F7;
+  min-width: 0;
   min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--app-bg-page);
+  isolation: isolate;
 }
 
-// ========== 滚动条美化 ==========
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+:where(button, a, input, select, textarea, [tabindex], [role='button'], [role='tab']):focus-visible {
+  outline: 2px solid var(--app-focus-color);
+  outline-offset: 3px;
+}
+
+::selection {
+  color: var(--app-text-primary);
+  background: #DCE7FC;
+}
+
+// Keep scrollbar affordances usable for tables and code editors on both axes.
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #B8C0CC transparent;
+}
+
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 
-::-webkit-scrollbar-track {
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
   background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background-color: rgba(163, 174, 208, 0.3);
-  border-radius: 3px;
-  transition: background-color 0.2s;
+  background-color: #B8C0CC;
+  border-radius: 8px;
 
   &:hover {
-    background-color: rgba(163, 174, 208, 0.5);
+    background-color: #929DAA;
   }
 }
 
-// ========== 通用类 ==========
-.page-container {
-  padding: 24px;
+// Existing public classes stay compatible. New app-* primitives are opt-in for page/shell owners.
+.page-container,
+.app-page {
+  width: 100%;
+  min-width: 0;
+  padding: var(--app-space-page);
 }
 
-.page-title {
-  font-size: 24px;
-  font-weight: 700;
-  color: #1B2559;
-  margin-bottom: 24px;
+.page-title,
+.app-page-title {
+  margin: 0 0 20px;
+  font-size: clamp(22px, 2vw, 28px);
+  line-height: 1.3;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  color: var(--app-text-primary);
+  overflow-wrap: anywhere;
 }
 
-// 扁平化卡片：去阴影 + 去边框，纯靠 #F5F5F7 页面底色与 #FFF 卡片色差区分；圆角收紧
-.soft-card {
-  background: #FFFFFF;
-  border-radius: 12px;
-  padding: 20px;
+.soft-card,
+.app-surface {
+  min-width: 0;
+  padding: var(--app-space-panel);
+  background: var(--app-bg-surface);
+  border: 0;
+  border-radius: var(--app-radius-panel);
+  box-shadow: none;
 }
 
-// ========== 动画 ==========
+.app-surface--inset {
+  background: var(--app-bg-control);
+  border-radius: var(--app-radius-control);
+}
+
+.app-page-header,
+.app-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  min-width: 0;
+  margin-bottom: 20px;
+}
+
+.app-page-header .app-page-title {
+  margin-bottom: 0;
+}
+
+.app-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.app-actions > .el-button + .el-button {
+  margin-left: 0;
+}
+
+.app-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-gap);
+  min-width: 0;
+}
+
+.app-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  align-items: start;
+  gap: var(--app-space-gap);
+  min-width: 0;
+}
+
+.app-grid > *,
+.app-split > * {
+  min-width: 0;
+}
+
+.app-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 328px);
+  align-items: start;
+  gap: var(--app-space-gap);
+  min-width: 0;
+}
+
+// Only opt-in scroll regions constrain their content. The document remains naturally scrollable.
+.app-scroll {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.app-flex-fill {
+  flex: 1 1 0%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.app-mono {
+  font-family: var(--app-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.app-text-secondary {
+  color: var(--app-text-secondary);
+}
+
+.app-link {
+  color: var(--app-accent);
+  text-decoration: none;
+  text-underline-offset: 3px;
+
+  &:hover {
+    color: var(--app-accent-hover);
+    text-decoration: underline;
+  }
+}
+
+// Never reset nested editor typography, SVG strokes, filters or positioned widget internals.
+// Monaco and wangEditor own their rendering and scroll behavior.
+@media (max-width: 900px) {
+  .app-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  :root {
+    --app-space-panel: 16px;
+  }
+
+  .app-page-header,
+  .app-toolbar {
+    align-items: flex-start;
+    margin-bottom: 16px;
+  }
+}
+
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.2s ease;
@@ -76,20 +224,30 @@ body {
   opacity: 0;
 }
 
-.slide-fade-enter-active {
-  transition: all 0.3s ease-out;
-}
-
+.slide-fade-enter-active,
 .slide-fade-leave-active {
-  transition: all 0.2s ease-in;
+  transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
 .slide-fade-enter-from {
-  transform: translateX(20px);
+  transform: translateX(12px);
   opacity: 0;
 }
 
 .slide-fade-leave-to {
-  transform: translateX(-20px);
+  transform: translateX(-12px);
   opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fade-enter-active,
+  .fade-leave-active,
+  .slide-fade-enter-active,
+  .slide-fade-leave-active {
+    transition: none;
+  }
+
+  html:focus-within {
+    scroll-behavior: auto;
+  }
 }
