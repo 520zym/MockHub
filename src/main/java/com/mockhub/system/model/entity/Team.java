@@ -20,6 +20,23 @@ public class Team {
     /** 团队颜色标识（HEX 格式） */
     private String color;
 
+    private String description;
+    private String status = "ACTIVE";
+    private String createdBy;
+    private Integer effectiveAdminCount;
+    private Boolean adminRepairRequired;
+    public String getDescription() { return description; }
+    public void setDescription(String description) { this.description=description; }
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status=status; }
+    public boolean isArchived() { return "ARCHIVED".equals(status); }
+    public String getCreatedBy() { return createdBy; }
+    public void setCreatedBy(String createdBy) { this.createdBy=createdBy; }
+    public Integer getEffectiveAdminCount() { return effectiveAdminCount; }
+    public void setEffectiveAdminCount(Integer count) { this.effectiveAdminCount=count; }
+    public Boolean getAdminRepairRequired() { return adminRepairRequired; }
+    public void setAdminRepairRequired(Boolean required) { this.adminRepairRequired=required; }
+
     /** 创建时间（ISO 格式） */
     private String createdAt;
 

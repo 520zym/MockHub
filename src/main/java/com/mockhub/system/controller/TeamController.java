@@ -24,7 +24,7 @@ import java.util.List;
 /**
  * 团队管理控制器
  * <p>
- * 提供团队 CRUD 和成员管理功能，仅超级管理员可访问。
+ * 团队成员可读，本队管理员管理本队；平台超管负责建队和归档。
  * 权限校验在 Service 层实现。
  */
 @RestController
@@ -33,6 +33,23 @@ public class TeamController {
 
     @Autowired
     private TeamServiceImpl teamService;
+
+    @org.springframework.web.bind.annotation.PatchMapping("/{id}/status")
+    public Result<Team> updateStatus(@PathVariable String id, @RequestBody com.mockhub.system.model.dto.UpdateTeamStatusRequest request) {
+        return Result.ok(teamService.updateStatus(id, request));
+    }
+
+    @GetMapping("/{id}/member-candidates")
+    public Result<List<com.mockhub.system.model.dto.MemberCandidateVO>> memberCandidates(@PathVariable String id,
+            @org.springframework.web.bind.annotation.RequestParam String username) {
+        return Result.ok(teamService.memberCandidates(id, username));
+    }
+
+    @PostMapping("/{id}/leave")
+    public Result<Void> leave(@PathVariable String id) {
+        teamService.leave(id);
+        return Result.ok();
+    }
 
     /**
      * GET /api/teams — 团队列表

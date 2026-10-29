@@ -14,7 +14,7 @@ public class TeamMemberVO {
     /** 显示名称 */
     private String displayName;
 
-    /** 团队内角色：TEAM_ADMIN / MEMBER */
+    /** 团队内角色：TEAM_ADMIN / EDITOR / VIEWER（兼容输入 MEMBER 为 EDITOR） */
     private String role;
 
     public TeamMemberVO() {
