@@ -1,4 +1,5 @@
 // Explicit in-memory transport for the real workspace component fixture; never used by production.
+import { trashInvoke } from './trash-stub.js'
 function seed(state) {
   if(state.rows)return
   state.rows=[['api-a','GET','/api/user/{id}','用户详情与状态','other',3102],['api-login','POST','/api/user/login','账号登录','user-1',1844],['api-profile','GET','/api/user/profile','个人资料','user-1',842],['api-update','PATCH','/api/user/profile','修改个人资料','other',206],['api-token','POST','/api/user/token','刷新令牌 · Mock 示例','user-1',418],['api-legacy','GET','/legacy/user/level','旧版会员等级','other',0],['api-b','GET','/api/pay/{id}','支付对账','other',812]].map(([id,method,path,name,createdBy,hitCount],index)=>({id,teamId:id==='api-b'?'team-b':'team-a',teamName:id==='api-b'?'支付中心':'用户中心',teamIdentifier:id==='api-b'?'PAY':'USER',type:index===0?'SOAP':'REST',method,path,name,createdBy,createdByName:createdBy==='user-1'?'王琳':'李哲',updatedBy:'user-1',updatedByName:'王琳',revision:3,hitCount,lastCalledAt:hitCount?'2026-10-29T03:12:00Z':null,createdAt:'2026-10-20T02:00:00Z',updatedAt:'2026-10-29T03:12:00Z',enabled:id!=='api-legacy',groupId:'group-'+(id==='api-b'?'b':'a'),groupName:id==='api-b'?'支付模块':'用户模块',tags:[{id:'tag-'+(id==='api-b'?'b':'a'),name:id==='api-b'?'支付':'用户',color:'#3568d4'}]}))
@@ -9,6 +10,7 @@ function seed(state) {
 const answer=data=>({handled:true,data})
 export async function workspaceInvoke(state,method,url,body,config) {
   seed(state)
+  const trash=await trashInvoke(state,method,url,body,config);if(trash.handled)return trash
   if(url==='/apis'&&method==='GET') {
     const params=config?.params||{};if(!params.teamId)throw new Error('Fixture forbids unscoped list requests')
     let list=state.rows.filter(row=>row.teamId===params.teamId)

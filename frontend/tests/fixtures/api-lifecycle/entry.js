@@ -6,6 +6,7 @@ import { useUserStore } from '../../../src/stores/user'
 import { useAppStore } from '../../../src/stores/app'
 import ApiHistoryDrawer from '../../../src/components/ApiHistoryDrawer.vue'
 import ApiList from '../../../src/views/ApiList.vue'
+import ApiTrash from '../../../src/views/ApiTrash.vue'
 import AppLayout from '../../../src/components/layout/AppLayout.vue'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import * as icons from '@element-plus/icons-vue'
@@ -40,6 +41,13 @@ window.fixture = {
   releaseLists() { fixtureState.holdListTeam = ''; fixtureState.listDeferred.splice(0).forEach(resolve => resolve()) },
   bumpTarget() { const row = fixtureState.rows.find(row => row.id === 'api-a'); row.revision++; fixtureState.revisions['api-a'] = row.revision },
   importConflict(value) { fixtureState.importConflict = value },
+  holdTrash(teamId) { fixtureState.holdTrashTeam = teamId },
+  releaseTrash() { fixtureState.holdTrashTeam = ''; fixtureState.trashDeferred.splice(0).forEach(resolve => resolve()) },
+  bumpTrash(id) { const row=fixtureState.trash.find(row=>row.id===id);row.revision++;fixtureState.revisions[id]=row.revision },
+  archiveTeam(value) { const id=appStore.currentTeamId;fixtureState.archivedTeams[id]=value;const update=team=>team.teamId===id?{...team,status:value?'ARCHIVED':'ACTIVE',teamStatus:value?'ARCHIVED':'ACTIVE',capabilities:{...team.capabilities,write:!value,purge:!value&&fixtureState.role==='TEAM_ADMIN',batchDelete:!value&&fixtureState.role==='TEAM_ADMIN',overwriteImport:!value&&fixtureState.role==='TEAM_ADMIN'}}:team;user.updateUser({...user.user,teams:user.user.teams.map(update)});appStore.teams=appStore.teams.map(update);window.fixtureTeams=appStore.teams },
+  setSchemaVersion(value) { fixtureState.snapshotSchemaVersion = value },
+  longWorkspace() { const row=fixtureState.rows.find(row=>row.teamId===appStore.currentTeamId);row.name='LONG_API_'+'x'.repeat(180)+'<img data-snapshot-injection>';row.path='/'+'longsegment'.repeat(45);row.updatedByName='Actor'+ 'x'.repeat(80);appStore.bumpApiRevision() },
+  longTrash() { const row=fixtureState.trash.find(row=>row.teamId===appStore.currentTeamId);row.name='LONG_TRASH_'+'x'.repeat(180)+'<img data-snapshot-injection>';row.path='/'+'longsegment'.repeat(45);row.deletedByName='Actor'+'x'.repeat(80);appStore.bumpApiRevision() },
   calls: fixtureState.calls,
   state: fixtureState
 }
@@ -52,9 +60,9 @@ const view = new URLSearchParams(location.search).get('view') || 'history'
 let instance
 if (view === 'history') instance = createApp(Root).use(pinia)
 else {
-  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: AppLayout, children: [{ path: 'apis', component: ApiList, meta: { title: '接口管理', teamRequired: true } }, { path: 'apis/:id/edit', component: { template: '<div>API EDIT 由父任务负责</div>' }, meta: { title: '接口详情', teamRequired: true } }, { path: 'apis/trash', component: { template: '<div>回收站将在独立功能提交中挂载真实组件。</div>' }, meta: { title: '回收站', teamRequired: true } }] }, { path: '/account', component: { template: '<div>个人账号不属于本组件测试范围。</div>' } }] })
+  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: AppLayout, children: [{ path: 'apis', component: ApiList, meta: { title: '接口管理', teamRequired: true } }, { path: 'apis/:id/edit', component: { template: '<div>API EDIT 由父任务负责</div>' }, meta: { title: '接口详情', teamRequired: true } }, { path: 'apis/trash', component: ApiTrash, meta: { title: '回收站', teamRequired: true } }] }, { path: '/account', component: { template: '<div>个人账号不属于本组件测试范围。</div>' } }] })
   instance = createApp({ template: '<router-view />' }).use(pinia).use(router)
-  await router.push('/apis'); await router.isReady()
+  await router.push(view === 'trash' ? '/apis/trash' : '/apis'); await router.isReady()
 }
 for (const [name, component] of Object.entries(icons)) instance.component(name, component)
 instance.use(ElementPlus, { locale: zhCn }).mount('#app')

@@ -7,10 +7,10 @@ const snapshots = {
 }
 export const fixtureState = { calls: [], conflict: false, deferred: [], holdHistory: false, revisions: { 'api-a': 3, 'api-b': 3 }, role: 'EDITOR', teamId: 'team-a', snapshots, apiStub: true }
 window.fixtureState = fixtureState
-function metadata(apiId, revision) { return { id: 'rev-' + revision, apiId, teamId: apiId === 'api-b' ? 'team-b' : 'team-a', revision, action: revision === 1 ? 'CREATE' : revision > 3 ? 'ROLLBACK' : 'UPDATE', actorNameSnapshot: ['系统', '陈晨', '李哲', '王琳'][Math.min(revision, 3)], source: revision === 2 ? 'AI' : 'WEB', createdAt: '2026-10-29T0' + Math.min(revision, 8) + ':12:00Z', snapshotSchemaVersion: 1 } }
+function metadata(apiId, revision) { return { id: 'rev-' + revision, apiId, teamId: fixtureState.rows?.find(row=>row.id===apiId)?.teamId || fixtureState.trash?.find(row=>row.id===apiId)?.teamId || (apiId === 'api-b' ? 'team-b' : 'team-a'), revision, action: revision === 1 ? 'CREATE' : revision > 3 ? 'ROLLBACK' : 'UPDATE', actorNameSnapshot: ['系统', '陈晨', '李哲', '王琳'][Math.min(revision, 3)], source: revision === 2 ? 'AI' : 'WEB', createdAt: '2026-10-29T0' + Math.min(revision, 8) + ':12:00Z', snapshotSchemaVersion: fixtureState.snapshotSchemaVersion || 1 } }
 async function invoke(method, url, body, config) {
   fixtureState.calls.push({ method, url, body, params: config?.params })
-  const history = url.match(/^\/apis\/(api-[ab])\/revisions(?:\/(rev-\d+))?(\/rollback)?$/)
+  const history = url.match(/^\/apis\/([^/]+)\/revisions(?:\/(rev-\d+))?(\/rollback)?$/)
   if (history) {
     if (fixtureState.holdHistory && method === 'GET') await new Promise(resolve => fixtureState.deferred.push(resolve))
     const [, apiId, id, rollback] = history, latest = fixtureState.revisions[apiId]

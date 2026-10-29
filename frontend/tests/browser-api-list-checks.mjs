@@ -61,6 +61,9 @@ export async function runListChecks({ cdp, evaluate, waitFor, click, check, scre
   await click('关闭并返回列表');await waitFor('document.body.innerText.includes("导入用户配置")&&!document.querySelector(".api-import-dialog")?.getBoundingClientRect().width')
   await evaluate('window.fixture.setTeam("team-b")');await waitFor('document.body.innerText.includes("支付对账")');await evaluate('window.fixture.holdList("team-a");window.fixture.setTeam("team-a");window.fixture.setTeam("team-b")');await waitFor('document.body.innerText.includes("支付对账")');await evaluate('window.fixture.releaseLists()')
   check('late old-team list cannot repaint current rows',await evaluate('!document.querySelector(".api-results").textContent.includes("导入用户配置")'))
+  await evaluate('window.fixture.setTeam("team-a");window.fixture.longWorkspace()');await waitFor('document.querySelector(".api-results").textContent.includes("LONG_API_")');await cdp('Emulation.setDeviceMetricsOverride',{width:375,height:960,deviceScaleFactor:1,mobile:false});await screenshot('list-long-content-375')
+  check('long names paths and actor labels fit mobile cards',await evaluate('document.documentElement.scrollWidth<=innerWidth+1&&[...document.querySelectorAll(".api-card")].every(e=>e.scrollWidth<=e.clientWidth+1)'))
+  check('untrusted names render as text, not markup',await evaluate('!document.querySelector("[data-snapshot-injection]")'))
   check('every list or preview read supplies a concrete current team',await evaluate('window.fixture.calls.filter(c=>c.url==="/apis"&&c.method==="GET").every(c=>!!c.params?.teamId)'))
   const reads=await evaluate('window.fixture.calls.filter(c=>c.url==="/apis").length');await evaluate('window.fixture.revokeRead()');await waitFor('document.body.innerText.includes("等待加入团队")');check('empty team makes no global API-list request',await evaluate('window.fixture.calls.filter(c=>c.url==="/apis").length')===reads)
 }

@@ -5,6 +5,7 @@ import { spawn } from 'node:child_process'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { build } from 'vite'
 import { runListChecks } from './browser-api-list-checks.mjs'
+import { runTrashChecks } from './browser-api-trash-checks.mjs'
 
 // Real components/Element Plus; request transport is intentionally stubbed. No backend or HTTP server starts here.
 const frontend = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -65,7 +66,10 @@ try {
   await evaluate('window.fixture.close();window.fixture.conflict(false)'); await waitFor('!document.querySelector(".comparison-heading")'); await evaluate('window.fixture.open()'); await waitFor('document.querySelectorAll(".comparison-group").length >= 4')
   await click('回滚到', true); await click('确认回滚'); await waitFor('document.querySelector("#fixture-changed").textContent.trim()==="1"')
   check('successful rollback emits new revision and closes the drawer', await evaluate('window.fixture.state.revisions["api-a"]===4'))
-  } else { await runListChecks({ cdp, evaluate, waitFor, click, check, screenshot }) }
+  await evaluate('window.fixture.setSchemaVersion(2);window.fixture.open()');await waitFor('document.body.innerText.includes("结构版本尚不支持比较")')
+  check('unsupported snapshot schema never claims there are no differences',await evaluate('!document.body.innerText.includes("两个版本没有配置差异")&&document.querySelectorAll(".comparison-group").length===0'))
+  check('unsupported schema cannot be rolled back by the UI',await evaluate('[...document.querySelectorAll(".api-history-drawer button")].find(e=>e.textContent.trim().startsWith("回滚到"))?.disabled===true'))
+  } else if(view === 'trash') { await runTrashChecks({ cdp, evaluate, waitFor, click, check, screenshot }) } else { await runListChecks({ cdp, evaluate, waitFor, click, check, screenshot }) }
   check('no browser JavaScript exceptions', exceptions.length === 0); check('no failed fixture resources', resourceErrors.length === 0)
   await fs.writeFile(path.join(output, 'report.json'), JSON.stringify({ apiStub: true, backendIntegration: false, passed: true, checks, screenshots, exceptions, resourceErrors }, null, 2))
   console.log(JSON.stringify({ passed: true, apiStub: true, checks: checks.length, screenshots, output }, null, 2))
