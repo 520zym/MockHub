@@ -194,11 +194,19 @@ public class UserServiceImpl implements UserService {
             if (item == null || item.getTeamId() == null || item.getTeamId().trim().isEmpty()) throw new BizException(40000, "团队ID不能为空");
             if (desired.containsKey(item.getTeamId())) throw new BizException(40000, "团队ID不能重复");
             String role = RoleInputs.teamRole(item.getRole());
-            if ("TEAM_ADMIN".equals(role) && !user.isActive()) throw new BizException(40000, "不能将停用账号指派为团队管理员");
             desired.put(item.getTeamId(), role);
         }
         java.util.Map<String,String> previous = new java.util.LinkedHashMap<String,String>();
         for (UserTeam old : userRepository.findTeamRolesByUserId(userId)) previous.put(old.getTeamId(), old.getRole());
+        if (!user.isActive()) {
+            // A status change retains memberships for later reactivation. Keeping that same admin
+            // relationship is not a new grant, including when its team has since been archived.
+            for (java.util.Map.Entry<String,String> item : desired.entrySet()) {
+                if ("TEAM_ADMIN".equals(item.getValue()) && !"TEAM_ADMIN".equals(previous.get(item.getKey()))) {
+                    throw new BizException(40000, "不能为停用账号新增或提升团队管理员角色");
+                }
+            }
+        }
         java.util.Set<String> changed = new java.util.LinkedHashSet<String>();
         changed.addAll(previous.keySet()); changed.addAll(desired.keySet());
         for (String teamId : desired.keySet()) {

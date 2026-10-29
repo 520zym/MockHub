@@ -118,6 +118,53 @@ class UserAdministrationSafetyTest {
         assertEquals("TEAM_ADMIN",role("a","t1"));assertEquals("EDITOR",role("a","t2"));
         assertThrows(BizException.class,()->users.assignTeams("disabled",assign("t2","TEAM_ADMIN")));
     }
+    @Test void disabledAccountCanKeepUnchangedArchivedAdminWhileOtherTeamAssignmentsChange() {
+        member("disabled", "t1", "TEAM_ADMIN");
+        jdbc.update("UPDATE team SET status='ARCHIVED' WHERE id='t1'");
+        // Unchanged archived membership must be retained without deleting/reinserting or updating it.
+        jdbc.execute("CREATE TRIGGER deny_archived_admin_delete BEFORE DELETE ON user_team "
+                + "WHEN OLD.user_id='disabled' AND OLD.team_id='t1' "
+                + "BEGIN SELECT RAISE(ABORT,'archived membership changed'); END");
+        jdbc.execute("CREATE TRIGGER deny_archived_admin_update BEFORE UPDATE ON user_team "
+                + "WHEN OLD.user_id='disabled' AND OLD.team_id='t1' "
+                + "BEGIN SELECT RAISE(ABORT,'archived membership changed'); END");
+
+        users.assignTeams("disabled", assign("t1", "TEAM_ADMIN", "t2", "EDITOR"));
+        assertEquals("TEAM_ADMIN", role("disabled", "t1"));
+        assertEquals("EDITOR", role("disabled", "t2"));
+        users.assignTeams("disabled", assign("t1", "TEAM_ADMIN", "t2", "VIEWER"));
+        assertEquals("VIEWER", role("disabled", "t2"));
+        assertEquals("DISABLED", user("disabled").getStatus());
+        assertEquals(0, user("disabled").getAuthVersion());
+        assertEquals(1, context.getBean(AdminSafetyService.class).effectiveTeamAdminCount("t1"));
+    }
+
+    @Test void disabledAccountCannotAddAdminOrPromoteExistingMembershipAndBatchIsUnchanged() {
+        member("disabled", "t1", "TEAM_ADMIN");
+        member("disabled", "t2", "VIEWER");
+        assertThrows(BizException.class, () -> users.assignTeams("disabled",
+                assign("t1", "TEAM_ADMIN", "t2", "TEAM_ADMIN", "orphan", "EDITOR")));
+        assertEquals("TEAM_ADMIN", role("disabled", "t1"));
+        assertEquals("VIEWER", role("disabled", "t2"));
+        assertNull(role("disabled", "orphan"));
+        assertThrows(BizException.class, () -> users.assignTeams("disabled",
+                assign("t1", "TEAM_ADMIN", "t2", "EDITOR", "orphan", "TEAM_ADMIN")));
+        assertEquals("VIEWER", role("disabled", "t2"));
+        assertNull(role("disabled", "orphan"));
+    }
+
+    @Test void retainedDisabledAdminDoesNotReplaceLastEffectiveAdminAndArchivedChangesStillFail() {
+        member("disabled", "t1", "TEAM_ADMIN");
+        users.assignTeams("disabled", assign("t1", "TEAM_ADMIN", "t2", "EDITOR"));
+        assertThrows(BizException.class, () -> users.assignTeams("a", assign("t1", "EDITOR")));
+        assertEquals("TEAM_ADMIN", role("a", "t1"));
+        jdbc.update("UPDATE team SET status='ARCHIVED' WHERE id='t1'");
+        assertThrows(BizException.class, () -> users.assignTeams("disabled", assign("t2", "EDITOR")));
+        assertThrows(BizException.class, () -> users.assignTeams("disabled", assign("t1", "VIEWER", "t2", "EDITOR")));
+        assertEquals("TEAM_ADMIN", role("disabled", "t1"));
+        assertEquals("EDITOR", role("disabled", "t2"));
+    }
+
     @Test void successfulBatchMultiTeamMembershipPreservesCreatorAndGlobalRole() {
         member("b","t1","TEAM_ADMIN");users.assignTeams("a",assign("t1","VIEWER","t2","EDITOR"));
         assertEquals("VIEWER",role("a","t1"));assertEquals("EDITOR",role("a","t2"));assertEquals("USER",user("a").getGlobalRole());
