@@ -521,7 +521,7 @@
  * 数据流：筛选条件来自 appStore（团队/分组）和 apiStore（关键词/方法/状态/标签/分页）
  */
 import { ref, computed, watch, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAppStore } from '@/stores/app'
 import { useApiStore } from '@/stores/api'
@@ -548,6 +548,7 @@ function formatRelativeTime(input) {
 }
 
 const router = useRouter()
+const route = useRoute()
 const appStore = useAppStore()
 const apiStore = useApiStore()
 const userStore = useUserStore()
@@ -585,7 +586,7 @@ function handleClearSelection() {
 }
 
 // --- 工具栏筛选状态（双向绑定到输入控件，变化后同步到 store） ---
-const keyword = ref(apiStore.listParams.keyword)
+const keyword = ref(typeof route.query.keyword === 'string' ? route.query.keyword : apiStore.listParams.keyword)
 const methodFilter = ref(apiStore.listParams.method)
 const enabledFilter = ref(apiStore.listParams.enabled)
 const typeFilter = ref(apiStore.listParams.type)
@@ -968,6 +969,8 @@ watch(
     loadGroups()
   }
 )
+
+watch(() => route.query.keyword, value => { keyword.value = typeof value === 'string' ? value : '' })
 
 // 搜索框防抖：输入时延迟触发
 let keywordTimer = null

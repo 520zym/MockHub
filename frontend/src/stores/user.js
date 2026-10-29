@@ -1,51 +1,46 @@
 import { defineStore } from 'pinia'
+import { getCurrentUser, endSession } from '@/api/auth'
+import { safeStoredUser, teamCapability } from '@/utils/permissions'
 
+let identityRequest = null
 export const useUserStore = defineStore('user', {
-  state: () => ({
-    token: localStorage.getItem('token') || '',
-    user: JSON.parse(localStorage.getItem('user') || 'null')
-  }),
-
+  state: () => ({ token: localStorage.getItem('token') || '', user: safeStoredUser(localStorage.getItem('user')), identityReady: false }),
   getters: {
-    isLoggedIn: (state) => !!state.token,
-    isSuperAdmin: (state) => state.user?.globalRole === 'SUPER_ADMIN',
-    isTeamAdmin: (state) => {
-      return (teamId) => {
-        if (state.user?.globalRole === 'SUPER_ADMIN') return true
-        return state.user?.teams?.some(t => t.teamId === teamId && t.role === 'TEAM_ADMIN')
-      }
-    },
-    // 用户在任意一个团队中是否为管理员（用于"统计"等不绑定具体团队的入口可见性）
-    isAnyTeamAdmin: (state) => {
-      if (state.user?.globalRole === 'SUPER_ADMIN') return true
-      return state.user?.teams?.some(t => t.role === 'TEAM_ADMIN') || false
-    },
-    // 用户为管理员身份的团队列表（用于统计页面的团队下拉选择）
-    teamAdminTeams: (state) => {
-      if (!state.user?.teams) return []
-      return state.user.teams.filter(t => t.role === 'TEAM_ADMIN')
-    },
-    userTeamIds: (state) => state.user?.teams?.map(t => t.teamId) || []
+    isLoggedIn: state => !!state.token,
+    isSuperAdmin: state => state.identityReady && state.user?.globalRole === 'SUPER_ADMIN',
+    hasCapability: state => (teamId, action = 'read') => state.identityReady && teamCapability(state.user, teamId, action),
+    canWriteTeam: state => teamId => state.identityReady && teamCapability(state.user, teamId, 'write'),
+    isTeamAdmin: state => teamId => state.identityReady && teamCapability(state.user, teamId, 'manageMembers'),
+    isAnyTeamAdmin: state => state.identityReady && state.user?.teams?.some(t => teamCapability(state.user, t.teamId, 'manageMembers')) || false,
+    teamAdminTeams: state => (state.user?.teams || []).filter(t => teamCapability(state.user, t.teamId, 'manageMembers')),
+    readableTeams: state => (state.user?.teams || []).filter(t => teamCapability(state.user, t.teamId, 'read')),
+    userTeamIds: state => (state.user?.teams || []).filter(t => teamCapability(state.user, t.teamId, 'read')).map(t => t.teamId)
   },
-
   actions: {
     setLogin(token, user) {
-      this.token = token
-      this.user = user
-      localStorage.setItem('token', token)
-      localStorage.setItem('user', JSON.stringify(user))
+      this.token = token; this.user = user; this.identityReady = true
+      localStorage.setItem('token', token); localStorage.setItem('user', JSON.stringify(user))
     },
-
-    logout() {
-      this.token = ''
-      this.user = null
-      localStorage.removeItem('token')
-      localStorage.removeItem('user')
+    clearSession() {
+      this.token = ''; this.user = null; this.identityReady = false; identityRequest = null
+      localStorage.removeItem('token'); localStorage.removeItem('user')
+      window.dispatchEvent(new CustomEvent('mockhub:session-cleared'))
     },
-
-    updateUser(user) {
-      this.user = user
-      localStorage.setItem('user', JSON.stringify(user))
-    }
+    async logout() {
+      try { if (this.token) await endSession() } finally { this.clearSession() }
+    },
+    updateUser(user) { this.user = user; this.identityReady = true; localStorage.setItem('user', JSON.stringify(user)) },
+    async refreshIdentity() {
+      if (!this.token) throw new Error('未登录')
+      if (identityRequest) return identityRequest
+      const token = this.token
+      const pending = getCurrentUser().then(user => {
+        if (this.token === token) this.updateUser(user)
+        return user
+      }).finally(() => { if (identityRequest === pending) identityRequest = null })
+      identityRequest = pending
+      return pending
+    },
+    async ensureIdentity() { if (!this.identityReady) await this.refreshIdentity(); return this.user }
   }
 })

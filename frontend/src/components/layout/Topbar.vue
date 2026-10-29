@@ -1,207 +1,34 @@
 <template>
-  <div class="topbar">
+  <header class="topbar">
     <div class="topbar__left">
-      <!-- 侧边栏折叠/展开按钮（业界主流位置：顶部左上角，最显眼） -->
-      <div
-        class="topbar__sidebar-toggle"
-        :title="appStore.sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'"
-        @click="appStore.toggleSidebar"
-      >
-        <el-icon>
-          <Fold v-if="!appStore.sidebarCollapsed" />
-          <Expand v-else />
-        </el-icon>
-      </div>
-      <h1 class="topbar__title">{{ pageTitle }}</h1>
+      <button class="topbar__toggle" type="button" @click="appStore.toggleSidebar" :aria-label="appStore.sidebarCollapsed ? '展开侧栏' : '收起侧栏'"><el-icon><Expand v-if="appStore.sidebarCollapsed" /><Fold v-else /></el-icon></button>
+      <div class="topbar__breadcrumb"><span>{{ context }}</span><span aria-hidden="true">/</span><b>{{ route.meta.title || 'MockHub' }}</b></div>
     </div>
     <div class="topbar__right">
-      <el-dropdown trigger="click" @command="handleCommand">
-        <div class="topbar__user">
-          <el-avatar :size="32" class="topbar__avatar">
-            {{ userInitial }}
-          </el-avatar>
-          <span class="topbar__username">{{ userStore.user?.displayName || userStore.user?.username }}</span>
-        </div>
-        <template #dropdown>
-          <el-dropdown-menu>
-            <el-dropdown-item command="changePassword">
-              <el-icon><Lock /></el-icon>
-              修改密码
-            </el-dropdown-item>
-            <el-dropdown-item command="logout" divided>
-              <el-icon><SwitchButton /></el-icon>
-              退出
-            </el-dropdown-item>
-          </el-dropdown-menu>
-        </template>
-      </el-dropdown>
+      <span class="topbar__scope">{{ route.meta.requiresSuperAdmin ? '系统管理' : route.path.startsWith('/account') ? '个人范围' : '团队工作区' }}</span>
+      <form class="topbar__search" @submit.prevent="search"><el-icon><Search /></el-icon><input v-model="query" type="search" placeholder="搜索当前团队接口" aria-label="搜索当前团队接口" /></form>
+      <button class="topbar__toggle" type="button" aria-label="刷新当前身份" title="刷新当前身份" @click="refresh"><el-icon><Refresh /></el-icon></button>
     </div>
-
-    <!-- 修改密码对话框 -->
-    <el-dialog v-model="pwdDialogVisible" title="修改密码" width="400px" :close-on-click-modal="false">
-      <el-form :model="pwdForm" label-width="80px">
-        <el-form-item label="原密码">
-          <el-input v-model="pwdForm.oldPassword" type="password" show-password placeholder="请输入原密码" />
-        </el-form-item>
-        <el-form-item label="新密码">
-          <el-input v-model="pwdForm.newPassword" type="password" show-password placeholder="不少于6位" />
-        </el-form-item>
-        <el-form-item label="确认密码">
-          <el-input v-model="pwdForm.confirmPassword" type="password" show-password placeholder="再次输入新密码" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="pwdDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="pwdLoading" @click="handleChangePassword">确认修改</el-button>
-      </template>
-    </el-dialog>
-  </div>
+  </header>
 </template>
-
 <script setup>
-import { ref, computed, reactive } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { useUserStore } from '@/stores/user'
 import { useAppStore } from '@/stores/app'
-import { changePassword } from '@/api/auth'
-
-const route = useRoute()
-const router = useRouter()
-const userStore = useUserStore()
-const appStore = useAppStore()
-
-const pageTitle = computed(() => {
-  return route.meta.title || 'MockHub'
-})
-
-const userInitial = computed(() => {
-  const name = userStore.user?.displayName || userStore.user?.username || ''
-  return name.charAt(0).toUpperCase()
-})
-
-/** 下拉菜单命令分发 */
-function handleCommand(command) {
-  if (command === 'changePassword') {
-    pwdDialogVisible.value = true
-    pwdForm.oldPassword = ''
-    pwdForm.newPassword = ''
-    pwdForm.confirmPassword = ''
-  } else if (command === 'logout') {
-    userStore.logout()
-    router.push('/login')
-  }
-}
-
-// --- 修改密码 ---
-const pwdDialogVisible = ref(false)
-const pwdLoading = ref(false)
-const pwdForm = reactive({
-  oldPassword: '',
-  newPassword: '',
-  confirmPassword: ''
-})
-
-/** 提交修改密码 */
-async function handleChangePassword() {
-  if (!pwdForm.oldPassword) {
-    ElMessage.warning('请输入原密码')
-    return
-  }
-  if (!pwdForm.newPassword || pwdForm.newPassword.length < 6) {
-    ElMessage.warning('新密码长度不能少于6位')
-    return
-  }
-  if (pwdForm.newPassword !== pwdForm.confirmPassword) {
-    ElMessage.warning('两次输入的密码不一致')
-    return
-  }
-  pwdLoading.value = true
-  try {
-    await changePassword({ oldPassword: pwdForm.oldPassword, newPassword: pwdForm.newPassword })
-    ElMessage.success('密码修改成功')
-    pwdDialogVisible.value = false
-  } catch (e) {
-    // API 层已有错误提示
-  } finally {
-    pwdLoading.value = false
-  }
-}
+import { useUserStore } from '@/stores/user'
+const appStore = useAppStore(), userStore = useUserStore(), route = useRoute(), router = useRouter(), query = ref('')
+const context = computed(() => route.meta.requiresSuperAdmin ? '系统管理' : route.path.startsWith('/account') ? '个人空间' : appStore.currentTeam?.name || 'MockHub')
+function search() { if (appStore.currentTeamId) router.push({ path: '/apis', query: query.value.trim() ? { keyword: query.value.trim() } : {} }) }
+function refresh() { window.dispatchEvent(new CustomEvent('mockhub:permissions-changed')) }
 </script>
-
 <style lang="scss" scoped>
-.topbar {
-  height: 60px;
-  background: #FFFFFF;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 24px;
-  // 扁平化：去阴影，改用极淡底边框区分顶栏与内容区
-  border-bottom: 1px solid var(--app-border-color-hairline);
-  z-index: 50;
-
-  &__left {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  // 侧边栏折叠/展开按钮：顶栏左侧最显眼位置
-  &__sidebar-toggle {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 36px;
-    height: 36px;
-    border-radius: 8px;
-    cursor: pointer;
-    color: #4A5568;
-    font-size: 18px;
-    transition: all 0.2s ease;
-
-    &:hover {
-      background: #F1F5F9;
-      color: #6366F1;
-    }
-  }
-
-  &__title {
-    font-size: 20px;
-    font-weight: 700;
-    color: #1B2559;
-  }
-
-  &__right {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-  }
-
-  &__user {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    cursor: pointer;
-    padding: 4px 8px;
-    border-radius: 8px;
-    transition: background 0.2s;
-
-    &:hover {
-      background: #F7F8FA;
-    }
-  }
-
-  &__avatar {
-    background: linear-gradient(135deg, #6366F1, #4F46E5);
-    color: #FFFFFF;
-    font-weight: 600;
-  }
-
-  &__username {
-    font-size: 14px;
-    font-weight: 500;
-    color: #1B2559;
-  }
-}
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 56px; min-height: 56px; padding: 0 16px; background: var(--app-bg-surface); border-radius: 16px; min-width: 0; }
+.topbar__left,.topbar__right { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.topbar__toggle { width: 30px; height: 30px; border: 0; background: var(--app-bg-control); border-radius: 9px; color: var(--app-text-secondary); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.topbar__breadcrumb { display: flex; align-items: center; gap: 9px; min-width: 0; font-size: 12px; } .topbar__breadcrumb span { color: var(--app-text-secondary); } .topbar__breadcrumb b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.topbar__scope { padding: 4px 8px; background: var(--app-bg-control); border-radius: 7px; font-size: 10px; white-space: nowrap; color: var(--app-text-secondary); }
+.topbar__search { display: flex; gap: 8px; align-items: center; background: var(--app-bg-control); border-radius: 9px; padding: 7px 10px; color: var(--app-text-secondary); }
+.topbar__search input { border: 0; background: transparent; outline: none; width: 180px; min-width: 0; font: inherit; font-size: 11px; color: var(--app-text-primary); }
+@media(max-width: 1000px) { .topbar__scope { display: none; } .topbar__search input { width: 130px; } }
+@media(max-width: 650px) { .topbar { padding: 0 10px; } .topbar__search { display: none; } .topbar__breadcrumb > span:first-child { display: none; } }
 </style>

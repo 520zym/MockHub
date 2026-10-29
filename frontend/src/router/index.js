@@ -1,155 +1,46 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
+import { useUserStore } from '@/stores/user'
+import { useAppStore } from '@/stores/app'
 
 const routes = [
-  {
-    path: '/login',
-    name: 'Login',
-    component: () => import('@/views/Login.vue'),
-    meta: { requiresAuth: false }
-  },
-  {
-    path: '/',
-    component: () => import('@/components/layout/AppLayout.vue'),
-    meta: { requiresAuth: true },
-    children: [
-      {
-        path: '',
-        redirect: '/apis'
-      },
-      {
-        path: 'apis',
-        name: 'ApiList',
-        component: () => import('@/views/ApiList.vue'),
-        meta: { title: '接口管理' }
-      },
-      {
-        path: 'apis/new',
-        name: 'ApiNew',
-        component: () => import('@/views/ApiEdit.vue'),
-        meta: { title: '新建接口' }
-      },
-      {
-        path: 'apis/:id/edit',
-        name: 'ApiEdit',
-        component: () => import('@/views/ApiEdit.vue'),
-        meta: { title: '编辑接口' }
-      },
-      {
-        path: 'teams',
-        name: 'TeamManage',
-        component: () => import('@/views/TeamManage.vue'),
-        meta: { title: '团队管理', requiresSuperAdmin: true }
-      },
-      {
-        path: 'variables',
-        name: 'TeamVariables',
-        component: () => import('@/views/TeamVariables.vue'),
-        meta: { title: '动态变量' }
-      },
-      {
-        path: 'files',
-        name: 'FileServer',
-        component: () => import('@/views/FileServer.vue'),
-        meta: { title: '文件服务器' }
-      },
-      {
-        path: 'users',
-        name: 'UserManage',
-        component: () => import('@/views/UserManage.vue'),
-        meta: { title: '用户管理', requiresSuperAdmin: true }
-      },
-      {
-        path: 'logs/operation',
-        name: 'OperationLog',
-        component: () => import('@/views/LogView.vue'),
-        meta: { title: '操作日志' }
-      },
-      {
-        path: 'logs/request',
-        name: 'RequestLog',
-        component: () => import('@/views/LogView.vue'),
-        meta: { title: '请求日志' }
-      },
-      {
-        path: 'mcp-confirm/:id',
-        name: 'McpConfirm',
-        component: () => import('@/views/McpConfirm.vue'),
-        meta: { title: 'AI 草稿确认' }
-      },
-      {
-        path: 'settings',
-        name: 'Settings',
-        component: () => import('@/views/Settings.vue'),
-        meta: { title: '全局设置', requiresSuperAdmin: true }
-      },
-      {
-        path: 'stats',
-        name: 'Stats',
-        component: () => import('@/views/Stats.vue'),
-        // requiresStatsAccess：超管或任意团队管理员可访问，普通成员被路由守卫拦截
-        meta: { title: '使用统计', requiresStatsAccess: true }
-      }
-    ]
-  }
+  { path: '/login', name: 'Login', component: () => import('@/views/Login.vue'), meta: { requiresAuth: false, title: '登录' } },
+  { path: '/', component: () => import('@/components/layout/AppLayout.vue'), meta: { requiresAuth: true }, children: [
+    { path: '', redirect: '/apis' },
+    { path: 'apis', name: 'ApiList', component: () => import('@/views/ApiList.vue'), meta: { title: '接口管理', teamRequired: true } },
+    { path: 'apis/new', name: 'ApiNew', component: () => import('@/views/ApiEdit.vue'), meta: { title: '新建接口', teamRequired: true, requiresTeamWrite: true } },
+    { path: 'apis/:id/edit', name: 'ApiEdit', component: () => import('@/views/ApiEdit.vue'), meta: { title: '接口详情', teamRequired: true } },
+    { path: 'team', name: 'TeamSettings', component: () => import('@/views/TeamSettings.vue'), meta: { title: '团队设置', teamRequired: true } },
+    { path: 'teams', name: 'TeamManage', component: () => import('@/views/TeamManage.vue'), meta: { title: '团队管理', requiresSuperAdmin: true } },
+    { path: 'users', name: 'UserManage', component: () => import('@/views/UserManage.vue'), meta: { title: '账号管理', requiresSuperAdmin: true } },
+    { path: 'variables', name: 'TeamVariables', component: () => import('@/views/TeamVariables.vue'), meta: { title: '动态变量', teamRequired: true } },
+    { path: 'files', name: 'FileServer', component: () => import('@/views/FileServer.vue'), meta: { title: '文件服务器', teamRequired: true } },
+    { path: 'stats', name: 'Stats', component: () => import('@/views/Stats.vue'), meta: { title: '使用统计', teamRequired: true } },
+    { path: 'logs/operation', name: 'OperationLog', component: () => import('@/views/LogView.vue'), meta: { title: '操作日志', teamRequired: true } },
+    { path: 'logs/request', name: 'RequestLog', component: () => import('@/views/LogView.vue'), meta: { title: '请求日志', teamRequired: true } },
+    { path: 'mcp-confirm/:id', name: 'McpConfirm', component: () => import('@/views/McpConfirm.vue'), meta: { title: 'AI 草稿确认', teamRequired: true } },
+    { path: 'settings', name: 'Settings', component: () => import('@/views/Settings.vue'), meta: { title: '全局设置', requiresSuperAdmin: true } },
+    { path: 'account', name: 'Account', component: () => import('@/views/Account.vue'), meta: { title: '个人账号' } },
+    { path: 'no-access', name: 'NoAccess', component: () => import('@/views/NoAccess.vue'), meta: { title: '无权访问' } },
+    { path: ':pathMatch(.*)*', redirect: '/apis' }
+  ] }
 ]
-
-const router = createRouter({
-  history: createWebHashHistory(),
-  routes
+const router = createRouter({ history: createWebHashHistory(), routes })
+router.beforeEach(async to => {
+  const user = useUserStore(), app = useAppStore(), token = localStorage.getItem('token')
+  if (!token && user.token) user.clearSession()
+  if (to.meta.requiresAuth === false) {
+    if (token && user.identityReady) return '/apis'
+    return true
+  }
+  if (!token) return '/login'
+  if (user.token !== token) { user.token = token; user.identityReady = false }
+  try { await user.ensureIdentity() } catch { return '/login' }
+  if (to.meta.requiresSuperAdmin && !user.isSuperAdmin) return '/no-access'
+  if (user.user?.firstLogin && !(to.path === '/account' && to.query.tab === 'security')) return { path: '/account', query: { tab: 'security', required: '1' } }
+  if (to.meta.requiresTeamWrite) {
+    if (!app.teams.length) { try { await app.loadTeams() } catch { return false } }
+    if (app.currentTeamId && !user.canWriteTeam(app.currentTeamId)) return '/no-access'
+  }
+  return true
 })
-
-// 路由守卫
-router.beforeEach((to, from, next) => {
-  const token = localStorage.getItem('token')
-
-  // 需要登录但未登录 → 跳转登录页
-  if (to.meta.requiresAuth !== false && !to.matched.some(r => r.meta.requiresAuth === false)) {
-    // 检查路由本身或其父路由是否需要认证
-    const needsAuth = to.matched.some(r => r.meta.requiresAuth === true)
-    if (needsAuth && !token) {
-      return next('/login')
-    }
-  }
-
-  // 已登录访问登录页 → 跳转首页
-  if (to.path === '/login' && token) {
-    return next('/')
-  }
-
-  // 超管页面权限校验
-  if (to.meta.requiresSuperAdmin) {
-    try {
-      const userStr = localStorage.getItem('user')
-      if (userStr) {
-        const user = JSON.parse(userStr)
-        if (user.globalRole !== 'SUPER_ADMIN') {
-          return next('/')
-        }
-      }
-    } catch (e) {
-      // JSON 解析失败，忽略
-    }
-  }
-
-  // 统计页面权限：超管 OR 任意团队的管理员；普通成员拦截回首页
-  if (to.meta.requiresStatsAccess) {
-    try {
-      const userStr = localStorage.getItem('user')
-      if (userStr) {
-        const user = JSON.parse(userStr)
-        const isSuperAdmin = user.globalRole === 'SUPER_ADMIN'
-        const isAnyTeamAdmin = (user.teams || []).some(t => t.role === 'TEAM_ADMIN')
-        if (!isSuperAdmin && !isAnyTeamAdmin) {
-          return next('/')
-        }
-      }
-    } catch (e) {
-      // JSON 解析失败，按拒绝处理
-      return next('/')
-    }
-  }
-
-  next()
-})
-
 export default router
