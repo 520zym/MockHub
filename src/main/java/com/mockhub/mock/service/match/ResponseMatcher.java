@@ -54,6 +54,9 @@ public class ResponseMatcher {
     private final ApiResponseRepository apiResponseRepository;
     private final ObjectMapper objectMapper;
 
+    // Only preview suppresses diagnostics which can contain sample values. Production logs are unchanged.
+    private final ThreadLocal<Boolean> previewQuiet = new ThreadLocal<Boolean>();
+
     public ResponseMatcher(ApiResponseRepository apiResponseRepository,
                            ObjectMapper objectMapper) {
         this.apiResponseRepository = apiResponseRepository;
@@ -94,11 +97,25 @@ public class ResponseMatcher {
                 apiResponseRepository.findEnabledByApiIdAndOperation(apiId, soapOperationName), responseMode, req);
     }
 
+    /**
+     * Read-only entry for an already filtered, ordered in-memory enabled list. No repository access.
+     * Uses exactly the dispatch selector, but never logs sample body/header/query values.
+     */
+    public ApiResponse previewEnabled(List<ApiResponse> enabled, String responseMode, HttpServletRequest req) {
+        Boolean previous = previewQuiet.get();
+        previewQuiet.set(Boolean.TRUE);
+        try {
+            return matchEnabled("preview", null, enabled, responseMode, req);
+        } finally {
+            if (previous == null) previewQuiet.remove(); else previewQuiet.set(previous);
+        }
+    }
+
     private ApiResponse matchEnabled(String apiId, String soapOperationName,
                                      List<ApiResponse> enabled, String responseMode, HttpServletRequest req) {
         String scope = soapOperationName == null ? apiId : apiId + "#" + soapOperationName;
         if (enabled.isEmpty()) {
-            log.warn("接口 {} 无启用返回体", scope);
+            if (!Boolean.TRUE.equals(previewQuiet.get())) log.warn("接口 {} 无启用返回体", scope);
             return null;
         }
 
@@ -109,7 +126,7 @@ public class ResponseMatcher {
 
         if ("RANDOM".equalsIgnoreCase(responseMode)) {
             ApiResponse selected = enabled.get(ThreadLocalRandom.current().nextInt(enabled.size()));
-            log.debug("接口 {} 随机选择返回体 {}（{}）", scope, selected.getId(), selected.getName());
+            if (!Boolean.TRUE.equals(previewQuiet.get())) log.debug("接口 {} 随机选择返回体 {}（{}）", scope, selected.getId(), selected.getName());
             return selected;
         }
 
@@ -125,18 +142,18 @@ public class ResponseMatcher {
                 continue;
             }
             if (matchRule(rule, req)) {
-                log.debug("接口 {} 命中返回体 {}（{}）", scope, resp.getId(), resp.getName());
+                if (!Boolean.TRUE.equals(previewQuiet.get())) log.debug("接口 {} 命中返回体 {}（{}）", scope, resp.getId(), resp.getName());
                 return resp;
             }
         }
 
         if (fallback != null) {
-            log.debug("接口 {} 所有规则均未命中，走兜底返回体 {}", scope, fallback.getId());
+            if (!Boolean.TRUE.equals(previewQuiet.get())) log.debug("接口 {} 所有规则均未命中，走兜底返回体 {}", scope, fallback.getId());
             return fallback;
         }
 
         // 理论上保存校验已拦截（启用 ≥ 2 必有一个兜底）；运行时兜底保护
-        log.warn("接口 {} 启用 {} 条返回体但无兜底（数据异常）", scope, enabled.size());
+        if (!Boolean.TRUE.equals(previewQuiet.get())) log.warn("接口 {} 启用 {} 条返回体但无兜底（数据异常）", scope, enabled.size());
         return null;
     }
 
@@ -150,7 +167,7 @@ public class ResponseMatcher {
         try {
             return objectMapper.readValue(conditionsJson, MatchRule.class);
         } catch (Exception e) {
-            log.warn("解析 conditions JSON 失败，视为无规则: {}", e.getMessage());
+            if (!Boolean.TRUE.equals(previewQuiet.get())) log.warn("解析 conditions JSON 失败，视为无规则: {}", e.getMessage());
             return null;
         }
     }
@@ -217,7 +234,7 @@ public class ResponseMatcher {
             req.setAttribute(ATTR_PARSED_BODY, node);
             return node;
         } catch (Exception e) {
-            log.warn("请求体 JSON 解析失败，BODY 条件统一判不满足: {}", e.getMessage());
+            if (!Boolean.TRUE.equals(previewQuiet.get())) log.warn("请求体 JSON 解析失败，BODY 条件统一判不满足: {}", e.getMessage());
             return null;
         }
     }
@@ -251,12 +268,19 @@ public class ResponseMatcher {
             factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
             factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
             factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
-            Document document = factory.newDocumentBuilder()
-                    .parse(new ByteArrayInputStream(rawBody.getBytes("UTF-8")));
+            javax.xml.parsers.DocumentBuilder builder = factory.newDocumentBuilder();
+            if (Boolean.TRUE.equals(previewQuiet.get())) {
+                // JAXP's default handler writes parser errors directly to stderr; keep samples private.
+                builder.setErrorHandler(new org.xml.sax.helpers.DefaultHandler() {
+                    @Override public void error(org.xml.sax.SAXParseException e) throws org.xml.sax.SAXException { throw e; }
+                    @Override public void fatalError(org.xml.sax.SAXParseException e) throws org.xml.sax.SAXException { throw e; }
+                });
+            }
+            Document document = builder.parse(new ByteArrayInputStream(rawBody.getBytes("UTF-8")));
             req.setAttribute(ATTR_PARSED_XML_BODY, document);
             return document;
         } catch (Exception e) {
-            log.warn("请求体 XML 解析失败，BODY 条件统一判不满足: {}", e.getMessage());
+            if (!Boolean.TRUE.equals(previewQuiet.get())) log.warn("请求体 XML 解析失败，BODY 条件统一判不满足: {}", e.getMessage());
             return null;
         }
     }
@@ -335,7 +359,7 @@ public class ResponseMatcher {
             }
             return sb.toString();
         } catch (Exception e) {
-            log.warn("读取请求体失败: {}", e.getMessage());
+            if (!Boolean.TRUE.equals(previewQuiet.get())) log.warn("读取请求体失败: {}", e.getMessage());
             return null;
         }
     }
@@ -453,7 +477,7 @@ public class ResponseMatcher {
             case Operators.REGEX:
                 return matchRegex(actual, expected);
             default:
-                log.warn("未知操作符: {}", op);
+                if (!Boolean.TRUE.equals(previewQuiet.get())) log.warn("未知操作符: {}", op);
                 return false;
         }
     }
@@ -467,7 +491,7 @@ public class ResponseMatcher {
             BigDecimal b = new BigDecimal(expected);
             return a.compareTo(b);
         } catch (Exception e) {
-            log.warn("数字比较失败: actual={} expected={}", actual, expected);
+            if (!Boolean.TRUE.equals(previewQuiet.get())) log.warn("数字比较失败: actual={} expected={}", actual, expected);
             return Integer.MIN_VALUE;
         }
     }
@@ -503,7 +527,7 @@ public class ResponseMatcher {
                 }
             }
         } catch (Exception e) {
-            log.warn("IN 操作符期望值不是合法 JSON 数组: {}", expected);
+            if (!Boolean.TRUE.equals(previewQuiet.get())) log.warn("IN 操作符期望值不是合法 JSON 数组: {}", expected);
         }
         return false;
     }
@@ -518,7 +542,7 @@ public class ResponseMatcher {
         try {
             return Pattern.compile(regex).matcher(actual).find();
         } catch (Exception e) {
-            log.warn("正则编译或匹配失败: regex={} error={}", regex, e.getMessage());
+            if (!Boolean.TRUE.equals(previewQuiet.get())) log.warn("正则编译或匹配失败: regex={} error={}", regex, e.getMessage());
             return false;
         }
     }
