@@ -1,7 +1,7 @@
 <template>
-  <div v-if="aiStore.visible" class="ai-assistant">
+  <div v-if="aiStore.enabled && aiStore.visible && canRead" class="ai-assistant">
     <transition name="ai-pop">
-      <section v-if="open" class="ai-chat">
+      <section v-if="open" class="ai-chat" role="dialog" aria-label="MockHub 助手" @keydown.esc.stop.prevent="open = false">
         <header class="ai-chat__head">
           <div class="ai-chat__avatar">
             <el-icon><MagicStick /></el-icon>
@@ -12,12 +12,12 @@
               <span class="ai-beta">Beta</span>
             </div>
             <div class="ai-chat__sub">
-              <span class="ai-dot" :class="{ 'ai-dot--muted': !aiStore.available }"></span>
-              {{ aiStore.available ? (aiStore.provider === 'MOCK' ? '在线 · 内置演示模型' : '在线 · ' + (aiStore.status?.model || 'AI')) : (aiStore.reason || '未就绪') }}
+              <span class="ai-dot" :class="{ 'ai-dot--muted': !canUseAssistant }"></span>
+              {{ canUseAssistant ? (aiStore.provider === 'MOCK' ? '在线 · 内置演示模型' : '在线 · ' + (aiStore.status?.model || 'AI')) : (aiStore.reason || '未就绪') }}
             </div>
           </div>
           <div class="ai-chat__actions">
-            <el-button text circle size="small" title="会话历史" @click="openHistory">
+            <el-button text circle size="small" title="会话历史" :disabled="!canUseAssistant || loading" @click="openHistory">
               <el-icon><Clock /></el-icon>
             </el-button>
             <el-button text circle size="small" title="新会话" @click="clearChat">
@@ -37,7 +37,8 @@
             </el-button>
           </div>
           <div class="ai-history__list" v-loading="historyLoading">
-            <div v-if="!conversations.length" class="ai-history__empty">还没有历史会话，先聊一句吧。</div>
+            <div v-if="historyError" class="ai-history__empty ai-card-error" role="alert">{{ historyError }} <el-button link @click="openHistory">重试</el-button></div>
+            <div v-else-if="!historyLoading && !conversations.length" class="ai-history__empty">当前团队还没有历史会话，先聊一句吧。</div>
             <button
               v-for="conv in conversations"
               :key="conv.id"
@@ -54,34 +55,17 @@
         </div>
 
         <div class="ai-chat__ctx">
-          <el-select
-            v-if="userStore.isSuperAdmin"
-            v-model="scopeTeamId"
-            size="small"
-            class="ai-scope-select"
-            placeholder="选择团队"
-            filterable
-            :loading="teamsLoading"
-            @visible-change="onScopeVisible"
-          >
-            <el-option label="全部团队" value="__ALL__" />
-            <el-option v-for="team in assistantTeams" :key="team.id" :label="team.name" :value="team.id" />
-          </el-select>
-          <span v-else class="ctx-chip">范围：{{ teamName || '未选择团队' }}</span>
-          <span class="ctx-chip">
-            <el-icon><Lock /></el-icon>
-            以你的权限运行
-          </span>
-          <span v-if="teamsError" class="ai-team-error" @click="loadAssistantTeams(true)">{{ teamsError }}，重试</span>
+          <span class="ctx-chip">范围：{{ teamName || '未选择团队' }}</span>
+          <span class="ctx-chip"><el-icon><Lock /></el-icon>{{ canWrite ? '按团队写入权限运行' : '只读 · 仅查询与解释' }}</span>
         </div>
 
         <div ref="bodyRef" class="ai-chat__body">
-          <div v-if="!aiStore.available" class="ai-unavailable">
+          <div v-if="!canUseAssistant" class="ai-unavailable">
             <div class="ai-welcome__icon">
               <el-icon><MagicStick /></el-icon>
             </div>
             <div class="ai-welcome__title">AI 助手尚未就绪</div>
-            <div class="ai-welcome__desc">{{ aiStore.reason || '请先在全局设置中配置模型服务' }}</div>
+            <div class="ai-welcome__desc">{{ aiStore.reason || '当前账号未启用对话助手能力，请联系管理员确认配置。' }}</div>
             <el-button v-if="userStore.isSuperAdmin" type="primary" plain @click="goSettings">
               去配置
             </el-button>
@@ -94,22 +78,21 @@
             </div>
             <div class="ai-welcome__title">有什么可以帮你？</div>
             <div class="ai-welcome__desc">
-              可以查询调用统计、搜索接口、生成响应体、创建接口草稿，或修改当前接口的返回值。
-              涉及写操作时会先给你确认卡片。
+              {{ canWrite ? '可以查询调用统计、搜索接口、生成响应体或创建接口草稿；写入前必须由你确认。' : '可以查询当前团队统计、搜索接口与解释配置。当前身份只读，不能创建或修改接口。' }}
             </div>
             <div class="ai-welcome__prompts">
               <button
                 v-for="prompt in quickPrompts"
                 :key="prompt"
-                class="ai-prompt"
-                @click="send(prompt)"
+                type="button" class="ai-prompt"
+                :disabled="loading || historyLoading || !canUseAssistant" @click="send(prompt)"
               >
                 {{ prompt }}
               </button>
             </div>
           </div>
 
-          <div v-for="(msg, idx) in messages" v-if="aiStore.available" :key="idx" class="ai-msg">
+          <div v-for="(msg, idx) in messages" v-if="canUseAssistant" :key="idx" class="ai-msg">
             <template v-if="msg.role === 'user'">
               <div class="ai-msg--user">
                 <div class="ai-bubble-user">{{ msg.text }}</div>
@@ -134,7 +117,7 @@
                       <button
                         v-for="item in card.items"
                         :key="item.apiId"
-                        class="ai-api-row"
+                        type="button" class="ai-api-row"
                         @click="openApi(item.apiId)"
                       >
                         <span class="ai-method" :class="'ai-method--' + (item.method || 'GET').toLowerCase()">
@@ -214,12 +197,13 @@
                       </div>
                       <div class="ai-confirm__note">
                         <el-icon><Lock /></el-icon>
-                        确认后服务端会重新校验权限并写入，操作记入日志。
+                        {{ canWrite ? '确认后服务端会重新校验权限并写入，操作记入日志。' : '当前身份只读，不能执行写操作；可查看预览或取消本人草稿。' }}
                       </div>
+                      <p v-if="card.error" class="ai-card-error" role="alert">{{ card.error }}</p>
                       <div class="ai-confirm__actions">
                         <template v-if="card.status === 'PENDING' && !cardExpired(card)">
-                          <el-button text size="small" @click="cancelCard(card)">取消</el-button>
-                          <el-button size="small" type="primary" :loading="card.busy" @click="confirmCard(card)">{{ card.actionType === 'UPDATE_API' ? '确认修改' : '确认创建' }}</el-button>
+                          <el-button text size="small" :disabled="!canCancelCard(card)" @click="cancelCard(card)">取消</el-button>
+                          <el-button size="small" type="primary" :loading="card.busy" :disabled="!canConfirmCard(card)" @click="confirmCard(card)">{{ card.actionType === 'UPDATE_API' ? '确认修改' : '确认创建' }}</el-button>
                         </template>
                         <template v-else-if="card.status === 'CONFIRMED' && card.apiId">
                           <el-button size="small" type="primary" plain @click="openApi(card.apiId)">
@@ -239,7 +223,7 @@
             </template>
           </div>
 
-          <div v-if="aiStore.available && loading" class="ai-msg">
+          <div v-if="canUseAssistant && loading" class="ai-msg">
             <div class="ai-msg__avatar">
               <el-icon><MagicStick /></el-icon>
             </div>
@@ -249,7 +233,7 @@
           </div>
         </div>
 
-        <div v-if="aiStore.available" class="ai-composer">
+        <div v-if="canUseAssistant" class="ai-composer">
           <div class="ai-composer__box" :class="{ 'ai-composer__box--focus': composerFocus }" @click="focusComposer">
             <el-input
               ref="composerInput"
@@ -257,8 +241,8 @@
               type="textarea"
               :autosize="{ minRows: 2, maxRows: 5 }"
               resize="none"
-              placeholder="继续追问，或描述要创建的接口…"
-              :disabled="(!teamId && !userStore.isSuperAdmin) || loading"
+              :placeholder="canWrite ? '继续追问，或描述要创建的接口…' : '询问当前团队的接口或匹配逻辑…'"
+              :disabled="!canUseAssistant || loading || historyLoading"
               @focus="composerFocus = true"
               @blur="composerFocus = false"
               @keydown.enter.exact.prevent="send()"
@@ -269,10 +253,10 @@
                 {{ teamName || '请先选择团队' }}
               </span>
               <el-button
-                type="primary"
+                type="primary" aria-label="发送消息"
                 circle
                 size="small"
-                :disabled="(!teamId && !userStore.isSuperAdmin) || loading || !input.trim()"
+                :disabled="!canUseAssistant || loading || historyLoading || !input.trim()"
                 @click="send()"
               >
                 <el-icon><Promotion /></el-icon>
@@ -281,7 +265,7 @@
           </div>
           <div class="ai-composer__tip">
             <el-icon><Lock /></el-icon>
-            AI 生成内容需确认后生效，不会自动保存
+            {{ canWrite ? 'AI 生成内容需确认后生效，不会自动保存' : '只读问答不会创建或修改团队资源' }}
           </div>
         </div>
       </section>
@@ -291,7 +275,7 @@
       <pre class="ai-preview-full">{{ previewDialogContent }}</pre>
     </el-dialog>
 
-    <button v-if="!open" class="ai-fab" title="MockHub AI 助手" @click="openChat">
+    <button v-if="!open" type="button" class="ai-fab" title="MockHub AI 助手" @click="openChat">
       <el-icon><MagicStick /></el-icon>
       <span class="ai-fab__dot"></span>
     </button>
@@ -302,1158 +286,183 @@
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import {
-  MagicStick, Close, Lock, Search, DataAnalysis, Plus,
-  Check, EditPen, Clock, Promotion, OfficeBuilding
-} from '@element-plus/icons-vue'
-import { aiChat, confirmAiAction, cancelAiAction, getAiAction, getAiConversation, getAiConversations } from '@/api/ai'
-import { getTeams } from '@/api/teams'
+import { MagicStick, Close, Lock, Search, DataAnalysis, Plus, Check, EditPen, Clock, Promotion, OfficeBuilding } from '@element-plus/icons-vue'
+import request from '@/api/request'
 import { useAiStore } from '@/stores/ai'
 import { useAppStore } from '@/stores/app'
 import { useUserStore } from '@/stores/user'
 
-const aiStore = useAiStore()
-const appStore = useAppStore()
-const userStore = useUserStore()
-const router = useRouter()
-const route = useRoute()
-
-const open = ref(false)
-const input = ref('')
-const loading = ref(false)
-const messages = ref([])
-const bodyRef = ref(null)
-const composerFocus = ref(false)
-const composerInput = ref(null)
-const scopeTeamId = ref('__ALL__')
-const assistantTeams = ref([])
-const teamsLoading = ref(false)
-const teamsError = ref('')
-const lastApiId = ref('')
-const conversationId = ref('')
-const historyOpen = ref(false)
-const historyLoading = ref(false)
-const conversations = ref([])
-const previewDialogVisible = ref(false)
-const previewDialogContent = ref('')
-const previewDialogTitle = ref('')
-
-const quickPrompts = [
-  '最近 7 天哪个接口调用最多？',
-  '找一下用户相关的接口',
-  '帮我创建 GET /api/user/info 的 Mock，返回姓名、头像、等级'
-]
-
-const teamId = computed(() => {
-  if (userStore.isSuperAdmin) {
-    return scopeTeamId.value && scopeTeamId.value !== '__ALL__' ? scopeTeamId.value : null
-  }
-  return appStore.currentTeamId || assistantTeams.value[0]?.id || appStore.teams[0]?.id || null
-})
-const teamName = computed(() => {
-  if (!teamId.value) return userStore.isSuperAdmin ? '全部团队' : ''
-  return assistantTeams.value.find((team) => team.id === teamId.value)?.name || ''
-})
-
-const contextApiId = computed(() => {
-  if (route.name === 'ApiEdit' && route.params.id) return route.params.id
-  return lastApiId.value || ''
-})
-
-async function loadAssistantTeams(force) {
-  if (teamsLoading.value) return
-  if (!force && assistantTeams.value.length) return
-  teamsLoading.value = true
-  teamsError.value = ''
-  try {
-    const data = await getTeams()
-    assistantTeams.value = Array.isArray(data) ? data : []
-    if (assistantTeams.value.length && appStore.teams.length === 0) {
-      appStore.teams = assistantTeams.value
-    }
-    if (userStore.isSuperAdmin && scopeTeamId.value !== '__ALL__'
-      && !assistantTeams.value.some(team => team.id === scopeTeamId.value)) {
-      scopeTeamId.value = '__ALL__'
-    }
-  } catch (e) {
-    if (assistantTeams.value.length === 0 && appStore.teams.length) {
-      assistantTeams.value = appStore.teams
-    }
-    teamsError.value = '团队列表加载失败'
-  } finally {
-    teamsLoading.value = false
-  }
+const aiStore = useAiStore(), appStore = useAppStore(), userStore = useUserStore(), router = useRouter(), route = useRoute()
+const teamId = computed(() => appStore.currentTeamId || null)
+const teamName = computed(() => appStore.currentTeam?.name || '')
+const canRead = computed(() => !!teamId.value && !!appStore.currentTeam && userStore.identityReady && appStore.currentTeam?.status !== 'DISABLED' && userStore.hasCapability(teamId.value, 'read'))
+const canWrite = computed(() => canRead.value && appStore.currentTeam?.status !== 'ARCHIVED' && userStore.hasCapability(teamId.value, 'write'))
+const canUseAssistant = computed(() => canRead.value && aiStore.enabled && aiStore.visible && aiStore.available && aiStore.capabilities.assistant === true)
+const open = ref(false), input = ref(''), loading = ref(false), messages = ref([]), bodyRef = ref(null), composerFocus = ref(false), composerInput = ref(null)
+const lastApiId = ref(''), conversationId = ref(''), historyOpen = ref(false), historyLoading = ref(false), historyError = ref(''), conversations = ref([])
+const previewDialogVisible = ref(false), previewDialogContent = ref(''), previewDialogTitle = ref(''), now = ref(Date.now())
+const quickPrompts = computed(() => canWrite.value ? ['最近 7 天哪个接口调用最多？', '找一下用户相关的接口', '帮我创建 GET /api/user/info 的 Mock，返回姓名、头像、等级'] : ['最近 7 天哪个接口调用最多？', '找一下用户相关的接口', '解释当前接口的匹配规则'])
+let epoch = 0, disposed = false, clock = null
+const pendingRequests = new Set()
+function snapshot() { return { teamId: teamId.value, epoch, userId: userStore.user?.id } }
+function current(ctx) { return !disposed && canUseAssistant.value && ctx.teamId === teamId.value && ctx.epoch === epoch && ctx.userId === userStore.user?.id }
+function errorText(error, fallback) { return error?.response?.data?.msg || error?.msg || error?.message || fallback }
+// The existing client still supplies authentication and response unwrapping. Local calls add
+// AbortSignal without changing shared API wrappers or leaking context into another conversation.
+async function call(method, url, data, ctx) {
+  if (!current(ctx)) throw new Error('会话上下文已失效')
+  const controller = new AbortController()
+  pendingRequests.add(controller)
+  try { return await request({ method, url, data, signal: controller.signal, timeout: 120000, skipGlobalNetworkError: true }) }
+  finally { pendingRequests.delete(controller) }
 }
-
-function onScopeVisible(visible) {
-  if (visible) {
-    loadAssistantTeams(true)
-  }
-}
-
-onMounted(async () => {
-  aiStore.load()
-  assistantTeams.value = appStore.teams
-  await loadAssistantTeams(true)
-  if (userStore.isSuperAdmin) {
-    const preferred = appStore.currentTeamId
-    scopeTeamId.value = preferred && assistantTeams.value.some(team => team.id === preferred)
-      ? preferred
-      : '__ALL__'
-  }
-})
-
-onBeforeUnmount(() => {
-  // 组件销毁无需额外清理，消息仅保存在内存
-})
-
-function goSettings() {
-  open.value = false
-  router.push('/settings')
-}
-
-function focusComposer() {
-  if (!loading.value) {
-    composerInput.value?.focus()
-  }
-}
-
-function openChat() {
-  open.value = true
-  if (!assistantTeams.value.length) {
-    loadAssistantTeams()
-  }
-  scrollToBottom()
-}
-
 function clearChat() {
-  messages.value = []
-  input.value = ''
-  conversationId.value = ''
-  lastApiId.value = ''
-  historyOpen.value = false
+  epoch++
+  for (const controller of pendingRequests) controller.abort()
+  pendingRequests.clear()
+  messages.value = []; input.value = ''; conversationId.value = ''; lastApiId.value = ''; loading.value = false; composerFocus.value = false
+  historyOpen.value = false; historyLoading.value = false; historyError.value = ''; conversations.value = []
+  previewDialogVisible.value = false; previewDialogContent.value = ''; previewDialogTitle.value = ''
 }
-
-async function openHistory() {
-  historyOpen.value = true
-  historyLoading.value = true
-  try {
-    conversations.value = await getAiConversations()
-  } catch (e) {
-    conversations.value = []
-  } finally {
-    historyLoading.value = false
-  }
-}
-
-async function loadConversation(id) {
-  if (!id) return
-  historyLoading.value = true
-  try {
-    const detail = await getAiConversation(id)
-    conversationId.value = detail.id
-    lastApiId.value = ''
-    messages.value = (detail.messages || []).map((msg) => {
-      if (msg.role === 'user') {
-        return { role: 'user', text: msg.content || '' }
-      }
-      return {
-        role: 'assistant',
-        reply: msg.content || '',
-        cards: Array.isArray(msg.cards) ? msg.cards : [],
-        provider: msg.provider,
-        model: msg.model
-      }
-    })
-    // 历史卡片里的待确认操作可能已经处理过；打开会话时对齐状态。
-    for (const msg of messages.value) {
-      for (const card of (msg.cards || [])) {
-        if (card && card.actionId && card.status === 'PENDING') {
-          try {
-            const action = await getAiAction(card.actionId)
-            card.status = action.status
-            card.apiId = action.resultApiId || card.apiId
-          } catch (e) {
-            // 草稿已清理时保持原状态，确认时会给出提示
-          }
-        }
-        if (card && card.apiId) {
-          lastApiId.value = card.apiId
-        }
-      }
+watch([teamId, canRead, canWrite, canUseAssistant, () => userStore.user?.id], () => { clearChat(); open.value = false }, { immediate: true, flush: 'sync' })
+onMounted(() => { aiStore.load(); clock = window.setInterval(() => { now.value = Date.now() }, 30000) })
+onBeforeUnmount(() => { disposed = true; clearChat(); window.clearInterval(clock) })
+function goSettings() { if (!userStore.isSuperAdmin) return; open.value = false; router.push('/settings') }
+function focusComposer() { if (canUseAssistant.value && !loading.value && !historyLoading.value) composerInput.value?.focus() }
+function openChat() { if (!canRead.value || !aiStore.enabled || !aiStore.visible) return; open.value = true; scrollToBottom(); nextTick(() => { if (open.value && canUseAssistant.value) focusComposer() }) }
+function normalizeCards(cards, ctx) {
+  return (Array.isArray(cards) ? cards : []).filter(Boolean).flatMap(raw => {
+    if (raw.type === 'PENDING_ACTION') {
+      if (raw.summary?.teamId !== ctx.teamId) return []
+      return [{ ...raw, summary: { ...raw.summary }, busy: false, error: '' }]
     }
-    historyOpen.value = false
-    await scrollToBottom()
-  } catch (e) {
-    ElMessage.error(e?.msg || '加载会话失败')
-  } finally {
-    historyLoading.value = false
-  }
+    if (raw.type === 'API_LIST') return [{ ...raw, items: (raw.items || []).filter(item => !item.teamId || item.teamId === ctx.teamId) }]
+    if (raw.type === 'STATS') return [{ ...raw, items: raw.items || [] }]
+    return []
+  })
 }
-
+async function openHistory() {
+  if (!canUseAssistant.value || loading.value || historyLoading.value) return
+  const ctx = snapshot()
+  historyOpen.value = true; historyLoading.value = true; historyError.value = ''
+  try {
+    const data = await call('get', '/ai/conversations', undefined, ctx)
+    if (current(ctx)) conversations.value = (Array.isArray(data) ? data : []).filter(item => item.teamId === ctx.teamId)
+  } catch (error) { if (current(ctx)) { conversations.value = []; historyError.value = errorText(error, '会话历史加载失败。') } }
+  finally { if (current(ctx)) historyLoading.value = false }
+}
+async function loadConversation(id) {
+  if (!canUseAssistant.value || loading.value || historyLoading.value || !conversations.value.some(item => item.id === id && item.teamId === teamId.value)) return
+  const list = conversations.value
+  clearChat(); conversations.value = list; historyOpen.value = true; historyLoading.value = true
+  const ctx = snapshot()
+  try {
+    const detail = await call('get', '/ai/conversations/' + encodeURIComponent(id), undefined, ctx)
+    if (!current(ctx)) return
+    if (detail.teamId !== ctx.teamId) throw new Error('该会话不属于当前团队，已停止加载。')
+    conversationId.value = detail.id
+    messages.value = (detail.messages || []).map(msg => msg.role === 'user' ? { role: 'user', text: msg.content || '' } : { role: 'assistant', reply: msg.content || '', cards: normalizeCards(msg.cards, ctx), provider: msg.provider, model: msg.model })
+    // Reconcile pending history cards before allowing any execution.
+    for (const msg of messages.value) for (const card of (msg.cards || [])) {
+      if (!current(ctx)) return
+      if (card.actionId && card.status === 'PENDING') {
+        try {
+          const action = await call('get', '/ai/actions/' + encodeURIComponent(card.actionId), undefined, ctx)
+          if (!current(ctx)) return
+          if ((action.summary?.teamId || action.teamId || ctx.teamId) !== ctx.teamId) { card.status = 'EXPIRED'; card.error = '操作上下文不匹配，不能执行。' }
+          else { card.status = action.status; card.apiId = action.resultApiId || card.apiId }
+        } catch (error) { if (!current(ctx)) return; if ([40401, 40901].includes(error?.code)) card.status = 'EXPIRED'; else card.error = '操作状态暂无法同步，执行时仍由服务端校验。' }
+      }
+      if (card.apiId) lastApiId.value = card.apiId
+    }
+    if (current(ctx)) { historyOpen.value = false; await scrollToBottom() }
+  } catch (error) { if (current(ctx)) { messages.value = []; conversationId.value = ''; historyError.value = errorText(error, '会话加载失败。') } }
+  finally { if (current(ctx)) historyLoading.value = false }
+}
 function formatHistoryTime(value) {
   if (!value) return ''
   const date = new Date(value)
-  const now = new Date()
-  if (date.toDateString() === now.toDateString()) {
-    return String(date.getHours()).padStart(2, '0') + ':' + String(date.getMinutes()).padStart(2, '0')
-  }
-  return (date.getMonth() + 1) + '/' + date.getDate()
+  if (Number.isNaN(date.getTime())) return ''
+  return new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(date)
 }
-
+async function resolveContextApi(ctx) {
+  if (route.name === 'ApiEdit' && route.params?.id) {
+    const id = String(route.params.id), api = await call('get', '/apis/' + encodeURIComponent(id), undefined, ctx)
+    if (!current(ctx)) return ''
+    if (api.teamId !== ctx.teamId) throw new Error('当前页面接口不属于所选团队，请先切换团队或返回接口列表。')
+    return id
+  }
+  return lastApiId.value || ''
+}
 async function send(preset) {
-  const content = (preset || input.value).trim()
-  if (!content || loading.value) return
-  if (!teamId.value && !userStore.isSuperAdmin) {
-    ElMessage.warning('请先在侧边栏选择团队')
-    return
-  }
-  messages.value.push({ role: 'user', text: content })
-  input.value = ''
-  loading.value = true
-  scrollToBottom()
+  const content = (typeof preset === 'string' ? preset : input.value).trim()
+  if (!content || !canUseAssistant.value || loading.value || historyLoading.value) return
+  const ctx = snapshot()
+  messages.value.push({ role: 'user', text: content }); input.value = ''; loading.value = true; scrollToBottom()
   try {
-    const history = messages.value.slice(0, -1).slice(-8).map((msg) => ({
-      role: msg.role,
-      content: msg.role === 'user' ? msg.text : (msg.reply || '')
-    }))
-    const res = await aiChat({
-      teamId: teamId.value,
-      message: content,
-      conversationId: conversationId.value || undefined,
-      contextApiId: contextApiId.value || undefined,
-      history
-    })
-    conversationId.value = res.conversationId || conversationId.value
-    messages.value.push({
-      role: 'assistant',
-      reply: res.reply || '没有生成回复，请换个说法试试。',
-      cards: res.cards || [],
-      provider: res.provider,
-      model: res.model
-    })
-  } catch (e) {
-    messages.value.push({
-      role: 'assistant',
-      reply: e?.msg || '请求失败，请稍后重试',
-      cards: [],
-      error: true
-    })
-  } finally {
-    loading.value = false
-    scrollToBottom()
-  }
+    const contextApiId = await resolveContextApi(ctx)
+    if (!current(ctx)) return
+    const history = messages.value.slice(0, -1).slice(-8).map(msg => ({ role: msg.role, content: msg.role === 'user' ? msg.text : (msg.reply || '') }))
+    const result = await call('post', '/ai/chat', { teamId: ctx.teamId, message: content, conversationId: conversationId.value || undefined, contextApiId: contextApiId || undefined, history }, ctx)
+    if (!current(ctx)) return
+    conversationId.value = result.conversationId || conversationId.value
+    messages.value.push({ role: 'assistant', reply: result.reply || '没有生成回复，请换个说法试试。', cards: normalizeCards(result.cards, ctx), provider: result.provider, model: result.model })
+  } catch (error) { if (current(ctx)) messages.value.push({ role: 'assistant', reply: errorText(error, '请求失败，请稍后重试。'), cards: [], error: true }) }
+  finally { if (current(ctx)) { loading.value = false; scrollToBottom() } }
 }
-
+function ownsCard(card) { return canUseAssistant.value && messages.value.some(msg => (msg.cards || []).includes(card)) && card.summary?.teamId === teamId.value }
+function canCancelCard(card) { return ownsCard(card) && !!card.actionId && !card.busy && !historyLoading.value && card.status === 'PENDING' && !cardExpired(card) }
+function canConfirmCard(card) { return canCancelCard(card) && canWrite.value && ['CREATE_API', 'UPDATE_API'].includes(card.actionType) }
 async function confirmCard(card) {
-  if (!card.actionId || card.busy) return
-  card.busy = true
+  if (!canConfirmCard(card)) return
+  const ctx = snapshot(), id = card.actionId
+  card.busy = true; card.error = ''
   try {
-    const res = await confirmAiAction(card.actionId)
-    card.status = 'CONFIRMED'
-    card.apiId = res.apiId
-    lastApiId.value = res.apiId || card.apiId || ''
-    appStore.bumpApiRevision()
+    const result = await call('post', '/ai/actions/' + encodeURIComponent(id) + '/confirm', null, ctx)
+    if (!current(ctx) || !canWrite.value || !ownsCard(card)) return
+    card.status = 'CONFIRMED'; card.apiId = result.apiId; lastApiId.value = result.apiId || ''; appStore.bumpApiRevision()
     ElMessage.success(card.actionType === 'UPDATE_API' ? '接口已更新' : '接口已创建')
-  } catch (e) {
-    ElMessage.error(e?.msg || '确认失败，请稍后重试')
-    if (e?.code === 40901) {
-      card.status = 'EXPIRED'
-    }
-  } finally {
-    card.busy = false
-  }
+  } catch (error) { if (current(ctx) && ownsCard(card)) { card.error = errorText(error, '确认失败，请稍后重试。'); if (error?.code === 40901) card.status = 'EXPIRED' } }
+  finally { if (current(ctx)) card.busy = false }
 }
-
 async function cancelCard(card) {
-  if (!card.actionId || card.busy) return
-  card.busy = true
-  try {
-    await cancelAiAction(card.actionId)
-    card.status = 'CANCELLED'
-    ElMessage.success('已取消')
-  } catch (e) {
-    ElMessage.error(e?.msg || '取消失败，请稍后重试')
-  } finally {
-    card.busy = false
-  }
+  if (!canCancelCard(card)) return
+  const ctx = snapshot()
+  card.busy = true; card.error = ''
+  try { await call('post', '/ai/actions/' + encodeURIComponent(card.actionId) + '/cancel', null, ctx); if (current(ctx) && ownsCard(card)) { card.status = 'CANCELLED'; ElMessage.success('已取消') } }
+  catch (error) { if (current(ctx) && ownsCard(card)) card.error = errorText(error, '取消失败，请稍后重试。') }
+  finally { if (current(ctx)) card.busy = false }
 }
-
-function openApi(apiId) {
-  if (!apiId) return
-  lastApiId.value = apiId
-  open.value = false
-  router.push('/apis/' + apiId + '/edit')
-}
-
-function isLongPreview(card) {
-  const text = String(card.preview || '')
-  return text.length > 420 || text.split('\n').length > 12
-}
-
-function openPreview(card) {
-  previewDialogContent.value = String(card.preview || '')
-  previewDialogTitle.value = card.actionType === 'UPDATE_API' ? '修改后完整内容' : '接口完整内容'
-  previewDialogVisible.value = true
-}
-
-function cardExpired(card) {
-  if (!card.expiresAt) return false
-  return new Date(card.expiresAt).getTime() < Date.now()
-}
-
-function expiryText(card) {
-  if (!card.expiresAt) return ''
-  const date = new Date(card.expiresAt)
-  const hh = String(date.getHours()).padStart(2, '0')
-  const mm = String(date.getMinutes()).padStart(2, '0')
-  return '有效至 ' + hh + ':' + mm
-}
-
-function teamLabel(id) {
-  const team = assistantTeams.value.find((item) => item.id === id)
-    || appStore.teams.find((item) => item.id === id)
-  return team ? team.name : '当前团队'
-}
-
-async function scrollToBottom() {
-  await nextTick()
-  if (bodyRef.value) {
-    bodyRef.value.scrollTop = bodyRef.value.scrollHeight
-  }
-}
-
-watch(messages, () => {
-  scrollToBottom()
-}, { deep: true })
-
-watch(() => aiStore.available, (available) => {
-  if (!available) open.value = false
-})
+function openApi(id) { if (!canRead.value || !id) return; lastApiId.value = id; open.value = false; router.push('/apis/' + encodeURIComponent(id) + '/edit') }
+function isLongPreview(card) { const text = String(card.preview || ''); return text.length > 420 || text.split('\n').length > 12 }
+function openPreview(card) { if (!ownsCard(card)) return; previewDialogContent.value = String(card.preview || ''); previewDialogTitle.value = card.actionType === 'UPDATE_API' ? '修改后完整内容' : '接口完整内容'; previewDialogVisible.value = true }
+function cardExpired(card) { return !!card.expiresAt && new Date(card.expiresAt).getTime() <= now.value }
+function expiryText(card) { if (!card.expiresAt) return ''; const date = new Date(card.expiresAt); return Number.isNaN(date.getTime()) ? '' : '有效至 ' + new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit' }).format(date) }
+function teamLabel(id) { return id === teamId.value ? teamName.value : '非当前团队' }
+async function scrollToBottom() { await nextTick(); if (bodyRef.value && open.value) bodyRef.value.scrollTop = bodyRef.value.scrollHeight }
+watch(messages, scrollToBottom, { deep: true })
 </script>
 
 <style scoped>
-.ai-assistant {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 2001;
-}
-
-.ai-fab {
-  pointer-events: auto;
-  position: absolute;
-  right: 28px;
-  bottom: 28px;
-  width: 56px;
-  height: 56px;
-  border: none;
-  border-radius: 18px;
-  background: var(--ai-gradient, linear-gradient(135deg, #6366F1, #8B5CF6));
-  color: #fff;
-  font-size: 26px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  box-shadow: 0 12px 28px rgba(99, 102, 241, 0.38), 0 2px 6px rgba(99, 102, 241, 0.25);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.ai-fab:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 16px 34px rgba(99, 102, 241, 0.45);
-}
-
-.ai-fab__dot {
-  position: absolute;
-  right: -2px;
-  top: -2px;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: #22C55E;
-  border: 2.5px solid #fff;
-}
-
-.ai-chat {
-  pointer-events: auto;
-  position: absolute;
-  right: 24px;
-  bottom: 16px;
-  width: 428px;
-  height: min(824px, calc(100vh - 32px));
-  background: #fff;
-  border-radius: 16px;
-  box-shadow: 0 24px 64px rgba(27, 37, 89, 0.18), 0 2px 8px rgba(27, 37, 89, 0.06);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.ai-history {
-  position: absolute;
-  inset: 0;
-  z-index: 20;
-  display: flex;
-  flex-direction: column;
-  background: #fff;
-}
-
-.ai-history__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 62px;
-  padding: 0 12px 0 18px;
-  border-bottom: 1px solid #F1F5F9;
-  font-size: 14px;
-  font-weight: 600;
-  color: #1B2559;
-}
-
-.ai-history__list {
-  flex: 1;
-  overflow: auto;
-  padding: 10px;
-}
-
-.ai-history__empty {
-  padding: 48px 16px;
-  text-align: center;
-  font-size: 12px;
-  color: #A3AED0;
-}
-
-.ai-history__item {
-  display: block;
-  width: 100%;
-  padding: 10px 12px;
-  margin-bottom: 4px;
-  border: 1px solid transparent;
-  border-radius: 10px;
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
-}
-
-.ai-history__item:hover {
-  background: #F7F8FA;
-}
-
-.ai-history__item--on {
-  background: #F5F6FF;
-  border-color: #E0E7FF;
-}
-
-.ai-history__title {
-  font-size: 13px;
-  font-weight: 500;
-  color: #1B2559;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ai-history__preview {
-  margin-top: 3px;
-  font-size: 11px;
-  color: #8A93A8;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ai-history__meta {
-  margin-top: 4px;
-  font-size: 10px;
-  color: #A3AED0;
-}
-
-.ai-chat__head {
-  height: 62px;
-  padding: 0 10px 0 16px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border-bottom: 1px solid #F1F5F9;
-  flex-shrink: 0;
-}
-
-.ai-chat__avatar {
-  width: 34px;
-  height: 34px;
-  border-radius: 11px;
-  background: var(--ai-gradient, linear-gradient(135deg, #6366F1, #8B5CF6));
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 19px;
-  flex-shrink: 0;
-}
-
-.ai-chat__title-wrap {
-  flex: 1;
-  min-width: 0;
-}
-
-.ai-chat__title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #1B2559;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  white-space: nowrap;
-}
-
-.ai-beta {
-  font-size: 10.5px;
-  font-weight: 700;
-  color: var(--ai-accent, #8B5CF6);
-  background: var(--ai-soft, #F5F3FF);
-  border: 1px solid var(--ai-border, #E7E3FD);
-  border-radius: 6px;
-  padding: 0 6px;
-  line-height: 18px;
-}
-
-.ai-chat__sub {
-  font-size: 11.5px;
-  color: #A3AED0;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  margin-top: 1px;
-}
-
-.ai-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #10B981;
-}
-
-.ai-dot--muted {
-  background: #CBD5E1;
-}
-
-.ai-scope-select {
-  width: 150px;
-}
-
-.ai-scope-select :deep(.el-input__wrapper) {
-  background: #fff;
-  border-radius: 7px;
-  box-shadow: 0 0 0 1px #EDF0F5 inset;
-  min-height: 26px;
-}
-
-.ai-unavailable {
-  margin: auto;
-  text-align: center;
-  padding: 24px 16px;
-  max-width: 340px;
-}
-
-.ai-unavailable__hint {
-  font-size: 11.5px;
-  color: #A3AED0;
-  margin-top: 10px;
-}
-
-.ai-chat__actions {
-  display: flex;
-  align-items: center;
-  gap: 0;
-  color: #A3AED0;
-}
-
-.ai-chat__ctx {
-  height: 34px;
-  padding: 0 16px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: #FBFBFE;
-  border-bottom: 1px solid #F1F5F9;
-  flex-shrink: 0;
-  font-size: 11.5px;
-  color: #7B87A8;
-}
-
-.ai-team-error {
-  margin-left: auto;
-  color: #EF4444;
-  font-size: 10.5px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.ctx-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 22px;
-  padding: 0 8px;
-  border-radius: 6px;
-  background: #F7F8FA;
-  color: #4A5568;
-  font-size: 11px;
-}
-
-.ai-chat__body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 14px 14px 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  background: #FDFDFF;
-}
-
-.ai-welcome {
-  margin: auto;
-  text-align: center;
-  padding: 20px 12px;
-  max-width: 340px;
-}
-
-.ai-welcome__icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 15px;
-  margin: 0 auto 12px;
-  background: var(--ai-soft, #F5F3FF);
-  border: 1px solid var(--ai-border, #E7E3FD);
-  color: var(--ai-accent, #8B5CF6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-}
-
-.ai-welcome__title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #1B2559;
-}
-
-.ai-welcome__desc {
-  font-size: 11.5px;
-  color: #A3AED0;
-  line-height: 1.75;
-  margin-top: 4px;
-}
-
-.ai-welcome__prompts {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-top: 14px;
-}
-
-.ai-prompt {
-  border: 1px solid #EDF0F5;
-  background: #fff;
-  border-radius: 9px;
-  padding: 7px 10px;
-  font-size: 11.5px;
-  color: #4A5568;
-  text-align: left;
-  cursor: pointer;
-  font-family: inherit;
-  transition: all 0.2s ease;
-}
-
-.ai-prompt:hover {
-  border-color: #C7D2FE;
-  color: #4F46E5;
-  background: #FBFCFF;
-}
-
-.ai-msg {
-  display: flex;
-  gap: 8px;
-  max-width: 100%;
-}
-
-.ai-msg--user {
-  width: 100%;
-  display: flex;
-  justify-content: flex-end;
-}
-
-.ai-bubble-user {
-  max-width: 300px;
-  background: #6366F1;
-  color: #fff;
-  padding: 9px 13px;
-  border-radius: 12px 12px 4px 12px;
-  font-size: 13px;
-  line-height: 1.65;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.ai-msg__avatar {
-  width: 24px;
-  height: 24px;
-  border-radius: 8px;
-  background: var(--ai-gradient, linear-gradient(135deg, #6366F1, #8B5CF6));
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-  flex-shrink: 0;
-  margin-top: 2px;
-}
-
-.ai-msg__stack {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-width: 344px;
-  min-width: 0;
-}
-
-.ai-bubble {
-  background: #fff;
-  border: 1px solid #F1F5F9;
-  padding: 9px 12px;
-  border-radius: 12px 12px 12px 4px;
-  font-size: 12.5px;
-  line-height: 1.7;
-  color: #1B2559;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.ai-bubble--error {
-  border-color: #FEE2E2;
-  background: #FEF2F2;
-  color: #B91C1C;
-}
-
-.ai-bubble--typing {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 12px 14px;
-}
-
-.ai-bubble--typing span {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: #C7D2FE;
-  animation: ai-typing 1s ease-in-out infinite;
-}
-
-.ai-bubble--typing span:nth-child(2) { animation-delay: 0.15s; }
-.ai-bubble--typing span:nth-child(3) { animation-delay: 0.3s; }
-
-@keyframes ai-typing {
-  0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
-  30% { transform: translateY(-3px); opacity: 1; }
-}
-
-.ai-card {
-  background: #fff;
-  border: 1px solid #EDF0F5;
-  border-radius: 12px;
-  overflow: hidden;
-}
-
-.ai-card__head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  background: #FBFBFE;
-  border-bottom: 1px solid #F1F5F9;
-  font-size: 12px;
-  font-weight: 600;
-  color: #4A5568;
-}
-
-.ai-card__head .el-icon {
-  color: #A3AED0;
-}
-
-.ai-card__right {
-  margin-left: auto;
-  font-size: 11px;
-  font-weight: 400;
-  color: #A3AED0;
-}
-
-.ai-card__body {
-  padding: 8px 12px;
-}
-
-.ai-card__body--list {
-  padding: 4px 8px;
-}
-
-.ai-api-row {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 6px 4px;
-  border: none;
-  border-bottom: 1px solid #F8FAFC;
-  background: transparent;
-  cursor: pointer;
-  font-family: inherit;
-  text-align: left;
-}
-
-.ai-api-row:last-child {
-  border-bottom: none;
-}
-
-.ai-api-row:hover {
-  background: #FAFBFF;
-}
-
-.ai-method {
-  font-size: 10px;
-  font-weight: 600;
-  padding: 1px 6px;
-  border-radius: 5px;
-  background: #F7F8FA;
-  color: #4A5568;
-  flex-shrink: 0;
-}
-
-.ai-method--get { background: rgba(16, 185, 129, 0.12); color: #059669; }
-.ai-method--post { background: rgba(99, 102, 241, 0.12); color: #4F46E5; }
-.ai-method--put { background: rgba(245, 158, 11, 0.12); color: #D97706; }
-.ai-method--delete { background: rgba(239, 68, 68, 0.12); color: #DC2626; }
-.ai-method--patch { background: rgba(139, 92, 246, 0.12); color: #7C3AED; }
-
-.ai-api-path {
-  font-family: 'SF Mono', Menlo, Monaco, Consolas, monospace;
-  font-size: 11px;
-  color: #1B2559;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ai-api-name {
-  margin-left: auto;
-  font-size: 10.5px;
-  color: #A3AED0;
-  flex-shrink: 0;
-}
-
-.ai-stats-total {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  padding: 2px 0 6px;
-}
-
-.ai-stats-num {
-  font-size: 22px;
-  font-weight: 700;
-  color: #1B2559;
-  font-variant-numeric: tabular-nums;
-}
-
-.ai-stats-label {
-  font-size: 10.5px;
-  color: #A3AED0;
-}
-
-.ai-stat-rows {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.ai-stat-row {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 11.5px;
-  padding: 3px 0;
-}
-
-.ai-stat-idx {
-  width: 16px;
-  height: 16px;
-  border-radius: 5px;
-  background: #F7F8FA;
-  color: #A3AED0;
-  font-size: 10px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.ai-stat-idx--top {
-  background: #E0E7FF;
-  color: #4F46E5;
-}
-
-.ai-stat-path {
-  font-family: 'SF Mono', Menlo, Monaco, Consolas, monospace;
-  font-size: 10.5px;
-  color: #1B2559;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ai-stat-count {
-  margin-left: auto;
-  font-weight: 600;
-  color: #1B2559;
-  font-variant-numeric: tabular-nums;
-}
-
-.ai-card__empty {
-  text-align: center;
-  font-size: 11px;
-  color: #A3AED0;
-  padding: 10px 0;
-}
-
-.ai-confirm__head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  background: linear-gradient(90deg, rgba(99, 102, 241, 0.07), rgba(139, 92, 246, 0.03));
-  border-bottom: 1px solid #E7E3FD;
-  font-size: 12px;
-  font-weight: 600;
-  color: #6D28D9;
-}
-
-.ai-confirm__head--done {
-  background: #ECFDF5;
-  border-bottom-color: #DCF5EC;
-  color: #0F9D6E;
-}
-
-.ai-confirm__head--muted {
-  background: #F7F8FA;
-  border-bottom-color: #F1F5F9;
-  color: #A3AED0;
-}
-
-.ai-countdown {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  font-size: 10.5px;
-  font-weight: 500;
-  color: #A3AED0;
-  background: #fff;
-  border: 1px solid #F1F5F9;
-  border-radius: 6px;
-  padding: 0 6px;
-  height: 20px;
-}
-
-.ai-confirm__body {
-  padding: 10px 12px;
-}
-
-.ai-confirm__grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 7px 12px;
-  font-size: 12px;
-}
-
-.ai-confirm__k {
-  font-size: 11.5px;
-  color: #A3AED0;
-}
-
-.ai-confirm__v {
-  color: #1B2559;
-  font-weight: 500;
-  margin-top: 1px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ai-confirm__v code {
-  font-family: 'SF Mono', Menlo, Monaco, Consolas, monospace;
-  font-size: 11px;
-  font-weight: 400;
-}
-
-.ai-confirm__preview-wrap {
-  margin-top: 8px;
-}
-
-.ai-confirm__preview {
-  margin: 0;
-  max-height: 170px;
-  overflow: auto;
-  padding: 8px 10px;
-  background: #FAFBFD;
-  border: 1px solid #F1F5F9;
-  border-radius: 8px;
-  font-family: 'SF Mono', Menlo, Monaco, Consolas, monospace;
-  font-size: 10.5px;
-  white-space: pre-wrap;
-  word-break: break-word;
-  line-height: 1.7;
-  color: #4A5568;
-  max-height: 170px;
-  overflow: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.ai-confirm__expand {
-  margin-top: 6px;
-  border: none;
-  background: transparent;
-  padding: 0;
-  color: #6366F1;
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.ai-preview-full {
-  margin: 0;
-  max-height: 60vh;
-  overflow: auto;
-  padding: 12px;
-  border-radius: 8px;
-  background: #FAFBFD;
-  border: 1px solid #F1F5F9;
-  font-family: 'SF Mono', Menlo, Monaco, Consolas, monospace;
-  font-size: 12px;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.ai-confirm__note {
-  display: flex;
-  align-items: flex-start;
-  gap: 5px;
-  font-size: 10.5px;
-  color: #A3AED0;
-  line-height: 1.6;
-  margin-top: 6px;
-}
-
-.ai-confirm__note .el-icon {
-  margin-top: 2px;
-  flex-shrink: 0;
-}
-
-.ai-confirm__actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 6px;
-  margin-top: 8px;
-}
-
-.ai-confirm__muted {
-  font-size: 10.5px;
-  color: #A3AED0;
-}
-
-.ai-msg__meta {
-  font-size: 10.5px;
-  color: #CBD5E0;
-  padding-left: 2px;
-}
-
-.ai-composer {
-  flex-shrink: 0;
-  padding: 11px 14px 10px;
-  border-top: 1px solid #F1F5F9;
-  background: #fff;
-}
-
-.ai-composer__box {
-  border: 1px solid #E6EAF2;
-  border-radius: 12px;
-  padding: 8px 10px 6px 12px;
-  background: #fff;
-  cursor: text;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.ai-composer__box--focus {
-  border-color: #6366F1;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.08);
-}
-
-.ai-composer__box :deep(.el-textarea__inner) {
-  min-height: 44px !important;
-  padding: 2px 0;
-  box-shadow: none;
-  background: transparent;
-  font-size: 13px;
-  line-height: 1.65;
-  cursor: text;
-}
-
-.ai-composer__foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 6px;
-}
-
-.ai-composer__scope {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 10.5px;
-  color: #A3AED0;
-}
-
-.ai-composer__tip {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  font-size: 10px;
-  color: #CBD5E0;
-  margin-top: 5px;
-}
-
-.ai-pop-enter-active,
-.ai-pop-leave-active {
-  transition: opacity 0.18s ease, transform 0.18s ease;
-}
-
-.ai-pop-enter-from,
-.ai-pop-leave-to {
-  opacity: 0;
-  transform: translateY(8px) scale(0.99);
-}
-
-@media (max-width: 520px) {
-  .ai-chat {
-    right: 8px;
-    left: 8px;
-    width: auto;
-    bottom: 8px;
-    height: calc(100vh - 16px);
-  }
-}
+.ai-assistant { position: fixed; inset: 0; pointer-events: none; z-index: 2001; color: var(--app-text-primary); }
+.ai-fab { pointer-events: auto; position: absolute; right: 28px; bottom: 28px; width: 56px; height: 56px; display: grid; place-items: center; border: 0; border-radius: 16px; background: var(--app-accent); color: #FFFFFF; font-size: 26px; cursor: pointer; box-shadow: none; }
+.ai-fab:hover { background: var(--app-accent-hover); }.ai-fab__dot { position: absolute; top: 4px; right: 4px; width: 8px; height: 8px; border-radius: 50%; background: #FFFFFF; }
+.ai-chat { pointer-events: auto; position: absolute; right: 24px; bottom: 16px; width: min(460px, calc(100vw - 32px)); height: min(824px, calc(100vh - 32px)); height: min(824px, calc(100dvh - 32px)); min-height: 0; display: flex; flex-direction: column; background: var(--app-bg-surface); border: 0; border-radius: 20px; box-shadow: none; overflow: hidden; }
+.ai-chat__head { min-height: 68px; padding: 12px 14px; display: flex; align-items: center; gap: 10px; flex-shrink: 0; background: var(--app-bg-surface); }
+.ai-chat__avatar, .ai-msg__avatar { display: grid; place-items: center; flex-shrink: 0; color: #FFFFFF; background: var(--app-accent); border-radius: 10px; }
+.ai-chat__avatar { width: 34px; height: 34px; font-size: 19px; }.ai-chat__title-wrap { flex: 1; min-width: 0; }.ai-chat__title { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 14px; font-weight: 600; }.ai-beta { background: var(--app-bg-selected); color: var(--app-accent); padding: 2px 6px; border-radius: 8px; font-size: 11px; font-weight: 500; }.ai-chat__sub { display: flex; align-items: flex-start; gap: 5px; font-size: 12px; color: var(--app-text-secondary); margin-top: 3px; overflow-wrap: anywhere; }.ai-dot { flex-shrink: 0; width: 6px; height: 6px; border-radius: 50%; background: var(--app-accent); margin-top: 6px; }.ai-dot--muted { background: var(--app-text-secondary); }.ai-chat__actions { display: flex; align-items: center; gap: 0; flex-shrink: 0; }.ai-chat__actions .el-button + .el-button { margin-left: 0; }
+.ai-chat__ctx { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; flex-shrink: 0; padding: 8px 14px; background: var(--app-bg-surface); }.ctx-chip { display: inline-flex; align-items: center; gap: 4px; min-width: 0; padding: 4px 8px; border-radius: 8px; background: var(--app-bg-control); color: var(--app-text-secondary); font-size: 12px; overflow-wrap: anywhere; }
+.ai-chat__body { flex: 1 1 0%; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 12px; overflow: auto; overscroll-behavior: contain; padding: 16px 14px; background: var(--app-bg-control); }
+.ai-unavailable, .ai-welcome { margin: auto; text-align: center; padding: 20px 10px; width: 100%; max-width: 360px; }.ai-welcome__icon { display: grid; place-items: center; width: 48px; height: 48px; margin: 0 auto 12px; border-radius: 16px; background: var(--app-bg-selected); color: var(--app-accent); font-size: 24px; }.ai-welcome__title { font-size: 16px; font-weight: 600; }.ai-welcome__desc, .ai-unavailable__hint { font-size: 13px; line-height: 1.8; color: var(--app-text-secondary); margin-top: 8px; }.ai-unavailable .el-button { margin-top: 16px; }.ai-welcome__prompts { display: flex; flex-direction: column; gap: 8px; margin-top: 18px; }.ai-prompt { border: 0; border-radius: 10px; padding: 10px 12px; background: var(--app-bg-surface); color: var(--app-accent); font: inherit; font-size: 13px; text-align: left; cursor: pointer; overflow-wrap: anywhere; }.ai-prompt:hover { background: var(--app-bg-selected); color: var(--app-accent-hover); }.ai-prompt:disabled { color: var(--app-text-disabled); background: var(--app-bg-disabled); cursor: not-allowed; }
+.ai-history { position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column; min-height: 0; background: var(--app-bg-surface); }.ai-history__head { display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; min-height: 64px; padding: 12px 14px 12px 18px; font-size: 14px; font-weight: 600; }.ai-history__list { min-height: 0; flex: 1; overflow: auto; overscroll-behavior: contain; padding: 10px; background: var(--app-bg-control); }.ai-history__empty { text-align: center; padding: 40px 16px; font-size: 13px; line-height: 1.8; color: var(--app-text-secondary); }.ai-history__item { display: block; width: 100%; margin-bottom: 8px; padding: 12px; border: 0; border-radius: 10px; text-align: left; background: var(--app-bg-surface); cursor: pointer; color: inherit; }.ai-history__item:hover, .ai-history__item--on { background: var(--app-bg-selected); }.ai-history__title { font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }.ai-history__preview { margin-top: 5px; font-size: 12px; line-height: 1.7; color: var(--app-text-secondary); overflow-wrap: anywhere; }.ai-history__meta { margin-top: 6px; font-size: 12px; color: var(--app-text-secondary); }
+.ai-msg { display: flex; gap: 8px; min-width: 0; max-width: 100%; }.ai-msg--user { width: 100%; display: flex; justify-content: flex-end; }.ai-bubble-user { max-width: 88%; padding: 10px 13px; border-radius: 16px 16px 8px 16px; background: var(--app-primary); color: #FFFFFF; font-size: 13px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }.ai-msg__avatar { width: 24px; height: 24px; border-radius: 8px; font-size: 14px; margin-top: 2px; }.ai-msg__stack { display: flex; flex: 1; flex-direction: column; gap: 10px; min-width: 0; }.ai-bubble { padding: 10px 12px; background: var(--app-bg-surface); color: var(--app-text-primary); border-radius: 16px 16px 16px 8px; font-size: 13px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }.ai-bubble--error { color: var(--el-color-danger); background: var(--el-color-danger-light-9); }.ai-msg__meta { padding-left: 2px; font-size: 12px; color: var(--app-text-secondary); overflow-wrap: anywhere; }
+.ai-card { min-width: 0; background: var(--app-bg-surface); border: 0; border-radius: 16px; overflow: hidden; }.ai-card__head, .ai-confirm__head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 10px 12px; background: var(--app-bg-selected); color: var(--app-accent); font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }.ai-card__right { margin-left: auto; color: var(--app-text-secondary); font-size: 12px; font-weight: 400; overflow-wrap: anywhere; }.ai-card__body { padding: 10px 12px; }.ai-card__body--list { padding: 6px 10px; }.ai-card__empty { padding: 14px; color: var(--app-text-secondary); font-size: 12px; text-align: center; }.ai-card-error { color: var(--el-color-danger); background: var(--el-color-danger-light-9); border-radius: 8px; padding: 10px; font-size: 12px; line-height: 1.8; overflow-wrap: anywhere; }
+.ai-api-row { width: 100%; display: flex; align-items: flex-start; flex-wrap: wrap; gap: 6px; border: 0; border-radius: 8px; padding: 8px 4px; background: var(--app-bg-surface); color: inherit; font: inherit; text-align: left; cursor: pointer; }.ai-api-row:hover { background: var(--app-bg-control); }.ai-method { flex-shrink: 0; padding: 2px 6px; border-radius: 8px; background: var(--app-bg-control); color: var(--app-text-regular); font-size: 11px; font-weight: 500; }.ai-method--get { background: #EDF7F2; color: #256F55; }.ai-method--post, .ai-method--patch { background: #EDF2FC; color: #2A53AD; }.ai-method--put { background: #FBF5E9; color: #846024; }.ai-method--delete { background: #FBEEED; color: #933B36; }.ai-api-path { min-width: 0; flex: 1; font: 12px/1.8 var(--app-font-mono); overflow-wrap: anywhere; }.ai-api-name { flex-basis: 100%; font-size: 12px; line-height: 1.7; color: var(--app-text-secondary); overflow-wrap: anywhere; }
+.ai-stats-total { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; padding: 2px 0 10px; }.ai-stats-num { font-size: 26px; font-weight: 500; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }.ai-stats-label { font-size: 12px; color: var(--app-text-secondary); }.ai-stat-rows { display: flex; flex-direction: column; gap: 8px; }.ai-stat-row { display: flex; align-items: flex-start; gap: 7px; font-size: 12px; }.ai-stat-idx { width: 18px; height: 18px; display: grid; place-items: center; border-radius: 8px; flex-shrink: 0; background: var(--app-bg-control); color: var(--app-text-secondary); font-size: 11px; }.ai-stat-idx--top { background: var(--app-bg-selected); color: var(--app-accent); }.ai-stat-path { flex: 1; min-width: 0; font: 12px/1.8 var(--app-font-mono); overflow-wrap: anywhere; }.ai-stat-count { margin-left: auto; max-width: 72px; font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.ai-confirm__head--done { color: #256F55; background: #EDF7F2; }.ai-confirm__head--muted { color: var(--app-text-secondary); background: var(--app-bg-control); }.ai-countdown { display: inline-flex; align-items: center; gap: 3px; margin-left: auto; padding: 2px 6px; border-radius: 8px; color: var(--app-text-secondary); background: var(--app-bg-surface); font-size: 12px; font-weight: 400; }.ai-confirm__body { padding: 12px; }.ai-confirm__grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }.ai-confirm__k { margin-bottom: 5px; font-size: 12px; color: var(--app-text-secondary); }.ai-confirm__v { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 4px; font-size: 12px; line-height: 1.8; overflow-wrap: anywhere; }.ai-confirm__v code { max-width: 100%; font-family: var(--app-font-mono); overflow-wrap: anywhere; }.ai-confirm__preview-wrap { min-width: 0; background: var(--app-bg-control); border-radius: 10px; padding: 10px; }.ai-confirm__preview { margin: 0; max-height: 160px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.8 var(--app-font-mono); color: var(--app-text-regular); }.ai-confirm__expand { display: block; margin: 8px 0 0; padding: 0; border: 0; background: var(--app-bg-control); color: var(--app-accent); font-size: 12px; cursor: pointer; }.ai-preview-full { max-height: 65vh; margin: 0; padding: 14px; border-radius: 10px; background: var(--app-bg-control); color: var(--app-text-regular); overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.8 var(--app-font-mono); }.ai-confirm__note { display: flex; align-items: flex-start; gap: 5px; margin-top: 12px; font-size: 12px; line-height: 1.8; color: var(--app-text-secondary); }.ai-confirm__note .el-icon { flex-shrink: 0; margin-top: 4px; }.ai-confirm__actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 6px; margin-top: 12px; }.ai-confirm__actions .el-button + .el-button { margin-left: 0; }.ai-confirm__muted { color: var(--app-text-secondary); font-size: 12px; }
+.ai-composer { flex-shrink: 0; padding: 12px 14px; background: var(--app-bg-surface); }.ai-composer__box { min-width: 0; padding: 10px 12px; border: 0; border-radius: 10px; background: var(--app-bg-control); cursor: text; }.ai-composer__box--focus { outline: 2px solid var(--app-focus-color); outline-offset: 1px; }.ai-composer__box :deep(.el-textarea__inner) { min-height: 44px !important; padding: 0; border: 0; background: var(--app-bg-control); box-shadow: none; font-size: 13px; line-height: 1.8; }.ai-composer__box :deep(.el-textarea__inner:focus) { outline: none; }.ai-composer__foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; }.ai-composer__scope { display: inline-flex; align-items: center; gap: 4px; min-width: 0; font-size: 12px; color: var(--app-text-secondary); overflow-wrap: anywhere; }.ai-composer__tip { display: flex; align-items: flex-start; justify-content: center; gap: 4px; margin-top: 8px; font-size: 12px; line-height: 1.6; color: var(--app-text-secondary); }.ai-composer__tip .el-icon { margin-top: 3px; flex-shrink: 0; }
+.ai-bubble--typing { display: flex; align-items: center; gap: 4px; padding: 14px; }.ai-bubble--typing span { width: 5px; height: 5px; border-radius: 50%; background: var(--app-accent); animation: ai-typing 1s ease-in-out infinite; }.ai-bubble--typing span:nth-child(2) { animation-delay: .15s; }.ai-bubble--typing span:nth-child(3) { animation-delay: .3s; }@keyframes ai-typing { 0%,60%,100% { transform: translateY(0); } 30% { transform: translateY(-3px); } }
+.ai-pop-enter-active, .ai-pop-leave-active { transition: opacity .18s ease, transform .18s ease; }.ai-pop-enter-from, .ai-pop-leave-to { opacity: 0; transform: translateY(8px); }
+@media(max-width:520px) { .ai-chat { inset: 8px; width: auto; height: auto; }.ai-chat__head { padding: 12px; gap: 8px; }.ai-chat__ctx { padding: 8px 12px; }.ai-chat__body { padding: 14px 12px; }.ai-confirm__grid { grid-template-columns: minmax(0,1fr); }.ai-fab { right: 16px; bottom: 16px; } }
+@media(prefers-reduced-motion:reduce) { .ai-pop-enter-active,.ai-pop-leave-active { transition: none; }.ai-bubble--typing span { animation: none; } }
 </style>
