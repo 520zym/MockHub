@@ -596,7 +596,10 @@ public class ApiServiceImpl implements ApiService {
         copy.setName(source.getName() + " (副本)");
         copy.setDescription(source.getDescription());
         copy.setMethod(source.getMethod());
-        copy.setPath(source.getPath() + "-copy");
+        String copyPath=source.getPath()+"-copy";int suffix=2;
+        while(!apiRepository.findByTeamIdAndPathAndMethod(source.getTeamId(),copyPath,source.getMethod()).isEmpty())
+            copyPath=source.getPath()+"-copy-"+(suffix++);
+        copy.setPath(copyPath);
         copy.setResponseCode(source.getResponseCode());
         copy.setContentType(source.getContentType());
         copy.setResponseBody(source.getResponseBody());
@@ -616,6 +619,9 @@ public class ApiServiceImpl implements ApiService {
         // 复制返回体
         List<ApiResponse> sourceResponses = apiResponseRepository.findByApiId(id);
         for (ApiResponse srcResp : sourceResponses) {
+            if("FILE".equalsIgnoreCase(srcResp.getBodyType())) {
+                apiRepository.requireFileReference(source.getTeamId(),srcResp.getFilePath());fileStorageService.loadAsResource(srcResp.getFilePath());
+            }
             ApiResponse copyResp = new ApiResponse();
             copyResp.setId(UUID.randomUUID().toString());
             copyResp.setApiId(copy.getId());
@@ -691,7 +697,7 @@ public class ApiServiceImpl implements ApiService {
     }
     private BatchApiResult batchInternal(String action,List<String> ids,String targetGroupId,Map<String,Long> expectedRevisions) {
         if (ids == null || ids.isEmpty()) {
-            return new BatchApiResult(0);
+            throw new BizException(40000,"请选择接口并提供每项预期版本");
         }
         if (action == null || action.isEmpty()) {
             throw new BizException(40400, "缺少 action 参数");
@@ -700,8 +706,7 @@ public class ApiServiceImpl implements ApiService {
         // 1. 一次性把目标接口加载出来（用于权限校验和审计日志）
         List<ApiDefinition> targets = apiRepository.findByIds(ids);
         if (targets.isEmpty()) {
-            log.warn("批量操作未匹配到任何接口: action={}, ids={}", action, ids);
-            return new BatchApiResult(0);
+            throw new BizException(40402,"批量目标不存在或已删除");
         }
 
         // 2. 按团队聚合一次去重，避免同一团队多次重复校验
@@ -766,7 +771,9 @@ public class ApiServiceImpl implements ApiService {
         }
 
         for(ApiDefinition api:targets) apiRepository.appendRevision(api.getId(), "BATCH_"+action.toUpperCase(), "WEB", null);
-        return new BatchApiResult(affected);
+        BatchApiResult result=new BatchApiResult(affected);
+        for(ApiDefinition api:targets)result.getRevisions().put(api.getId(),api.getRevision());
+        return result;
     }
 
     @Override
@@ -795,36 +802,8 @@ public class ApiServiceImpl implements ApiService {
      * 规范化接口维护路径：接口定义只保存 URL path，不保存 query/fragment。
      * Mock 分发入口收到请求时也是按 path 匹配，query 交给条件返回规则处理。
      */
-    private String normalizeApiPath(String path) {
-        String normalized = normalizeApiPathForCheck(path);
-        if (normalized == null) {
-            throw new BizException(40400, "接口路径不能为空");
-        }
-        return normalized;
-    }
-
-    private String normalizeApiPathForCheck(String path) {
-        if (path == null) {
-            return null;
-        }
-        String normalized = path.trim();
-        int queryIndex = normalized.indexOf('?');
-        if (queryIndex >= 0) {
-            normalized = normalized.substring(0, queryIndex);
-        }
-        int fragmentIndex = normalized.indexOf('#');
-        if (fragmentIndex >= 0) {
-            normalized = normalized.substring(0, fragmentIndex);
-        }
-        normalized = normalized.trim();
-        if (normalized.isEmpty()) {
-            return null;
-        }
-        if (!normalized.startsWith("/")) {
-            normalized = "/" + normalized;
-        }
-        return normalized;
-    }
+    private String normalizeApiPath(String path) { return com.mockhub.mock.lifecycle.ApiPaths.normalize(path); }
+    private String normalizeApiPathForCheck(String path) { return com.mockhub.mock.lifecycle.ApiPaths.forCheck(path); }
 
     /**
      * 把 action 翻成展示名（只用于操作日志的 detail 字段）

@@ -21,12 +21,33 @@ public final class ApiSnapshot {
         Object groupId=config.get("group_id");
         snapshot.put("group",groupId!=null && tableExists(conn,"api_group")
                 ? query(conn,"SELECT id,name,sort_order FROM api_group WHERE id=?",groupId):Collections.emptyList());
-        snapshot.put("responses", query(conn, "SELECT * FROM api_response WHERE api_id = ? ORDER BY sort_order, id", apiId));
+        List<Map<String,Object>> responses=query(conn,"SELECT * FROM api_response WHERE api_id = ? ORDER BY sort_order, id",apiId);
+        Object legacy=config.get("response_body");
+        if(legacy instanceof String && !((String)legacy).isEmpty()) for(Map<String,Object> response:responses) {
+            if(legacy.equals(response.get("response_body"))) {
+                config.remove("response_body");config.put("response_body_ref",response.get("id"));break;
+            }
+        }
+        snapshot.put("responses",responses);
         snapshot.put("tags", tableExists(conn, "api_tag") && tableExists(conn, "tag")
                 ? query(conn, "SELECT t.id, t.name, t.color FROM api_tag a JOIN tag t ON t.id=a.tag_id WHERE a.api_id = ? ORDER BY t.id", apiId)
                 : Collections.emptyList());
         try { return new ObjectMapper().writeValueAsString(snapshot); }
         catch (Exception e) { throw new SQLException("Cannot serialize API aggregate", e); }
+    }
+
+    @SuppressWarnings("unchecked")
+    public static Map<String,Object> materializeConfig(Map<String,Object> snapshot) {
+        Map<String,Object> config=new LinkedHashMap<String,Object>((Map<String,Object>)snapshot.get("config"));
+        Object reference=config.remove("response_body_ref");
+        if(reference!=null) {
+            boolean found=false;
+            for(Map<String,Object> response:(List<Map<String,Object>>)snapshot.get("responses")) if(reference.equals(response.get("id"))) {
+                config.put("response_body",response.get("response_body"));found=true;break;
+            }
+            if(!found)throw new IllegalStateException("Snapshot legacy body reference is missing");
+        }
+        return config;
     }
 
     @SuppressWarnings("unchecked")

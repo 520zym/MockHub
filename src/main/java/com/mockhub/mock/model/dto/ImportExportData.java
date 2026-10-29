@@ -33,6 +33,9 @@ public class ImportExportData {
 
     /** 接口返回体列表 */
     private List<ApiResponse> apiResponses;
+    private java.util.Map<String,java.util.List<String>> apiTags;
+    public java.util.Map<String,java.util.List<String>> getApiTags() { return apiTags; }
+    public void setApiTags(java.util.Map<String,java.util.List<String>> value) { apiTags=value; }
 
     /** 全局响应头列表 */
     private List<GlobalHeader> globalHeaders;

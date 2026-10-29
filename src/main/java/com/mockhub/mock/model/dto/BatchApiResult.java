@@ -6,6 +6,9 @@ package com.mockhub.mock.model.dto;
  * affected 表示实际处理的接口数量；忽略的（如不存在的 ID）不计入。
  */
 public class BatchApiResult {
+    private java.util.Map<String,Long> revisions=new java.util.LinkedHashMap<String,Long>();
+    public java.util.Map<String,Long> getRevisions() { return revisions; }
+    public void setRevisions(java.util.Map<String,Long> value) { revisions=value; }
 
     private int affected;
 

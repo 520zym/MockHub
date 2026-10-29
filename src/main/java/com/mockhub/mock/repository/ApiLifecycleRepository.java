@@ -64,7 +64,12 @@ public class ApiLifecycleRepository {
         List<Map<String,Object>> rows=jdbc.queryForList("SELECT * FROM api_revision WHERE api_id=? AND id=?",apiId,revisionId);
         if(rows.isEmpty()) throw new BizException(40402,"版本不存在");
         Map<String,Object> result=view(rows.get(0));
-        try { result.put("snapshot",new ObjectMapper().readValue(rows.get(0).get("snapshot_json").toString(),Map.class)); }
+        try {
+            Map<String,Object> snapshot=new ObjectMapper().readValue(rows.get(0).get("snapshot_json").toString(),Map.class);
+            if(((Number)rows.get(0).get("snapshot_schema_version")).intValue()==1 && snapshot.get("schemaVersion") instanceof Number
+                    && ((Number)snapshot.get("schemaVersion")).intValue()==1) snapshot.put("config",ApiSnapshot.materializeConfig(snapshot));
+            result.put("snapshot",snapshot);
+        }
         catch(Exception e) { throw new IllegalStateException("版本快照损坏",e); }
         return result;
     }
@@ -107,7 +112,7 @@ public class ApiLifecycleRepository {
         requireTransaction();
         if(!(snapshot.get("schemaVersion") instanceof Number) || ((Number)snapshot.get("schemaVersion")).intValue()!=1)
             throw new BizException(40924,"SNAPSHOT_VERSION_UNSUPPORTED: 不能恢复此快照格式");
-        Map<String,Object> config=(Map<String,Object>)snapshot.get("config");
+        Map<String,Object> config=ApiSnapshot.materializeConfig(snapshot);
         List<Object> args=new ArrayList<Object>();List<String> setters=new ArrayList<String>();
         for(String column:ApiSnapshot.CONFIG_COLUMNS) if(config.containsKey(column)) { setters.add(column+"=?");args.add(config.get(column)); }
         args.add(apiId);update("UPDATE api_definition SET "+String.join(",",setters)+" WHERE id=?",args);

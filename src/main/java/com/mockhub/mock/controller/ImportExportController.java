@@ -42,6 +42,8 @@ public class ImportExportController {
 
     private final ImportExportService importExportService;
     private final ObjectMapper objectMapper;
+    @org.springframework.beans.factory.annotation.Value("${mock.import.max-bytes:104857600}")
+    private long maxImportBytes=104857600L;
 
     public ImportExportController(ImportExportService importExportService,
                                   ObjectMapper objectMapper) {
@@ -62,10 +64,13 @@ public class ImportExportController {
     @PostMapping("/import")
     public Result<ImportResult> importApis(@RequestParam("file") MultipartFile file,
                                            @RequestParam("teamId") String teamId,
-                                           @RequestParam(value = "mode", defaultValue = "merge") String mode) {
+                                           @RequestParam(value = "mode", defaultValue = "merge") String mode,
+                                           @RequestParam(value="expectedRevisions",required=false) String expectedRevisions) {
+        importExportService.checkImportPermission(teamId,mode);
         if (file == null || file.isEmpty()) {
             throw new BizException(40401, "导入文件不能为空");
         }
+        if(file.getSize()>maxImportBytes)throw new BizException(40000,"导入包过大");
 
         ImportExportData data;
         Map<String, ImportExportService.FileBundleEntry> bundledFiles = new HashMap<String, ImportExportService.FileBundleEntry>();
@@ -82,7 +87,11 @@ public class ImportExportController {
             throw new BizException(40401, "导入文件格式错误: " + e.getMessage());
         }
 
-        ImportResult result = importExportService.importApis(teamId, data, mode, bundledFiles);
+        Map<String,Long> versions=java.util.Collections.emptyMap();
+        if(expectedRevisions!=null&&!expectedRevisions.trim().isEmpty())try {
+            versions=objectMapper.readValue(expectedRevisions,new com.fasterxml.jackson.core.type.TypeReference<Map<String,Long>>(){});
+        } catch(IOException invalid) { throw new BizException(40000,"expectedRevisions格式错误，请刷新版本后重试"); }
+        ImportResult result = importExportService.importApis(teamId, data, mode, bundledFiles,versions);
         log.info("导入完成: teamId={}, mode={}, imported={}, skipped={}, overridden={}",
                 teamId, mode, result.getImported(), result.getSkipped(), result.getOverridden());
 
@@ -133,14 +142,19 @@ public class ImportExportController {
         Map<String, ImportExportService.FileBundleEntry> files =
                 new HashMap<String, ImportExportService.FileBundleEntry>();
         try (ZipInputStream zipInputStream = new ZipInputStream(file.getInputStream())) {
-            ZipEntry entry;
+            ZipEntry entry;long total=0;int count=0;
             while ((entry = zipInputStream.getNextEntry()) != null) {
                 if (entry.isDirectory()) {
                     continue;
                 }
+                if(++count>1000)throw new BizException(40000,"导入包条目过多");
                 String entryName = entry.getName();
-                byte[] bytes = readAll(zipInputStream);
+                if(entryName.startsWith("/")||entryName.contains("../")||entryName.endsWith("/..")||entryName.indexOf('\\')>=0)
+                    throw new BizException(40000,"导入包包含非法文件路径");
+                byte[] bytes = readAll(zipInputStream);total+=bytes.length;
+                if(total>maxImportBytes)throw new BizException(40000,"导入包解压后过大");
                 if ("mockhub-export.json".equals(entryName)) {
+                    if(data!=null)throw new BizException(40000,"导入包重复定义主JSON文件");
                     data = objectMapper.readValue(bytes, ImportExportData.class);
                 } else if (entryName.startsWith("files/")) {
                     String relativePath = entryName.substring("files/".length());
@@ -149,6 +163,7 @@ public class ImportExportController {
                     if (slash >= 0) {
                         fileName = relativePath.substring(slash + 1);
                     }
+                    if(files.containsKey(relativePath))throw new BizException(40000,"导入包重复定义附件");
                     files.put(relativePath, new ImportExportService.FileBundleEntry(fileName, bytes));
                 }
             }
@@ -190,6 +205,7 @@ public class ImportExportController {
         byte[] buffer = new byte[8192];
         int len;
         while ((len = inputStream.read(buffer)) != -1) {
+            if((long)outputStream.size()+len>maxImportBytes)throw new BizException(40000,"导入包条目过大");
             outputStream.write(buffer, 0, len);
         }
         return outputStream.toByteArray();

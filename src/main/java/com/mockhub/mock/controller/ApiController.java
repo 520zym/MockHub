@@ -197,9 +197,11 @@ public class ApiController {
      * @return 新的启用状态 {"enabled": true/false}
      */
     @PutMapping("/{id}/toggle")
-    public Result<Map<String, Boolean>> toggle(@PathVariable String id,@RequestParam(required=false) Long expectedRevision) {
-        boolean newEnabled = apiService.toggle(id,com.mockhub.mock.lifecycle.ApiVersions.require(expectedRevision));
-        return Result.ok(Collections.singletonMap("enabled", newEnabled));
+    public Result<Map<String, Object>> toggle(@PathVariable String id,@RequestParam(required=false) Long expectedRevision) {
+        long expected=com.mockhub.mock.lifecycle.ApiVersions.require(expectedRevision);
+        boolean newEnabled = apiService.toggle(id,expected);
+        Map<String,Object> result=new java.util.LinkedHashMap<String,Object>();result.put("enabled",newEnabled);result.put("revision",expected+1);
+        return Result.ok(result);
     }
 
     /**

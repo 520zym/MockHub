@@ -457,7 +457,7 @@ public class ApiRepository {
      */
     public long countByGroupId(String groupId) {
         Long count = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM api_definition WHERE group_id = ?", Long.class, groupId);
+                "SELECT COUNT(*) FROM api_definition WHERE group_id = ? AND deleted_at IS NULL", Long.class, groupId);
         return count != null ? count : 0L;
     }
 

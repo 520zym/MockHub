@@ -507,8 +507,9 @@ public class DataSourceConfig {
             st.execute("CREATE TABLE IF NOT EXISTS mock_blob_ref (file_path TEXT NOT NULL, owner_type TEXT NOT NULL, owner_id TEXT NOT NULL,\n    expires_at INTEGER, PRIMARY KEY(file_path,owner_type,owner_id))");
             st.execute("CREATE INDEX IF NOT EXISTS idx_mock_blob_ref_owner ON mock_blob_ref(owner_type,owner_id)");
             addColumnIfNotExists(conn,"api_lifecycle_lock","history_delete_allowed","INTEGER NOT NULL DEFAULT 0");
+            st.execute("DROP TRIGGER IF EXISTS api_revision_protected_delete");
             st.execute("CREATE TRIGGER IF NOT EXISTS api_revision_protected_delete BEFORE DELETE ON api_revision "
-                    + "WHEN (SELECT history_delete_allowed FROM api_lifecycle_lock WHERE id=1)=0 "
+                    + "WHEN COALESCE((SELECT history_delete_allowed FROM api_lifecycle_lock WHERE id=1),0)=0 "
                     + "BEGIN SELECT RAISE(ABORT,'Revision deletion requires audited retention or purge'); END");
             st.execute("CREATE TRIGGER IF NOT EXISTS api_revision_immutable BEFORE UPDATE ON api_revision "
                     + "BEGIN SELECT RAISE(ABORT,'Published API revisions are immutable'); END");

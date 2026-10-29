@@ -387,6 +387,94 @@ class ApiLifecycleIntegrationTest {
         draft.setResponseId(responses.findByApiId(api.getId()).get(0).getId());return draft;
     }
 
+    @Test void importOverrideUsesTargetExpectedVersionsNormalizedRoutesAndNeverClearsTheTeam() {
+        ApiDefinition target=service.create(dto("/normalized","old")),untouched=service.create(dto("/untouched","keep"));
+        ImportExportData data=pack("normalized?query=ignored","imported-body");data.getApis().get(0).setRevision(999);
+        ImportExportService importer=importer();
+        assertEquals(40920,assertThrows(BizException.class,()->importer.importApis("a",data,"override")).getCode());
+        assertEquals(40921,assertThrows(BizException.class,()->importer.importApis("a",data,"override",Collections.emptyMap(),Collections.singletonMap(target.getId(),2L))).getCode());
+        ImportResult result=importer.importApis("a",data,"override",Collections.emptyMap(),Collections.singletonMap(target.getId(),1L));
+        assertEquals(1,result.getOverridden());assertEquals(0,result.getImported());assertEquals(2,apis.findById(target.getId()).getRevision());
+        assertEquals("imported-body",apis.findById(target.getId()).getResponseBody());assertEquals("u",apis.findById(target.getId()).getCreatedBy());
+        assertEquals("keep",apis.findById(untouched.getId()).getResponseBody());assertEquals("IMPORT",service.revisions(target.getId()).get(0).get("source"));
+        assertEquals(1,importer.importApis("a",data,"merge").getSkipped());assertEquals(2,apis.findById(target.getId()).getRevision());
+        assertEquals(Collections.singletonList("tag"),new ApiTagRepository(jdbc).findTagIdsByApiId(target.getId()),"old packages must not erase existing tag associations");
+        assertEquals("source",data.getApis().get(0).getId(),"import retries must not mutate the source package");
+    }
+
+    @Test void importFailureRollsBackEveryTargetMetadataResponseRevisionAndAudit() {
+        ApiDefinition target=service.create(dto("/existing","old"));ImportExportData data=pack("/existing","changed");
+        ApiDefinition extra=sourceApi("extra","/new","new-body");data.setApis(Arrays.asList(data.getApis().get(0),extra));
+        com.mockhub.mock.model.entity.ApiGroup group=new com.mockhub.mock.model.entity.ApiGroup();group.setId("source-group");group.setName("Imported group");
+        data.setGroups(Collections.singletonList(group));data.getApis().get(0).setGroupId(group.getId());
+        com.mockhub.mock.model.entity.Tag tag=new com.mockhub.mock.model.entity.Tag();tag.setId("source-tag");tag.setName("Imported tag");tag.setColor("#fff");
+        data.setTags(Collections.singletonList(tag));data.setApiTags(Collections.singletonMap("source",Collections.singletonList("source-tag")));
+        jdbc.execute("CREATE TRIGGER reject_import_create BEFORE INSERT ON api_revision WHEN NEW.source='IMPORT' AND NEW.action='CREATE' "
+                + "BEGIN SELECT RAISE(ABORT,'import history failed'); END");
+        assertThrows(DataAccessException.class,()->importer().importApis("a",data,"override",Collections.emptyMap(),Collections.singletonMap(target.getId(),1L)));
+        assertEquals("old",apis.findById(target.getId()).getResponseBody());assertEquals(1,apis.findById(target.getId()).getRevision());
+        assertEquals("old",responses.findByApiId(target.getId()).get(0).getResponseBody());assertEquals(1,service.revisions(target.getId()).size());
+        assertEquals(1,apis.countByTeamId("a"));assertEquals(0,jdbc.queryForObject("SELECT COUNT(*) FROM api_group",Integer.class));
+        assertEquals(1,jdbc.queryForObject("SELECT COUNT(*) FROM tag",Integer.class));
+    }
+
+    @Test void importCannotBorrowAnotherTeamsServerFileButBundledBytesBecomeANewOwnedBlob() throws Exception {
+        MockFileStorageService storage=new MockFileStorageService(temp.toString(),10485760L,new MockBlobRepository(jdbc));
+        MockFileStorageService.StoredMockFile foreign=storage.store("b","source.txt","text/plain",2,new java.io.ByteArrayInputStream(new byte[]{1,2}));
+        ImportExportData data=pack("/import-file","body");com.mockhub.mock.model.entity.ApiResponse response=data.getApiResponses().get(0);
+        response.setBodyType("FILE");response.setFilePath(foreign.getFilePath());response.setFileName("source.txt");response.setFileSize(2L);
+        assertEquals(40925,assertThrows(BizException.class,()->importer().importApis("a",data,"merge")).getCode());assertEquals(0,apis.countByTeamId("a"));
+        Map<String,ImportExportService.FileBundleEntry> files=Collections.singletonMap(foreign.getFilePath(),new ImportExportService.FileBundleEntry("source.txt",new byte[]{3,4}));
+        assertEquals(1,importer().importApis("a",data,"merge",files).getImported());
+        String imported=apis.findByTeamId("a").get(0).getId();String path=responses.findByApiId(imported).get(0).getFilePath();
+        assertTrue(path.startsWith("a/"));assertNotEquals(foreign.getFilePath(),path);assertNotNull(storage.loadAsResource(foreign.getFilePath()));
+        assertTrue(responses.findAllFilePaths().contains(path));
+    }
+
+    @Test void exportTagMappingAndActiveOnlySelectionRoundTripWithoutChangingSharedTeamHeaders() {
+        ApiDefinition api=service.create(dto("/export","body")),trash=service.create(dto("/hidden-trash","private"));service.delete(trash.getId(),1L);
+        jdbc.update("INSERT INTO global_header(id,team_id,header_name,header_value,enabled,sort_order) VALUES('header-a','a','X-Shared','source',1,0)");
+        ImportExportData exported=importer().exportTeam("a");assertEquals("2.2",exported.getVersion());assertEquals(1,exported.getApis().size());
+        assertEquals(Collections.singletonList("tag"),exported.getApiTags().get(api.getId()));
+        jdbc.update("INSERT INTO user_team VALUES('u','b','TEAM_ADMIN')");
+        jdbc.update("INSERT INTO global_header(id,team_id,header_name,header_value,enabled,sort_order) VALUES('header-b','b','X-Shared','target',1,0)");
+        ImportResult imported=importer().importApis("b",exported,"merge");assertEquals(1,imported.getImported());assertFalse(imported.getWarnings().isEmpty());
+        ApiDefinition target=apis.findByTeamId("b").get(0);List<String> tags=new ApiTagRepository(jdbc).findTagIdsByApiId(target.getId());
+        assertEquals(1,tags.size());assertNotEquals("tag",tags.get(0));assertEquals("Tag",new TagRepository(jdbc).findById(tags.get(0)).getName());
+        assertEquals("target",jdbc.queryForObject("SELECT header_value FROM global_header WHERE team_id='b'",String.class));
+    }
+
+    @Test void persistedSnapshotsDoNotDuplicateMegabyteLegacyResponseBodies() {
+        char[] chars=new char[1024*1024];Arrays.fill(chars,'x');String body=new String(chars);
+        ApiDefinition api=service.create(dto("/large-snapshot",body));
+        String snapshot=jdbc.queryForObject("SELECT snapshot_json FROM api_revision WHERE api_id=?",String.class,api.getId());
+        assertTrue(snapshot.length()<body.length()+20000,"snapshot should store legacy/main body as an internal reference, not a second megabyte copy");
+        String version=service.revisions(api.getId()).get(0).get("id").toString();service.update(api.getId(),dto("/large-snapshot","short"));
+        assertEquals(body,service.rollback(api.getId(),version,2L).getResponseBody());
+    }
+
+    @Test void missingBatchTargetsAndInvalidRandomImportsNeverReturnFakeSuccess() {
+        assertEquals(40402,assertThrows(BizException.class,()->service.batch("disable",Collections.singletonList("missing"),null,Collections.singletonMap("missing",1L))).getCode());
+        ImportExportData data=pack("/empty-random","body");data.getApis().get(0).setResponseMode("RANDOM");data.setApiResponses(Collections.emptyList());
+        assertEquals(40410,assertThrows(BizException.class,()->importer().importApis("a",data,"merge")).getCode());
+        assertEquals(0,apis.countByTeamId("a"));assertEquals(0,jdbc.queryForObject("SELECT COUNT(*) FROM api_revision",Integer.class));
+    }
+
+    private ImportExportService importer() {
+        return new ImportExportService(apis,responses,new GroupRepository(jdbc),new TagRepository(jdbc),new ApiTagRepository(jdbc),new GlobalHeaderRepository(jdbc),
+                mock(TeamService.class),permission(),new MockFileStorageService(temp.toString(),10485760L,new MockBlobRepository(jdbc)),service);
+    }
+    private ImportExportData pack(String path,String body) {
+        ImportExportData data=new ImportExportData();data.setApis(Collections.singletonList(sourceApi("source",path,body)));
+        com.mockhub.mock.model.entity.ApiResponse response=new com.mockhub.mock.model.entity.ApiResponse();response.setId("source-response");response.setApiId("source");
+        response.setActive(true);response.setName("Default");response.setResponseBody(body);response.setResponseCode(200);response.setContentType("application/json");
+        data.setApiResponses(Collections.singletonList(response));return data;
+    }
+    private ApiDefinition sourceApi(String id,String path,String body) {
+        ApiDefinition source=new ApiDefinition();source.setId(id);source.setTeamId("untrusted-source-team");source.setName(path);source.setType("REST");
+        source.setMethod("GET");source.setPath(path);source.setResponseCode(200);source.setContentType("application/json");source.setResponseBody(body);source.setEnabled(true);return source;
+    }
+
     private void injectRealTeamRepository(PermissionCheckerImpl permission) {
         // Exercise the real archive guard using this test database, never a mocked permission boundary.
         com.mockhub.system.repository.TeamRepository teams=new com.mockhub.system.repository.TeamRepository();
