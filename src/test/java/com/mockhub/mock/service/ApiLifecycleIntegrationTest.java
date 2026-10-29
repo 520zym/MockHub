@@ -48,6 +48,8 @@ class ApiLifecycleIntegrationTest {
         jdbc.update("INSERT INTO tag(id,team_id,name,color) VALUES('tag','a','Tag','#fff')");
         UserRepository users=new UserRepository(); ReflectionTestUtils.setField(users,"jdbcTemplate",jdbc);
         PermissionCheckerImpl permission=new PermissionCheckerImpl(); ReflectionTestUtils.setField(permission,"userRepository",users);
+        com.mockhub.system.repository.TeamRepository teams=new com.mockhub.system.repository.TeamRepository();
+        ReflectionTestUtils.setField(teams,"jdbcTemplate",jdbc); ReflectionTestUtils.setField(permission,"teamRepository",teams);
         apis=new ApiRepository(jdbc);responses=new ApiResponseRepository(jdbc);
         service=new ApiServiceImpl(apis,responses,new ApiTagRepository(jdbc),new GroupRepository(jdbc),new TagRepository(jdbc),
                 mock(TeamService.class),permission,json,mock(LogService.class),users,new MockFileStorageService(temp.toString()));
