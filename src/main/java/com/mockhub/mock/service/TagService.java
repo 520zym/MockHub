@@ -31,10 +31,12 @@ public class TagService {
     private final TagRepository tagRepository;
     private final ApiTagRepository apiTagRepository;
     private final PermissionChecker permissionChecker;
+    private final com.mockhub.mock.repository.ApiRepository apiRepository;
 
     public TagService(TagRepository tagRepository,
                       ApiTagRepository apiTagRepository,
-                      PermissionChecker permissionChecker) {
+                      PermissionChecker permissionChecker,com.mockhub.mock.repository.ApiRepository apiRepository) {
+        this.apiRepository=apiRepository;
         this.tagRepository = tagRepository;
         this.apiTagRepository = apiTagRepository;
         this.permissionChecker = permissionChecker;
@@ -60,6 +62,9 @@ public class TagService {
      * @return 创建后的标签对象（含生成的 ID）
      */
     public Tag create(Tag tag) {
+        return apiRepository.write(() -> createInternal(tag));
+    }
+    private Tag createInternal(Tag tag) {
         permissionChecker.checkTeamWrite(tag.getTeamId());
 
         tag.setId(UUID.randomUUID().toString());
@@ -80,6 +85,9 @@ public class TagService {
      * @return 更新后的标签对象
      */
     public Tag update(String id, Tag tag) {
+        return apiRepository.write(() -> updateInternal(id,tag));
+    }
+    private Tag updateInternal(String id, Tag tag) {
         Tag existing = tagRepository.findById(id);
         if (existing == null) {
             throw new BizException(40601, "标签不存在");
@@ -88,10 +96,13 @@ public class TagService {
         // 修改标签需要团队管理员权限
         permissionChecker.checkTeamWrite(existing.getTeamId());
 
+        List<com.mockhub.mock.model.entity.ApiDefinition> affected=apiRepository.findByTagIncludingDeleted(id);
+        apiRepository.claimMetadataRevisions(affected,existing.getTeamId());
         existing.setName(tag.getName());
         existing.setColor(tag.getColor());
 
         tagRepository.update(existing);
+        apiRepository.appendMetadataRevisions(affected,"TAG_UPDATE");
         log.info("更新标签: id={}, name={}, color={}", id, existing.getName(), existing.getColor());
 
         return existing;
@@ -105,6 +116,9 @@ public class TagService {
      * @param id 标签 ID
      */
     public void delete(String id) {
+        apiRepository.write(() -> { deleteInternal(id);return null; });
+    }
+    private void deleteInternal(String id) {
         Tag tag = tagRepository.findById(id);
         if (tag == null) {
             throw new BizException(40601, "标签不存在");
@@ -113,11 +127,14 @@ public class TagService {
         // 删除标签需要团队管理员权限
         permissionChecker.checkTeamWrite(tag.getTeamId());
 
+        List<com.mockhub.mock.model.entity.ApiDefinition> affected=apiRepository.findByTagIncludingDeleted(id);
+        apiRepository.claimMetadataRevisions(affected,tag.getTeamId());
         // 清理 api_tag 关联记录
         apiTagRepository.deleteByTagId(id);
         log.info("清除标签关联: tagId={}", id);
 
         tagRepository.deleteById(id);
+        apiRepository.appendMetadataRevisions(affected,"TAG_DELETE");
         log.info("删除标签: id={}, name={}", id, tag.getName());
     }
 }

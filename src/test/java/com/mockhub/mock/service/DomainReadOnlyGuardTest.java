@@ -96,7 +96,7 @@ class DomainReadOnlyGuardTest {
                 case "batch-enable": service.batch("enable", Collections.singletonList("api"), null); break;
                 case "batch-delete": service.batch("delete", Collections.singletonList("api"), null); break;
                 case "group-create": ApiGroup g = new ApiGroup(); g.setTeamId("a"); new GroupService(groups, apis, permission).create(g); break;
-                case "tag-create": Tag t = new Tag(); t.setTeamId("a"); new TagService(tags, apiTags, permission).create(t); break;
+                case "tag-create": Tag t = new Tag(); t.setTeamId("a"); new TagService(tags, apiTags, permission,apis).create(t); break;
                 case "variable-create": new CustomVariableService(variables, permission).createVariable("a", "test", ""); break;
                 case "headers": new GlobalHeaderService(headers, permission).replaceAll("a", Collections.emptyList()); break;
                 case "upload": new FileServerService(files, mock(TeamRepository.class), permission, temp.toString(), 1024).uploadManaged("a", null); break;

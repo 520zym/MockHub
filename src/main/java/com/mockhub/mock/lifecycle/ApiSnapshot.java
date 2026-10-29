@@ -18,6 +18,9 @@ public final class ApiSnapshot {
         Map<String, Object> config = new LinkedHashMap<String, Object>();
         for (String column : CONFIG_COLUMNS) if (api.containsKey(column)) config.put(column, api.get(column));
         snapshot.put("config", config);
+        Object groupId=config.get("group_id");
+        snapshot.put("group",groupId!=null && tableExists(conn,"api_group")
+                ? query(conn,"SELECT id,name,sort_order FROM api_group WHERE id=?",groupId):Collections.emptyList());
         snapshot.put("responses", query(conn, "SELECT * FROM api_response WHERE api_id = ? ORDER BY sort_order, id", apiId));
         snapshot.put("tags", tableExists(conn, "api_tag") && tableExists(conn, "tag")
                 ? query(conn, "SELECT t.id, t.name, t.color FROM api_tag a JOIN tag t ON t.id=a.tag_id WHERE a.api_id = ? ORDER BY t.id", apiId)
@@ -39,6 +42,9 @@ public final class ApiSnapshot {
                 try(PreparedStatement blob=conn.prepareStatement("INSERT OR IGNORE INTO mock_blob(file_path,team_id) VALUES(?,?)")) {
                     blob.setString(1,path.toString()); blob.setString(2,teamId); blob.executeUpdate();
                 }
+                if(!path.toString().startsWith(teamId+"/")
+                        || query(conn,"SELECT team_id FROM mock_blob WHERE file_path=? AND team_id=?",path.toString(),teamId).isEmpty())
+                    throw new SQLException("Cross-team attachment reference: "+path);
                 for(String[] owner:new String[][]{{"API",apiId},{"REVISION",revisionId}}) {
                     try(PreparedStatement ref=conn.prepareStatement("INSERT OR IGNORE INTO mock_blob_ref(file_path,owner_type,owner_id) VALUES(?,?,?)")) {
                         ref.setString(1,path.toString());ref.setString(2,owner[0]);ref.setString(3,owner[1]);ref.executeUpdate();

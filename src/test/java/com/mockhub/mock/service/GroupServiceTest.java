@@ -47,6 +47,7 @@ class GroupServiceTest {
     void setUp() {
         groupRepository = mock(GroupRepository.class);
         apiRepository = mock(ApiRepository.class);
+        when(apiRepository.write(org.mockito.ArgumentMatchers.any())).thenAnswer(invocation -> ((java.util.function.Supplier<?>)invocation.getArgument(0)).get());
         permissionChecker = mock(PermissionChecker.class);
         groupService = new GroupService(groupRepository, apiRepository, permissionChecker);
     }

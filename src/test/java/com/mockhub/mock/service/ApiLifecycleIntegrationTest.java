@@ -209,7 +209,7 @@ class ApiLifecycleIntegrationTest {
     }
 
     @Test void rollbackRestoresSoapRulesBodyAndFilesWithoutRestoringCreatorCountersOrDeletedState() throws Exception {
-        MockFileStorageService storage=new MockFileStorageService(temp.toString());
+        MockFileStorageService storage=new MockFileStorageService(temp.toString(),10485760L,new MockBlobRepository(jdbc));
         MockFileStorageService.StoredMockFile file=storage.store("a","example.txt","text/plain",3,new java.io.ByteArrayInputStream(new byte[]{1,2,3}));
         ApiDefinitionDTO original=dto("/rollback","old");original.setType("SOAP");
         original.setSoapConfig(Collections.singletonMap("operations",Collections.singletonList(Collections.singletonMap("operationName","GetOld"))));
@@ -260,6 +260,59 @@ class ApiLifecycleIntegrationTest {
             if(restored.equals("restored")) { assertNotNull(apis.findById(api.getId()));assertFalse(apis.findById(api.getId()).isEnabled()); }
             else assertNull(apis.findIncludingDeleted(api.getId()));
         } finally { go.countDown();pool.shutdownNow(); }
+    }
+
+    @Test void attachmentsRequireSameTeamLiveLeaseOrRetainedReferenceAndGcProtectsThem() throws Exception {
+        MockBlobRepository blobs=new MockBlobRepository(jdbc);
+        MockFileStorageService storage=new MockFileStorageService(temp.toString(),10485760L,blobs);
+        MockFileStorageService.StoredMockFile foreign=storage.store("b","foreign.txt","text/plain",1,new java.io.ByteArrayInputStream(new byte[]{1}));
+        ApiDefinitionDTO malicious=dto("/foreign","body");ApiResponseDTO response=malicious.getResponses().get(0);
+        response.setBodyType("FILE");response.setFilePath(foreign.getFilePath());response.setFileName("foreign.txt");response.setFileSize(1L);
+        assertEquals(40925,assertThrows(BizException.class,()->service.create(malicious)).getCode());
+        assertEquals(0,apis.countByTeamId("a"));
+        MockFileStorageService.StoredMockFile own=storage.store("a","own.txt","text/plain",1,new java.io.ByteArrayInputStream(new byte[]{2}));
+        response.setFilePath(own.getFilePath());response.setFileName("own.txt");
+        ApiDefinition api=service.create(malicious);
+        jdbc.update("UPDATE mock_blob SET lease_expires_at=0 WHERE file_path=?",own.getFilePath());
+        blobs.requireUsable("a",own.getFilePath());
+        service.update(api.getId(),dto("/foreign","text-now"));
+        assertTrue(responses.findAllFilePaths().contains(own.getFilePath()));
+        assertEquals(0,storage.deleteOrphanFiles(responses.findAllFilePaths()).getDeletedCount());
+        service.delete(api.getId(),2L);service.purge(api.getId(),3L);
+        assertEquals(40925,assertThrows(BizException.class,()->blobs.requireUsable("a",own.getFilePath())).getCode());
+        assertEquals(1,storage.deleteOrphanFiles(responses.findAllFilePaths()).getDeletedCount());
+        assertNotNull(storage.loadAsResource(foreign.getFilePath()),"another team's valid upload lease must survive GC");
+    }
+
+    @Test void expiredUnclaimedUploadLeaseIsRejectedAndCanBeGarbageCollected() throws Exception {
+        MockBlobRepository blobs=new MockBlobRepository(jdbc);MockFileStorageService storage=new MockFileStorageService(temp.toString(),10485760L,blobs);
+        MockFileStorageService.StoredMockFile file=storage.store("a","temporary.txt","text/plain",1,new java.io.ByteArrayInputStream(new byte[]{1}));
+        assertTrue(responses.findAllFilePaths().contains(file.getFilePath()));
+        jdbc.update("UPDATE mock_blob SET lease_expires_at=0 WHERE file_path=?",file.getFilePath());
+        assertThrows(BizException.class,()->blobs.requireUsable("a",file.getFilePath()));
+        MockFileMaintenanceService maintenance=new MockFileMaintenanceService(responses,storage,new com.mockhub.common.config.MockFileProperties());
+        assertEquals(1,maintenance.cleanOrphanFiles().getDeletedCount());
+    }
+
+    @Test void groupAndTagMutationsVersionEveryAffectedAggregateIncludingTrashAndRollBackOnHistoryFailure() {
+        GroupService groups=new GroupService(new GroupRepository(jdbc),apis,permission());
+        TagService tags=new TagService(new TagRepository(jdbc),new ApiTagRepository(jdbc),permission(),apis);
+        com.mockhub.mock.model.entity.ApiGroup group=new com.mockhub.mock.model.entity.ApiGroup();group.setTeamId("a");group.setName("Old group");groups.create(group);
+        ApiDefinitionDTO dto=dto("/metadata","body");dto.setGroupId(group.getId());ApiDefinition api=service.create(dto);
+        group.setName("New group");groups.update(group.getId(),group);assertEquals(2,apis.findById(api.getId()).getRevision());
+        com.mockhub.mock.model.entity.Tag tag=new com.mockhub.mock.model.entity.Tag();tag.setName("New tag");tag.setColor("#abc");
+        jdbc.execute("CREATE TRIGGER reject_metadata_history BEFORE INSERT ON api_revision WHEN NEW.action='TAG_UPDATE' "
+                + "BEGIN SELECT RAISE(ABORT,'metadata history failed'); END");
+        assertThrows(DataAccessException.class,()->tags.update("tag",tag));
+        assertEquals("Tag",jdbc.queryForObject("SELECT name FROM tag WHERE id='tag'",String.class));
+        assertEquals(2,apis.findById(api.getId()).getRevision());jdbc.execute("DROP TRIGGER reject_metadata_history");
+        tags.update("tag",tag);service.delete(api.getId(),3L);groups.delete(group.getId());tags.delete("tag");
+        assertEquals(6,apis.findIncludingDeleted(api.getId()).getRevision());assertEquals(6,service.revisions(api.getId()).size());
+        ApiDefinition restored=service.restore(api.getId(),6L,null);assertNull(restored.getGroupId());assertTrue(service.getById(api.getId()).getTags().isEmpty());
+    }
+    private PermissionCheckerImpl permission() {
+        UserRepository users=new UserRepository();ReflectionTestUtils.setField(users,"jdbcTemplate",jdbc);
+        PermissionCheckerImpl permission=new PermissionCheckerImpl();ReflectionTestUtils.setField(permission,"userRepository",users);return permission;
     }
 
     private ApiDefinitionDTO dto(String path,String body) {

@@ -241,6 +241,7 @@ public class ApiServiceImpl implements ApiService {
             teamIds = new ArrayList<String>();
             for (com.mockhub.system.model.entity.UserTeam relation
                     : userRepository.findTeamRolesByUserId(SecurityContextUtil.getCurrentUserId())) {
+                if(com.mockhub.common.model.enums.TeamRoleType.fromStored(relation.getRole())==null) continue;
                 String memberTeamId = relation.getTeamId();
                 if (memberTeamId != null && !memberTeamId.isEmpty() && !teamIds.contains(memberTeamId)) {
                     teamIds.add(memberTeamId);
@@ -994,6 +995,14 @@ public class ApiServiceImpl implements ApiService {
         // v1.4.3 新增：多启用 + 条件匹配前置校验，失败抛 BizException 由全局处理器转为 40410~40416 错误码
         ResponseValidator.validateDtos(responses, responseModes);
 
+        ApiDefinition owner=apiRepository.findById(apiId);
+        for(ApiResponseDTO response:responses) {
+            if("FILE".equalsIgnoreCase(response.getBodyType())) {
+                if(owner==null) throw new BizException(40402,"接口不存在");
+                apiRepository.requireFileReference(owner.getTeamId(),response.getFilePath());
+                fileStorageService.loadAsResource(response.getFilePath());
+            }
+        }
         List<ApiResponse> entities = new ArrayList<ApiResponse>();
         for (int i = 0; i < responses.size(); i++) {
             ApiResponseDTO dto = responses.get(i);
@@ -1031,7 +1040,7 @@ public class ApiServiceImpl implements ApiService {
         if(!SecurityContextUtil.isSuperAdmin()) {
             teams=new ArrayList<String>();
             for(com.mockhub.system.model.entity.UserTeam membership:userRepository.findTeamRolesByUserId(SecurityContextUtil.getCurrentUserId()))
-                teams.add(membership.getTeamId());
+                if(com.mockhub.common.model.enums.TeamRoleType.fromStored(membership.getRole())!=null) teams.add(membership.getTeamId());
             if(teams.isEmpty()) return PageResult.of(Collections.emptyList(),0L,page,size);
         }
         if(teamId!=null&&!teamId.isEmpty()) permissionChecker.checkTeamAccess(teamId);
@@ -1196,7 +1205,7 @@ public class ApiServiceImpl implements ApiService {
             return null;
         }
         try {
-            return objectMapper.writeValueAsString(obj);
+            return obj instanceof String?objectMapper.writeValueAsString(objectMapper.readTree((String)obj)):objectMapper.writeValueAsString(obj);
         } catch (JsonProcessingException e) {
             throw new BizException(40000, "SOAP配置无法序列化");
         }

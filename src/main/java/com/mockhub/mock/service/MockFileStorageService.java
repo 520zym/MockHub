@@ -33,13 +33,19 @@ public class MockFileStorageService {
 
     private final Path rootDir;
     private final long maxSizeBytes;
+    private final com.mockhub.mock.repository.MockBlobRepository blobs;
 
     @Autowired
     public MockFileStorageService(@Value("${data.path:./data}") String dataDir,
-                                  @Value("${mock.file.max-size-bytes:10485760}") long maxSizeBytes) {
+                                  @Value("${mock.file.max-size-bytes:10485760}") long maxSizeBytes,
+                                  com.mockhub.mock.repository.MockBlobRepository blobs) {
+        this.blobs=blobs;
         this.rootDir = Paths.get(dataDir, "files").toAbsolutePath().normalize();
         this.maxSizeBytes = maxSizeBytes;
     }
+
+    /** Low-level filesystem constructor for isolated storage tests; application injection always supplies the registry. */
+    public MockFileStorageService(String dataDir,long maxSizeBytes) { this(dataDir,maxSizeBytes,null); }
 
     public MockFileStorageService(String dataDir) {
         this(dataDir, 10L * 1024L * 1024L);
@@ -59,11 +65,14 @@ public class MockFileStorageService {
             String safeName = sanitizeFileName(file.getOriginalFilename());
             String storedName = UUID.randomUUID().toString() + "-" + safeName;
             Path teamDir = rootDir.resolve(teamId).normalize();
+            if(teamId.contains("/") || teamId.indexOf('\\')>=0 || !teamDir.startsWith(rootDir) || teamDir.equals(rootDir))
+                throw new BizException(40000,"非法团队文件路径");
             Files.createDirectories(teamDir);
             Path target = teamDir.resolve(storedName).normalize();
             if (!target.startsWith(rootDir)) {
                 throw new BizException(40000, "非法文件路径");
             }
+            registerLease(teamId,target);
             file.transferTo(target.toFile());
             String relativePath = rootDir.relativize(target).toString().replace('\\', '/');
             return new StoredMockFile(relativePath, safeName, file.getContentType(), file.getSize());
@@ -87,11 +96,14 @@ public class MockFileStorageService {
             String safeName = sanitizeFileName(originalFileName);
             String storedName = UUID.randomUUID().toString() + "-" + safeName;
             Path teamDir = rootDir.resolve(teamId).normalize();
+            if(teamId.contains("/") || teamId.indexOf('\\')>=0 || !teamDir.startsWith(rootDir) || teamDir.equals(rootDir))
+                throw new BizException(40000,"非法团队文件路径");
             Files.createDirectories(teamDir);
             Path target = teamDir.resolve(storedName).normalize();
             if (!target.startsWith(rootDir)) {
                 throw new BizException(40000, "非法文件路径");
             }
+            registerLease(teamId,target);
             Files.copy(inputStream, target, StandardCopyOption.REPLACE_EXISTING);
             long storedSize = Files.size(target);
             if (maxSizeBytes > 0 && storedSize > maxSizeBytes) {
@@ -103,6 +115,10 @@ public class MockFileStorageService {
         } catch (IOException e) {
             throw new BizException(50000, "文件保存失败");
         }
+    }
+
+    private void registerLease(String teamId,Path target) {
+        if(blobs!=null) blobs.registerLease(teamId,rootDir.relativize(target).toString().replace('\\','/'),System.currentTimeMillis()+60*60*1000L);
     }
 
     public Resource loadAsResource(String relativePath) {

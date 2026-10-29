@@ -116,6 +116,26 @@ public class ApiRepository {
                 now,actor,purgeAfter,id);
     }
 
+    public List<ApiDefinition> findByGroupIncludingDeleted(String groupId) {
+        return jdbcTemplate.query("SELECT * FROM api_definition WHERE group_id=?",ROW_MAPPER,groupId);
+    }
+    public List<ApiDefinition> findByTagIncludingDeleted(String tagId) {
+        return jdbcTemplate.query("SELECT a.* FROM api_definition a JOIN api_tag t ON t.api_id=a.id WHERE t.tag_id=?",ROW_MAPPER,tagId);
+    }
+    public void claimMetadataRevisions(List<ApiDefinition> apis,String teamId) {
+        for(ApiDefinition api:apis) {
+            if(!teamId.equals(api.getTeamId())) throw new com.mockhub.common.model.BizException(40102,"跨团队分组或标签关联无效");
+            if(jdbcTemplate.update("UPDATE api_definition SET revision=revision+1,updated_at=?,updated_by=? WHERE id=? AND revision=?",
+                    java.time.Instant.now().toString(),com.mockhub.common.util.SecurityContextUtil.getCurrentUserId(),api.getId(),api.getRevision())!=1)
+                throw com.mockhub.mock.lifecycle.ApiVersions.conflict();
+        }
+    }
+    public void appendMetadataRevisions(List<ApiDefinition> apis,String action) {
+        for(ApiDefinition api:apis) appendRevision(api.getId(),action,"WEB",null);
+    }
+
+    public void requireFileReference(String teamId,String path) { new MockBlobRepository(jdbcTemplate).requireUsable(teamId,path); }
+
     public List<java.util.Map<String,Object>> trash(List<String> teamIds,String teamId,int offset,int limit) {
         return lifecycle.trash(teamIds,teamId,offset,limit);
     }
