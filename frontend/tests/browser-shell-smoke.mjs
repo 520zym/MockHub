@@ -77,13 +77,13 @@ try {
   await visit('/login', 'document.querySelector(".login-card")')
   for (const width of [1440, 768, 375]) await screenshot('login', width, '.login-page')
   let saved = null
-  try { saved = JSON.parse(await readFile(path.join(output, 'local-credentials.json'), 'utf8')) } catch {}
+  try { saved = JSON.parse(await readFile(path.join(output, 'local-credentials.json'), 'utf8')); if (saved.dataDirectory !== state.dataDirectory) saved = null } catch {}
   await setInput('input[autocomplete="username"]', 'admin')
   await setInput('input[autocomplete="current-password"]', saved?.password || 'admin123')
   await button('登录')
   if (!saved) {
     await waitFor('document.querySelector(".password-note")', 'initial password required')
-    saved = { username: 'admin', password: 'Smoke#' + randomBytes(10).toString('hex') }
+    saved = { username: 'admin', password: 'Smoke#' + randomBytes(10).toString('hex'), dataDirectory: state.dataDirectory }
     await writeFile(path.join(output, 'local-credentials.json'), JSON.stringify(saved))
     await setInput('.el-dialog input[autocomplete="new-password"]', saved.password)
     await evaluate('(()=>{const e=[...document.querySelectorAll(".el-dialog input[autocomplete=new-password]")][1];e.value=' + JSON.stringify(saved.password) + ';e.dispatchEvent(new Event("input",{bubbles:true}))})()')
@@ -101,7 +101,7 @@ try {
   for (const width of [1440, 768, 375]) await screenshot('account', width, '.account-page')
   await visit('/account?tab=sessions', 'document.querySelector(".account-sessions") || document.body.innerText.includes("当前会话")')
   check('current real session is visible', (await api('/me/sessions', 'GET', undefined, token)).some(s => s.current))
-  const other = await api('/auth/login', 'POST', saved)
+  const other = await api('/auth/login', 'POST', { username: saved.username, password: saved.password })
   const sessions = await api('/me/sessions', 'GET', undefined, token)
   const otherSession = sessions.find(s => !s.current)
   check('second login creates a separate durable session', !!otherSession)
