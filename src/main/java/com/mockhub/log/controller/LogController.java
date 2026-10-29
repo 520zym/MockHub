@@ -42,6 +42,11 @@ public class LogController {
         return Result.ok(logService.getOperationLogs(teamId, page, size));
     }
 
+    @GetMapping("/request/{id}")
+    public Result<RequestLog> getRequestLog(@org.springframework.web.bind.annotation.PathVariable String id) {
+        return Result.ok(logService.getRequestLog(id));
+    }
+
     /**
      * 分页查询请求日志
      *

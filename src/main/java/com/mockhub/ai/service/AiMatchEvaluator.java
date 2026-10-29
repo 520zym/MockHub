@@ -129,6 +129,26 @@ public class AiMatchEvaluator {
         }
     }
 
+    /** Privacy placeholders are unknown evidence, not literal values that can produce a false MISS. */
+    public boolean dependsOnRedactedInput(MatchRule rule,String bodyJson,String paramsJson,String headersJson){
+        if(rule==null || rule.isEmpty())return false;
+        JsonNode body=parseJson(bodyJson),params=parseJson(paramsJson),headers=parseJson(headersJson);
+        for(MatchCondition condition:rule.getConditions()){
+            if(condition==null)continue;
+            if(com.mockhub.log.service.LogPrivacySanitizer.sensitivePath(condition.getPath()) || com.mockhub.log.service.LogPrivacySanitizer.hasRedaction(condition.getValue()))return true;
+            String source=condition.getSource(),raw="BODY".equalsIgnoreCase(source)?bodyJson:"QUERY".equalsIgnoreCase(source)?paramsJson:headersJson;
+            if(raw!=null && (raw.contains("REDACTED_UNSTRUCTURED") || raw.contains("REDACTED_INVALID")))return true;
+            JsonNode actual=null;
+            if("BODY".equalsIgnoreCase(source) && condition.getPath()!=null)actual=navigate(body,condition.getPath());
+            else if("QUERY".equalsIgnoreCase(source))actual=params==null?null:params.get(condition.getPath());
+            else if("HEADER".equalsIgnoreCase(source) && headers!=null && headers.isObject()){
+                java.util.Iterator<java.util.Map.Entry<String,JsonNode>> entries=headers.fields();while(entries.hasNext()){java.util.Map.Entry<String,JsonNode> entry=entries.next();if(entry.getKey().equalsIgnoreCase(condition.getPath())){actual=entry.getValue();break;}}
+            }
+            if(actual!=null && com.mockhub.log.service.LogPrivacySanitizer.hasRedaction(actual.toString()))return true;
+        }
+        return false;
+    }
+
     private String extract(String source, String path, JsonNode body, JsonNode params, JsonNode headers) {
         if (path == null || path.isEmpty()) {
             return null;

@@ -41,6 +41,11 @@ public class RequestLog {
     /** 创建时间，ISO 格式 */
     private String createdAt;
 
+    /** Presentation metadata only, never stored or used by live response matching. */
+    private boolean redacted;
+    public boolean isRedacted(){return redacted;}
+    public void setRedacted(boolean value){redacted=value;}
+
     public RequestLog() {
     }
 
