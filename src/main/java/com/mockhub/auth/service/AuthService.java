@@ -170,8 +170,9 @@ public class AuthService {
             TeamRole item = new TeamRole(team.getId(), team.getName(), team.getIdentifier(), role);
             item.setMembershipRole(role);
             item.setAccessMode(role == null ? "SYSTEM_MAINTENANCE" : "MEMBER");
-            boolean admin = systemAdmin || "TEAM_ADMIN".equals(role);
-            boolean write = admin || "EDITOR".equals(role);
+            item.setTeamStatus(team.getStatus());
+            boolean admin = !team.isArchived() && (systemAdmin || "TEAM_ADMIN".equals(role));
+            boolean write = !team.isArchived() && (admin || "EDITOR".equals(role));
             Map<String, Boolean> capabilities = new LinkedHashMap<String, Boolean>();
             capabilities.put("read", true); capabilities.put("write", write);
             capabilities.put("manageMembers", admin); capabilities.put("manageTeam", admin);

@@ -21,6 +21,9 @@ public class TeamRole {
     private String role;
     private String membershipRole;
     private String accessMode;
+    private String teamStatus;
+    public String getTeamStatus() { return teamStatus; }
+    public void setTeamStatus(String status) { this.teamStatus = status; }
     private java.util.Map<String, Boolean> capabilities;
 
     public String getMembershipRole() { return membershipRole; }

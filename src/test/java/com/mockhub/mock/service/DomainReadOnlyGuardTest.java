@@ -57,6 +57,10 @@ class DomainReadOnlyGuardTest {
         users = mock(UserRepository.class);
         permission = new PermissionCheckerImpl();
         ReflectionTestUtils.setField(permission, "userRepository", users);
+        com.mockhub.system.repository.TeamRepository teams = mock(com.mockhub.system.repository.TeamRepository.class);
+        com.mockhub.system.model.entity.Team activeTeam = new com.mockhub.system.model.entity.Team();
+        when(teams.findById(anyString())).thenReturn(activeTeam);
+        ReflectionTestUtils.setField(permission, "teamRepository", teams);
         when(users.findUserTeamRole("u", "a")).thenReturn("VIEWER");
         Map<String,Object> details = new HashMap<String,Object>();
         details.put("userId", "u"); details.put("globalRole", "USER");

@@ -28,6 +28,10 @@ class TeamPermissionMatrixTest {
         users = mock(UserRepository.class);
         checker = new PermissionCheckerImpl();
         ReflectionTestUtils.setField(checker, "userRepository", users);
+        com.mockhub.system.repository.TeamRepository teams = mock(com.mockhub.system.repository.TeamRepository.class);
+        com.mockhub.system.model.entity.Team activeTeam = new com.mockhub.system.model.entity.Team();
+        when(teams.findById(anyString())).thenReturn(activeTeam);
+        ReflectionTestUtils.setField(checker, "teamRepository", teams);
         login("USER");
     }
     @AfterEach void clean() { SecurityContextHolder.clearContext(); }
@@ -92,6 +96,19 @@ class TeamPermissionMatrixTest {
         assertEquals(TeamRoleType.EDITOR, TeamRoleType.fromStored("MEMBER"));
         assertFalse(TeamRoleType.fromStored("MEMBER").canAdminister());
         assertNull(TeamRoleType.fromStored("SUPER_ADMIN"));
+    }
+
+    @Test void archiveFreezesWritesEvenForSystemMaintenanceButKeepsReads() {
+        com.mockhub.system.repository.TeamRepository teams = (com.mockhub.system.repository.TeamRepository)
+                ReflectionTestUtils.getField(checker, "teamRepository");
+        com.mockhub.system.model.entity.Team archived = new com.mockhub.system.model.entity.Team();
+        archived.setStatus("ARCHIVED"); when(teams.findById("a")).thenReturn(archived);
+        when(users.findUserTeamRole("u", "a")).thenReturn("EDITOR");
+        checker.checkTeamAccess("a");
+        assertEquals(40903, assertThrows(BizException.class, () -> checker.checkTeamWrite("a")).getCode());
+        login("SUPER_ADMIN"); checker.checkTeamAccess("a"); checker.checkSystemAdmin();
+        assertEquals(40903, assertThrows(BizException.class, () -> checker.checkTeamWrite("a")).getCode());
+        assertEquals(40903, assertThrows(BizException.class, () -> checker.checkTeamAdmin("a")).getCode());
     }
 
     private void login(String globalRole) {

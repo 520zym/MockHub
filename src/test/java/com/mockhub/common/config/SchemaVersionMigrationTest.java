@@ -198,7 +198,7 @@ class SchemaVersionMigrationTest {
 
         runMigration();
 
-        assertEquals(9, readSchemaVersion(), "全新库应记录 schema_version=7（v1 至 v7）");
+        assertEquals(9, readSchemaVersion(), "全新库应记录 schema_version=9（v1 至 v9）");
         assertTrue(columnExists("api_definition", "description"),
                 "description 列应已存在（全新库 schema.sql 已建出）");
         assertTrue(columnExists("api_definition", "group_id"),
@@ -247,12 +247,12 @@ class SchemaVersionMigrationTest {
         execSql("INSERT INTO schema_version(version,description) VALUES(7,'old v7')");
         runMigration();
         schema.invoke(config, jdbc);
-        assertEquals(8, readSchemaVersion());
+        assertEquals(9, readSchemaVersion());
         assertEquals("ACTIVE", jdbc.queryForObject("SELECT status FROM user WHERE id='legacy'", String.class));
         assertEquals(0, jdbc.queryForObject("SELECT auth_version FROM user WHERE id='legacy'", Integer.class));
         assertTrue(columnExists("auth_session", "expires_at"));
         runMigration();
-        assertEquals(2, countSchemaVersionRows());
+        assertEquals(3, countSchemaVersionRows());
     }
 
     @Test
@@ -328,7 +328,7 @@ class SchemaVersionMigrationTest {
                 "api_response.body_type 列应在 v4 迁移后存在");
         assertTrue(columnExists("api_definition", "response_mode"),
                 "api_definition.response_mode 列应在 v5 迁移后存在");
-        assertEquals(9, readSchemaVersion(), "迁移完成后 schema_version 应记为 6（v1 至 v7）");
+        assertEquals(9, readSchemaVersion(), "迁移完成后 schema_version 应记为 9（v1 至 v9）");
     }
 
     // ---------- case3：已跑过 soap-mock-enhancement 的本地库 ----------

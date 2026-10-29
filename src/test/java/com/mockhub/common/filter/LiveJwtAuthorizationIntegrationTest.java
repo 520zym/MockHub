@@ -100,6 +100,9 @@ class LiveJwtAuthorizationIntegrationTest {
         ReflectionTestUtils.setField(users, "jdbcTemplate", jdbc);
         permission = new PermissionCheckerImpl();
         ReflectionTestUtils.setField(permission, "userRepository", users);
+        com.mockhub.system.repository.TeamRepository guardTeams = new com.mockhub.system.repository.TeamRepository();
+        ReflectionTestUtils.setField(guardTeams, "jdbcTemplate", jdbc);
+        ReflectionTestUtils.setField(permission, "teamRepository", guardTeams);
         jwt = new JwtUtil();
         jwt.init();
         AuthSessionRepository sessions = new AuthSessionRepository(jdbc);
