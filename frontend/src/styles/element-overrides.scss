@@ -627,6 +627,89 @@
   }
 }
 
+// Element Plus tints plain/text buttons with the light palette, which drops to 1.9–3.6:1
+// on the button's own background. Text buttons and links use the text-safe ramp.
+.el-button--warning.is-text,
+.el-button--warning.is-link {
+  color: var(--app-text-warning);
+}
+
+.el-button--danger.is-text,
+.el-button--danger.is-link {
+  color: var(--app-text-danger);
+}
+
+.el-button--success.is-text,
+.el-button--success.is-link {
+  color: var(--app-text-success);
+}
+
+// Text and link buttons are used as inline row actions; keep a real 28px target.
+.el-button.is-text,
+.el-button.is-link {
+  min-height: 28px;
+}
+
+// An alert description is body copy, not a tinted signal colour.
+.el-alert .el-alert__description,
+.el-alert--info.is-light .el-alert__description,
+.el-alert--success.is-light .el-alert__description,
+.el-alert--warning.is-light .el-alert__description,
+.el-alert--error.is-light .el-alert__description {
+  color: var(--app-text-secondary);
+}
+
+.el-button.is-disabled,
+.el-button.is-disabled:hover,
+.el-button.is-disabled:focus {
+  color: var(--app-text-disabled);
+}
+
+// Plain buttons inherit the light palette for their label; use the text-safe ramp.
+.el-button--success.is-plain:not(.is-disabled) {
+  color: var(--app-text-success);
+}
+
+.el-button--warning.is-plain:not(.is-disabled) {
+  color: var(--app-text-warning);
+}
+
+.el-button--danger.is-plain:not(.is-disabled) {
+  color: var(--app-text-danger);
+}
+
+.el-button.is-plain.is-disabled {
+  color: var(--app-text-disabled);
+}
+
+// Element Plus draws a 14px checkbox and a 20px switch. The visual size stays, but the
+// clickable label must still meet a 28px desktop / 36px mobile hit area.
+.el-checkbox,
+.el-radio {
+  min-height: 28px;
+  min-width: 28px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.el-checkbox__inner,
+.el-radio__inner {
+  flex-shrink: 0;
+}
+
+.el-switch {
+  min-height: 28px;
+  align-items: center;
+}
+
+@media (max-width: 600px) {
+  .el-checkbox,
+  .el-radio,
+  .el-switch {
+    min-height: 36px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .el-button,
   .el-input__wrapper,

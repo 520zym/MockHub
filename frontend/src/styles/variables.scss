@@ -10,8 +10,22 @@
   --app-bg-disabled: #E9EDF2;
   --app-text-primary: #17191D;
   --app-text-regular: #3B4048;
-  --app-text-secondary: #6F757E;
+  // 1440 画板上的说明文字在这个亮度下只有 4.1:1（页面底）／4.6:1（白底），
+  // 正文级别的说明必须 ≥4.5:1，因此统一压深到 5.3:1／6.0:1。
+  --app-text-secondary: #5D6470;
   --app-text-disabled: #626B76;
+  // 更弱的说明色也保持可读；低于此亮度不再用于承载信息。
+  --app-text-muted: #5F6672;
+  // 语义色用于文字时需另取深色档位；原色只适合做填充/描边。
+  --app-text-success: #256F55;
+  --app-text-danger: #933B36;
+  --app-text-warning: #8A6423;
+  --app-text-accent: #2A53AD;
+  --app-text-violet: #5B3FA8;
+  --app-bg-violet: #F1EDFD;
+  // 字号下限：说明文字 12px，等宽角标/表头最密处不低于 11px。
+  --app-font-caption: 12px;
+  --app-font-micro: 11px;
   --app-text-inverse: #FFFFFF;
   --app-primary: #17191D;
   --app-primary-hover: #30343B;
@@ -71,7 +85,7 @@
   --el-color-error-light-8: var(--el-color-danger-light-8);
   --el-color-error-light-9: var(--el-color-danger-light-9);
   --el-color-error-dark-2: var(--el-color-danger-dark-2);
-  --el-color-info: #6F757E;
+  --el-color-info: #5D6470;
   --el-color-info-light-3: #9A9EA5;
   --el-color-info-light-5: #B7BABF;
   --el-color-info-light-7: #D4D6D8;
@@ -82,7 +96,7 @@
   --el-text-color-primary: var(--app-text-primary);
   --el-text-color-regular: var(--app-text-regular);
   --el-text-color-secondary: var(--app-text-secondary);
-  --el-text-color-placeholder: #6B7280;
+  --el-text-color-placeholder: #5F6672;
   --el-text-color-disabled: var(--app-text-disabled);
   --el-bg-color: var(--app-bg-surface);
   --el-bg-color-page: var(--app-bg-page);
@@ -139,11 +153,11 @@ $primary-dark: #000000;
 $success-color: #2E8B6A;
 $warning-color: #A5782D;
 $danger-color: #B84A44;
-$info-color: #6F757E;
+$info-color: #5D6470;
 $text-primary: #17191D;
 $text-regular: #3B4048;
 $text-secondary: #6F757E;
-$text-placeholder: #6B7280;
+$text-placeholder: #5F6672;
 $bg-page: #EEF1F4;
 $radius-card: 16px;
 $radius-button: 10px;

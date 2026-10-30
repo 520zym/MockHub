@@ -194,6 +194,38 @@ textarea {
   }
 }
 
+// The approved mockup is a 1440px desktop board. Its 9–10px captions are board
+// labels, not product type — at 1:1 they are unreadable. Hierarchy now comes from
+// weight and colour: informational text is never below 12px, and the densest
+// monogram/table caption never below 11px.
+:where(.app-page, .page-container) {
+  font-size: 14px;
+}
+
+:where(small, .app-caption) {
+  font-size: var(--app-font-caption);
+}
+
+:where(th) {
+  font-size: var(--app-font-caption);
+}
+
+@media (max-width: 600px) {
+  :where(th) {
+    font-size: var(--app-font-micro);
+  }
+}
+
+// wangEditor ships light-on-light defaults; theme its chrome to our text ramp.
+.rich-text-toolbar .w-e-bar-item button,
+.rich-text-toolbar .w-e-select-list {
+  color: var(--app-text-regular);
+}
+
+.rich-text-editor .w-e-text-placeholder {
+  color: var(--app-text-muted);
+}
+
 // Never reset nested editor typography, SVG strokes, filters or positioned widget internals.
 // Monaco and wangEditor own their rendering and scroll behavior.
 @media (max-width: 900px) {

@@ -69,27 +69,27 @@ async function accountCommand(command) {
 .sidebar { min-height: 0; min-width: 0; display: flex; flex-direction: column; background: var(--app-bg-surface); border-radius: 20px; padding: 16px 12px 10px; overflow: hidden; color: var(--app-text-primary); }
 .sidebar__brand { display: flex; align-items: center; gap: 9px; text-decoration: none; color: inherit; margin: 4px 8px 25px; }
 .sidebar__mark { width: 28px; height: 28px; display: grid; place-items: center; background: var(--app-primary); color: #fff; border-radius: 9px; font-weight: 700; flex-shrink: 0; }
-.sidebar__brand b { font-size: 17px; letter-spacing: -.4px; } .sidebar__brand small { margin-left: auto; font-size: 9px; color: var(--app-text-secondary); }
-.sidebar__scope { color: var(--app-text-secondary); font-size: 9px; margin: 0 10px 7px; }
+.sidebar__brand b { font-size: 17px; letter-spacing: -.4px; } .sidebar__brand small { margin-left: auto; font-size: 12px; color: var(--app-text-secondary); }
+.sidebar__scope { color: var(--app-text-secondary); font-size: 12px; margin: 0 10px 7px; }
 .sidebar__team-dropdown { display: block; width: 100%; }
 .sidebar__team { display: flex; align-items: center; gap: 9px; border: 0; border-radius: 12px; padding: 11px 10px; background: var(--app-bg-control); width: 100%; color: inherit; cursor: pointer; text-align: left; min-height: 58px; }
-.sidebar__team:disabled { cursor: default; } .sidebar__team-mark { font: 600 9px var(--app-font-mono); background: var(--app-bg-surface); padding: 7px 5px; border-radius: 7px; color: var(--app-accent); min-width: 30px; text-align: center; }
-.sidebar__team-text { display: flex; flex-direction: column; flex: 1; min-width: 0; gap: 4px; } .sidebar__team-text b { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .sidebar__team-text small { font-size: 10px; color: var(--app-text-secondary); }
+.sidebar__team:disabled { cursor: default; } .sidebar__team-mark { font: 600 10px var(--app-font-mono); background: var(--app-bg-surface); padding: 7px 5px; border-radius: 7px; color: var(--app-accent); min-width: 30px; text-align: center; }
+.sidebar__team-text { display: flex; flex-direction: column; flex: 1; min-width: 0; gap: 4px; } .sidebar__team-text b { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .sidebar__team-text small { font-size: 12px; color: var(--app-text-secondary); }
 .sidebar__scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding-top: 12px; }
-.sidebar__label { color: var(--app-text-secondary); font-size: 9px; padding: 8px 10px 7px; }
+.sidebar__label { color: var(--app-text-secondary); font-size: 12px; padding: 8px 10px 7px; }
 .sidebar__nav { display: flex; flex-direction: column; gap: 4px; }
 .sidebar__nav-item { display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 12px; margin: 2px 0; border-radius: 10px; text-decoration: none; color: var(--app-text-secondary); font-size: 12px; white-space: nowrap; }
 .sidebar__nav-item:hover { background: var(--app-bg-control); color: var(--app-text-primary); } .sidebar__nav-item.is-active { background: var(--app-primary); color: white; }
-.sidebar__count { margin-left: auto; font: 10px var(--app-font-mono); opacity: .7; }
-.sidebar__foot { margin-top: auto; padding-top: 12px; } .sidebar__notice { display: flex; align-items: center; gap: 7px; margin: 0 10px 14px; font-size: 9px; color: var(--app-text-secondary); } .sidebar__notice i { width: 5px; height: 5px; border-radius: 50%; background: var(--app-accent); }
+.sidebar__count { margin-left: auto; font: 11px var(--app-font-mono); opacity: .85; }
+.sidebar__foot { margin-top: auto; padding-top: 12px; } .sidebar__notice { display: flex; align-items: center; gap: 7px; margin: 0 10px 14px; font-size: 12px; line-height: 1.5; color: var(--app-text-secondary); } .sidebar__notice i { width: 5px; height: 5px; border-radius: 50%; background: var(--app-accent); }
 .sidebar__account-dropdown { width: 100%; } .sidebar__account { display: flex; align-items: center; gap: 9px; width: 100%; border: 0; background: transparent; padding: 8px; border-radius: 11px; cursor: pointer; text-align: left; color: inherit; } .sidebar__account:hover,.sidebar__account.is-current { background: var(--app-bg-selected); }
 .sidebar__avatar { width: 30px; height: 30px; border-radius: 9px; background: var(--app-bg-control); display: grid; place-items: center; font-size: 12px; font-weight: 600; flex-shrink: 0; }
-.sidebar__account-text { display: flex; flex: 1; flex-direction: column; gap: 3px; min-width: 0; } .sidebar__account-text b { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .sidebar__account-text small { font-size: 9px; color: var(--app-text-secondary); }
+.sidebar__account-text { display: flex; flex: 1; flex-direction: column; gap: 3px; min-width: 0; } .sidebar__account-text b { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .sidebar__account-text small { font-size: 12px; color: var(--app-text-secondary); }
 .sidebar--collapsed { padding: 16px 6px 10px; } .sidebar--collapsed .sidebar__copy { display: none; } .sidebar--collapsed .sidebar__brand { margin: 4px auto 25px; } .sidebar--collapsed .sidebar__team { padding: 7px 0; justify-content: center; } .sidebar--collapsed .sidebar__nav-item { justify-content: center; padding: 0; } .sidebar--collapsed .sidebar__account { justify-content: center; padding: 6px 0; }
 @media(max-width: 900px) { .sidebar { padding: 16px 6px 10px; } .sidebar__copy { display: none; } .sidebar__brand { margin: 4px auto 25px; } .sidebar__team { padding: 7px 0; justify-content: center; } .sidebar__nav-item { justify-content: center; padding: 0; } .sidebar__account { justify-content: center; padding: 6px 0; } }
 </style>
 <style>
 .team-switch-menu { min-width: 245px; } .team-switch-menu .el-dropdown-menu__item { gap: 10px; padding-top: 9px; padding-bottom: 9px; }
-.switch-team__code { font: 10px var(--app-font-mono); color: var(--app-accent); background: var(--app-bg-control); border-radius: 6px; padding: 5px; min-width: 38px; text-align: center; }
-.switch-team__info { display: flex; flex: 1; flex-direction: column; gap: 3px; } .switch-team__info b { font-size: 11px; font-weight: 600; } .switch-team__info small { font-size: 10px; color: var(--app-text-secondary); }
+.switch-team__code { font: 11px var(--app-font-mono); color: var(--app-accent); background: var(--app-bg-control); border-radius: 6px; padding: 5px; min-width: 38px; text-align: center; }
+.switch-team__info { display: flex; flex: 1; flex-direction: column; gap: 3px; } .switch-team__info b { font-size: 12px; font-weight: 600; } .switch-team__info small { font-size: 12px; color: var(--app-text-secondary); }
 </style>

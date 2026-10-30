@@ -26,9 +26,9 @@ function refresh() { window.dispatchEvent(new CustomEvent('mockhub:permissions-c
 .topbar__left,.topbar__right { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .topbar__toggle { width: 30px; height: 30px; border: 0; background: var(--app-bg-control); border-radius: 9px; color: var(--app-text-secondary); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .topbar__breadcrumb { display: flex; align-items: center; gap: 9px; min-width: 0; font-size: 12px; } .topbar__breadcrumb span { color: var(--app-text-secondary); } .topbar__breadcrumb b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.topbar__scope { padding: 4px 8px; background: var(--app-bg-control); border-radius: 7px; font-size: 10px; white-space: nowrap; color: var(--app-text-secondary); }
+.topbar__scope { padding: 4px 8px; background: var(--app-bg-control); border-radius: 7px; font-size: 12px; white-space: nowrap; color: var(--app-text-secondary); }
 .topbar__search { display: flex; gap: 8px; align-items: center; background: var(--app-bg-control); border-radius: 9px; padding: 7px 10px; color: var(--app-text-secondary); }
-.topbar__search input { border: 0; background: transparent; outline: none; width: 180px; min-width: 0; font: inherit; font-size: 11px; color: var(--app-text-primary); }
+.topbar__search input { border: 0; background: transparent; outline: none; width: 180px; min-width: 0; font: inherit; font-size: 12px; color: var(--app-text-primary); }
 @media(max-width: 1000px) { .topbar__scope { display: none; } .topbar__search input { width: 130px; } }
 @media(max-width: 650px) { .topbar { padding: 0 10px; } .topbar__search { display: none; } .topbar__breadcrumb > span:first-child { display: none; } }
 </style>
