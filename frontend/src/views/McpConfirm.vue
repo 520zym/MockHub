@@ -285,9 +285,9 @@ h1 { font-size: 22px; line-height: 1.5; font-weight: 600; }
 .mcp-card__title-wrap { flex: 1; min-width: 0; }
 h2 { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 16px; line-height: 1.7; font-weight: 600; overflow-wrap: anywhere; }
 .mcp-card__title-wrap p { margin-top: 4px; font-size: 12px; line-height: 1.7; color: var(--app-text-secondary, #6F757E); overflow-wrap: anywhere; }
-.mcp-status, .mcp-mode, .mcp-response__state { display: inline-block; padding: 3px 7px; border-radius: 6px; color: var(--app-accent, #3568D4); background: var(--app-bg-control, #F4F6F9); font-size: 12px; line-height: 1.5; font-weight: 500; }
+.mcp-status, .mcp-mode, .mcp-response__state { display: inline-block; padding: 4px 8px; border-radius: 6px; color: var(--app-text-accent, #2A53AD); background: var(--app-bg-control, #F4F6F9); font-size: 12px; line-height: 1.5; font-weight: 500; }
 .is-muted { color: var(--app-text-secondary, #6F757E); }
-.is-done { color: #256F55; }
+.is-done { color: var(--app-text-success, #256F55); }
 .mcp-card__body { display: flex; flex-direction: column; gap: 16px; min-width: 0; padding: 0 22px 22px; }
 .mcp-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .mcp-k { font-size: 12px; line-height: 1.7; color: var(--app-text-secondary, #6F757E); }
@@ -300,9 +300,9 @@ h3 { font-size: 14px; font-weight: 500; line-height: 1.8; }
 .mcp-response { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 14px; border: 0; border-radius: 12px; background: var(--app-bg-control, #F4F6F9); }
 .mcp-response__head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; font-size: 12px; overflow-wrap: anywhere; }
 h4 { max-width: 100%; font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }
-.mcp-response__index { display: grid; place-items: center; flex-shrink: 0; min-width: 22px; height: 22px; border-radius: 6px; color: var(--app-accent, #3568D4); background: var(--app-bg-surface, #FFFFFF); font-size: 12px; }
+.mcp-response__index { display: grid; place-items: center; flex-shrink: 0; min-width: 24px; height: 24px; border-radius: 6px; color: var(--app-text-accent, #2A53AD); background: var(--app-bg-surface, #FFFFFF); font-size: 12px; }
 .mcp-response__conditions, details { font-size: 12px; line-height: 1.8; overflow-wrap: anywhere; color: var(--app-text-regular, #3B4048); }
-summary { cursor: pointer; color: var(--app-accent, #3568D4); }
+summary { cursor: pointer; color: var(--app-text-accent, #2A53AD); }
 .mcp-preview { min-width: 0; max-width: 100%; max-height: 320px; margin: 0; padding: 12px; border: 0; border-radius: 10px; overflow: auto; overscroll-behavior: contain; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--app-text-regular, #3B4048); background: var(--app-bg-control, #F4F6F9); font: 12px/1.8 var(--app-font-mono, Menlo, monospace); }
 .mcp-response .mcp-preview { background: var(--app-bg-surface, #FFFFFF); }
 .mcp-muted { font-size: 12px; line-height: 1.8; color: var(--app-text-secondary, #6F757E); overflow-wrap: anywhere; }
@@ -310,10 +310,10 @@ summary { cursor: pointer; color: var(--app-accent, #3568D4); }
 .mcp-state { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; padding: 28px; font-size: 14px; line-height: 1.8; overflow-wrap: anywhere; }
 .mcp-confirm-page :deep(.el-button) { max-width: 100%; height: auto; min-height: 36px; padding: 8px 14px; border: 0; background: var(--app-bg-control, #F4F6F9); box-shadow: none; white-space: normal; }
 .mcp-confirm-page :deep(.el-button + .el-button) { margin-left: 0; }
-.mcp-confirm-page :deep(.el-button--primary) { color: #FFFFFF; background: var(--app-primary, #17191D); }
+.mcp-confirm-page :deep(.el-button--primary) { color: var(--app-text-inverse, #FFFFFF); background: var(--app-primary, #17191D); }
 .mcp-confirm-page :deep(.el-button--primary:not(.is-disabled):hover) { background: var(--app-primary-hover, #30343B); }
 .mcp-confirm-page :deep(.el-button.is-disabled) { color: var(--app-text-disabled, #626B76); background: var(--app-bg-disabled, #E9EDF2); }
-.mcp-confirm-page :deep(.el-button.is-text) { color: var(--app-accent, #3568D4); background: var(--app-bg-surface, #FFFFFF); }
+.mcp-confirm-page :deep(.el-button.is-text) { color: var(--app-text-accent, #2A53AD); background: var(--app-bg-surface, #FFFFFF); }
 .mcp-confirm-page :deep(.el-alert) { border: 0; box-shadow: none; }
 .mcp-confirm-page :deep(.el-button:focus-visible), .mcp-preview:focus-visible, summary:focus-visible { outline: 2px solid var(--app-focus-color, #3568D4); outline-offset: 2px; }
 :global(.el-message-box.mcp-action-confirm) { max-width: calc(100vw - 32px); border: 0; box-shadow: none; background: var(--app-bg-surface, #FFFFFF); }

@@ -25,32 +25,32 @@
     <p v-if="actionError" class="resource-error" role="alert">{{ actionError }}</p>
     <div v-if="canRead && !listError" class="table-card soft-card">
       <el-table ref="tableRef" v-loading="loading" :data="files" row-key="fileId" @selection-change="selectedRows = $event">
-        <el-table-column type="selection" width="46" :selectable="canSelect" />
-        <el-table-column label="文件" min-width="220" show-overflow-tooltip>
+        <el-table-column type="selection" width="44" :selectable="canSelect" />
+        <el-table-column label="文件" min-width="200" show-overflow-tooltip>
           <template #default="{ row }">
             <div class="file-name-cell">
               <el-icon><Document /></el-icon>
               <div>
-                <div class="file-name-cell__name">{{ row.alias || row.fileName }}</div>
-                <div v-if="row.alias" class="file-name-cell__original">{{ row.fileName }}</div>
+                <div class="file-name-cell__name" :title="row.alias || row.fileName">{{ row.alias || row.fileName }}</div>
+                <div v-if="row.alias" class="file-name-cell__original" :title="row.fileName">{{ row.fileName }}</div>
               </div>
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="fileId" min-width="160" show-overflow-tooltip>
+        <el-table-column label="fileId" min-width="140" show-overflow-tooltip>
           <template #default="{ row }"><code class="file-id">{{ row.fileId }}</code></template>
         </el-table-column>
-        <el-table-column label="标签" min-width="130" show-overflow-tooltip>
+        <el-table-column label="标签" min-width="110" show-overflow-tooltip>
           <template #default="{ row }">
             <div v-if="row.tags?.length" class="tag-list"><el-tag v-for="item in row.tags" :key="item" size="small" round>{{ item }}</el-tag></div>
             <span v-else class="muted">-</span>
           </template>
         </el-table-column>
-        <el-table-column label="大小" width="105" align="right"><template #default="{ row }">{{ formatSize(row.size) }}</template></el-table-column>
-        <el-table-column label="上传时间" width="170" align="center"><template #default="{ row }">{{ formatFull(row.uploadedAt) }}</template></el-table-column>
-        <el-table-column label="下载次数" width="100" align="right"><template #default="{ row }">{{ row.downloadCount || 0 }}</template></el-table-column>
-        <el-table-column label="传输量" width="110" align="right"><template #default="{ row }">{{ formatSize(row.transferredBytes) }}</template></el-table-column>
-        <el-table-column label="操作" width="185" fixed="right" align="center">
+        <el-table-column label="大小" width="88" align="right"><template #default="{ row }">{{ formatSize(row.size) }}</template></el-table-column>
+        <el-table-column label="上传时间" width="148" align="center"><template #default="{ row }">{{ formatFull(row.uploadedAt) }}</template></el-table-column>
+        <el-table-column label="下载次数" width="88" align="right"><template #default="{ row }">{{ row.downloadCount || 0 }}</template></el-table-column>
+        <el-table-column label="传输量" width="96" align="right"><template #default="{ row }">{{ formatSize(row.transferredBytes) }}</template></el-table-column>
+        <el-table-column label="操作" width="160" fixed="right" align="center">
           <template #default="{ row }">
             <el-button text size="small" type="primary" @click="openDetail(row)">详情</el-button>
             <el-button text size="small" @click="copy(row.downloadUrl)"><el-icon><DocumentCopy /></el-icon></el-button>
@@ -304,14 +304,14 @@ function excelColumnName(index) { let value = '', n = index + 1; while (n) { con
 .table-card { min-width: 0; padding: 16px; }.batch-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 12px 16px; }
 .pagination { display: flex; justify-content: flex-end; padding-top: 16px; min-width: 0; }
 .file-name-cell { display: flex; align-items: center; gap: 9px; min-width: 0; }.file-name-cell > div { min-width: 0; }.file-name-cell__name { font-weight: 500; }
-.file-name-cell__original, .muted, .preview-note { color: var(--app-text-secondary); font-size: 12px; }.file-id { color: var(--app-accent); font: 12px var(--app-font-mono); }
-.tag-list { gap: 4px; }.url-row { width: 100%; flex-wrap: nowrap; }.url-row code { flex: 1; min-width: 0; color: var(--app-text-regular); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+.file-name-cell__original, .muted, .preview-note { color: var(--app-text-secondary); font-size: var(--app-font-caption); }.file-id { color: var(--app-accent); font: 13px var(--app-font-mono); }
+.tag-list { gap: 4px; }.url-row { width: 100%; flex-wrap: nowrap; }.url-row code { flex: 1; min-width: 0; color: var(--app-text-regular); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; }
 .upload-example { width: 100%; margin-top: 8px; padding: 10px 12px; border-radius: 8px; background: var(--app-bg-control); color: var(--app-text-secondary); font: 12px/1.7 var(--app-font-mono); overflow-wrap: anywhere; }
 .file-detail :deep(.copy-button), .file-detail :deep(.copy-button:hover) { color: var(--app-accent); }
 .detail-actions { justify-content: flex-end; margin-bottom: 14px; }.detail-meta { margin: 16px 0; }.detail-meta :deep(.el-descriptions__content) { overflow-wrap: anywhere; }.detail-form { margin-top: 18px; }
 .preview-area { min-height: 120px; min-width: 0; }.preview-notice { margin-bottom: 12px; }.text-preview { max-height: 410px; margin: 0; padding: 14px; white-space: pre-wrap; overflow: auto; background: var(--app-bg-control); border-radius: 10px; font: 12px/1.8 var(--app-font-mono); overflow-wrap: anywhere; }
 .html-preview, .pdf-preview { width: 100%; height: min(430px, 65vh); border: 0; border-radius: 10px; }.image-preview { max-width: 100%; max-height: 430px; display: block; margin: auto; }.media-preview { width: 100%; }.excel-preview { min-width: 0; }.excel-preview section + section { margin-top: 18px; }.excel-preview h4 { margin: 0 0 8px; }
 .resource-state { text-align: center; color: var(--app-text-secondary); padding: 32px 20px; }.resource-state strong { color: var(--app-text-primary); }.resource-state p { margin: 10px 0; }
-.resource-error { color: var(--el-color-danger); background: var(--el-color-danger-light-9); border-radius: 10px; padding: 12px 16px; margin: 0; font-size: 13px; overflow-wrap: anywhere; }
+.resource-error { color: var(--app-text-danger); background: var(--el-color-danger-light-9); border-radius: 10px; padding: 12px 16px; margin: 0; font-size: 13px; overflow-wrap: anywhere; }
 @media (max-width: 600px) { .toolbar__filters, .toolbar__actions { width: 100%; }.toolbar__search, .toolbar__tag { width: 100%; }.table-card { padding: 12px; }.pagination { justify-content: flex-start; }.resource-header h1 { font-size: 24px; } }
 </style>

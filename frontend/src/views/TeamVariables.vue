@@ -53,7 +53,7 @@
               <el-button
                 text
                 size="small"
-                style="color: var(--el-color-danger)"
+                style="color: var(--app-text-danger)"
                 :disabled="!canWrite || writing"
                 @click="handleDeleteVariable(v)"
               >删除</el-button>
@@ -105,12 +105,12 @@
             </template>
             <el-table-column label="值" min-width="140" show-overflow-tooltip>
               <template #default="{ row }">
-                <span class="value-text">{{ row.value }}</span>
+                <span class="value-text" :title="row.value">{{ row.value }}</span>
               </template>
             </el-table-column>
             <el-table-column prop="description" label="描述" min-width="180" show-overflow-tooltip>
               <template #default="{ row }">
-                <span v-if="row.description" class="desc-text">{{ row.description }}</span>
+                <span v-if="row.description" class="desc-text" :title="row.description">{{ row.description }}</span>
                 <span v-else class="desc-muted">—</span>
               </template>
             </el-table-column>
@@ -174,7 +174,7 @@
               <el-button
                 text
                 size="small"
-                style="color: var(--el-color-danger)"
+                style="color: var(--app-text-danger)"
                 :disabled="!canWrite || writing"
                 @click="handleDeleteGroup(g)"
               >删除</el-button>
@@ -473,18 +473,19 @@ watch(filteredGroupValues, () => { if (showGroupDialog.value) { syncingSelection
 .team-variables { min-width: 0; display: flex; flex-direction: column; gap: 16px; color: var(--app-text-primary); }
 .page-header, .page-header__left, .page-header__right { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }.page-header { justify-content: space-between; }
 .page-title { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -.025em; color: var(--app-text-primary); }.page-description { margin: 0; font-size: 13px; color: var(--app-text-secondary); }
-.team-context { font-size: 12px; color: var(--app-text-secondary); padding: 7px 10px; background: var(--app-bg-surface); border-radius: 8px; }
+.team-context { font-size: var(--app-font-caption); color: var(--app-text-secondary); padding: 7px 10px; background: var(--app-bg-surface); border-radius: 8px; }.page-header__right :deep(.el-tag--success) { color: var(--app-text-success); background: var(--el-color-success-light-9); }.page-header__right :deep(.el-tag--info) { color: var(--app-text-secondary); background: var(--app-bg-control); }
 .panels { display: grid; grid-template-columns: minmax(180px, 230px) minmax(0, 1fr) minmax(200px, 260px); gap: 14px; min-width: 0; align-items: start; }
 .panel { min-width: 0; background: var(--app-bg-surface); border-radius: 16px; display: flex; flex-direction: column; }
 .panel__header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 18px 16px 12px; gap: 10px; }.panel__title { font-size: 15px; font-weight: 600; }.panel__subtitle { font-size: 12px; color: var(--app-text-secondary); font-weight: 400; overflow-wrap: anywhere; }
-.panel__header-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; }.panel__body { min-width: 0; padding: 8px 12px 12px; }.panel__body--table { padding: 0 12px 12px; }
+.panel__header-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.panel__header-actions :deep(.el-button) { height: 32px; min-height: 32px; }.panel__body { min-width: 0; padding: 8px 12px 12px; }.panel__body--table { padding: 0 12px 12px; }
 .value-text { font: 13px var(--app-font-mono); color: var(--app-text-primary); }.desc-text { font-size: 13px; color: var(--app-text-regular); }.desc-muted, .empty-hint { font-size: 13px; color: var(--app-text-secondary); }.empty-hint { padding: 24px 16px; text-align: center; }
 .variable-item { padding: 12px; border-radius: 10px; cursor: pointer; margin-bottom: 4px; }.variable-item:hover { background: var(--app-bg-control); }.variable-item:focus-visible { outline: 2px solid var(--app-focus-color); outline-offset: 1px; }.variable-item--active { background: var(--app-bg-selected); }.variable-item--active .variable-item__name { color: var(--app-accent); }
 .variable-item__name, .group-item__name { font: 500 14px var(--app-font-mono); color: var(--app-text-primary); overflow-wrap: anywhere; }.variable-item__desc, .group-item__desc { font-size: 12px; color: var(--app-text-secondary); margin-top: 5px; overflow-wrap: anywhere; }
 .variable-item__actions, .group-item__actions, .row-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; }.row-actions { margin-top: 0; flex-wrap: nowrap; }.row-actions .el-button + .el-button { margin-left: 0; }
 .group-item { padding: 12px; background: var(--app-bg-control); border-radius: 10px; margin-bottom: 10px; }.group-item__main { display: flex; justify-content: space-between; gap: 10px; align-items: center; }.group-item__count, .selected-count { font-size: 12px; color: var(--app-accent); }.selected-count { margin-top: 10px; }
 .batch-hint { font-size: 13px; line-height: 1.8; color: var(--app-text-secondary); margin-bottom: 12px; }.batch-hint code { padding: 2px 6px; background: var(--app-bg-control); border-radius: 8px; color: var(--app-accent); }
-.resource-state { text-align: center; color: var(--app-text-secondary); padding: 32px 20px; }.resource-state p { margin: 10px 0; }.resource-error { color: var(--el-color-danger); background: var(--el-color-danger-light-9); border-radius: 10px; padding: 12px 16px; margin: 0 0 12px; font-size: 13px; overflow-wrap: anywhere; }
+.resource-state { text-align: center; color: var(--app-text-secondary); padding: 32px 20px; }.resource-state p { margin: 10px 0; }.resource-error { color: var(--app-text-danger); background: var(--el-color-danger-light-9); border-radius: 10px; padding: 12px 16px; margin: 0 0 12px; font-size: 13px; overflow-wrap: anywhere; }
 @media (max-width: 1200px) { .panels { grid-template-columns: minmax(180px, 230px) minmax(0, 1fr); }.panel--right { grid-column: 1 / -1; } }
 @media (max-width: 760px) { .panels { grid-template-columns: minmax(0, 1fr); }.panel--right { grid-column: auto; }.page-title { font-size: 24px; }.panel__header-actions { width: 100%; }.panel__header-actions :deep(.el-input) { width: 100% !important; margin-right: 0 !important; } }
 </style>

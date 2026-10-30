@@ -402,15 +402,15 @@ onBeforeUnmount(() => {
 .account-page__header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-bottom: 20px; }
 .account-page__header h1 { font-size: clamp(24px, 2vw, 28px); font-weight: 600; line-height: 1.3; letter-spacing: -.025em; margin: 4px 0 6px; }
 .account-page__header p, .account-card__header p { margin: 4px 0 0; color: var(--app-text-secondary); font-size: 13px; line-height: 1.6; }
-.account-eyebrow { font: 11px/1.5 var(--app-font-mono); letter-spacing: .1em; color: var(--app-text-secondary); }
+.account-eyebrow { font: 12px/1.5 var(--app-font-mono); letter-spacing: .1em; color: var(--app-text-secondary); }
 .account-tabs { min-width: 0; }
 .account-tabs :deep(.el-tabs__header) { margin-bottom: 20px; }
 .account-tabs :deep(.el-tabs__nav-wrap::after) { height: 0; }
 .account-tabs :deep(.el-tabs__item) { font-size: 14px; }
 .account-tabs :deep(.el-tabs__content) { overflow: visible; }
-.account-two-column { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(280px, 1fr); align-items: start; gap: 14px; min-width: 0; }
-.account-stack { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
-.account-card { min-width: 0; background: var(--app-bg-surface); border-radius: var(--app-radius-panel); padding: 24px; }
+.account-two-column { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(280px, 1fr); align-items: stretch; gap: 14px; min-width: 0; }
+.account-stack { display: grid; grid-auto-rows: 1fr; gap: 14px; min-width: 0; }
+.account-card { min-width: 0; background: var(--app-bg-surface); border-radius: var(--app-radius-panel); padding: 20px; }
 .account-card__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
 .account-card__header h2 { margin: 0; font-size: 16px; line-height: 1.5; font-weight: 600; letter-spacing: -.015em; }
 .account-card__header > .filled-icon { color: var(--app-text-secondary); flex-shrink: 0; }
@@ -428,7 +428,7 @@ onBeforeUnmount(() => {
 .account-readonly-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 0 0 24px; }
 .account-readonly-grid dt { color: var(--app-text-secondary); font-size: 12px; margin-bottom: 6px; }
 .account-readonly-grid dd { margin: 0; min-height: 40px; padding: 10px 12px; background: var(--app-bg-control); border-radius: var(--app-radius-control); font-size: 13px; overflow-wrap: anywhere; }
-.account-code { margin-left: 8px; color: var(--app-text-secondary); font-size: 11px; }
+.account-code { margin-left: 8px; color: var(--app-text-secondary); font-size: 12px; }
 .account-mono { font-family: var(--app-font-mono); font-variant-numeric: tabular-nums; }
 .account-form, .account-password-form { min-width: 0; }
 .account-form :deep(.el-form-item__content), .account-password-form :deep(.el-form-item__content) { min-width: 0; }
@@ -437,7 +437,7 @@ onBeforeUnmount(() => {
 .account-form-actions { margin-top: 24px; }
 .account-form-actions > .el-button + .el-button, .account-actions > .el-button + .el-button { margin-left: 0; }
 .account-note { font-size: 12px; line-height: 1.75; color: var(--app-text-secondary); margin: 12px 0; }
-.account-error { color: var(--el-color-danger); background: var(--el-color-danger-light-9); border-radius: var(--app-radius-small); padding: 10px 12px; font-size: 13px; line-height: 1.65; margin: 16px 0; overflow-wrap: anywhere; }
+.account-error { color: var(--app-text-danger); background: var(--el-color-danger-light-9); border-radius: var(--app-radius-small); padding: 10px 12px; font-size: 13px; line-height: 1.65; margin: 16px 0; overflow-wrap: anywhere; }
 .account-summary-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0; }
 .account-summary-row > div { min-width: 0; }
 .account-summary-row b { display: block; font-size: 14px; font-weight: 500; }
@@ -447,7 +447,7 @@ onBeforeUnmount(() => {
 .account-team-count strong { font-size: 26px; font-weight: 500; color: var(--app-text-primary); }
 .account-guidance { padding-left: 20px; margin: 0; color: var(--app-text-regular); font-size: 13px; line-height: 1.8; }
 .account-guidance li + li { margin-top: 12px; }
-.account-notice { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 12px 16px; border-radius: var(--app-radius-control); background: var(--app-bg-selected); color: var(--app-accent-hover); margin-bottom: 16px; font-size: 13px; }
+.account-notice { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 12px 16px; border-radius: var(--app-radius-control); background: var(--app-bg-selected); color: var(--app-text-accent); margin-bottom: 16px; font-size: 13px; }
 .account-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 40px 20px; min-width: 0; text-align: center; color: var(--app-text-secondary); }
 .account-state h2, .account-state h3 { margin: 0; color: var(--app-text-primary); font-size: 17px; font-weight: 500; }
 .account-state p { margin: 0; line-height: 1.8; font-size: 13px; overflow-wrap: anywhere; }
@@ -471,7 +471,7 @@ onBeforeUnmount(() => {
 .account-sessions-footer p { color: var(--app-text-secondary); font-size: 12px; line-height: 1.8; margin: 0; }
 .account-team-list { display: flex; flex-direction: column; gap: 12px; }
 .account-team { display: flex; align-items: center; gap: 16px; min-width: 0; padding: 18px; background: var(--app-bg-control); border-radius: var(--app-radius-control); }
-.account-team__mark { flex-shrink: 0; display: grid; place-items: center; width: 48px; min-height: 44px; background: #E6EBF3; color: #53647C; border-radius: var(--app-radius-small); padding: 6px; font-size: 11px; overflow-wrap: anywhere; }
+.account-team__mark { flex-shrink: 0; display: grid; place-items: center; width: 48px; min-height: 44px; background: var(--app-bg-surface); color: var(--app-text-regular); border-radius: var(--app-radius-small); padding: 6px; font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
 .account-team__copy { flex: 1; min-width: 0; }
 .account-team__copy h3 { margin: 0; font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
 .account-team__copy p { margin: 5px 0 0; color: var(--app-text-secondary); font-size: 12px; line-height: 1.7; }

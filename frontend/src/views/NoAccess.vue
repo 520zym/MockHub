@@ -19,6 +19,6 @@ const router = useRouter(), userStore = useUserStore()
 .no-access__mark { width: 54px; height: 54px; display: grid; place-items: center; background: var(--app-bg-control); border-radius: 16px; color: var(--app-text-secondary); margin: 0 auto 20px; }
 .no-access h1 { font-size: 22px; font-weight: 600; margin: 0 0 12px; } .no-access p { max-width: 480px; margin: 0 auto 20px; color: var(--app-text-secondary); font-size: 13px; line-height: 1.8; }
 .no-access__actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-bottom: 24px; } .no-access__actions .el-button { margin: 0; }
-.no-access__identity { display: grid; grid-template-columns: auto 1fr; gap: 10px 22px; padding: 16px; border-radius: 12px; background: var(--app-bg-control); text-align: left; font-size: 12px; max-width: 400px; margin: auto; } .no-access__identity span { color: var(--app-text-secondary); } .no-access__identity b { font-weight: 500; } .no-access .no-access__hint { font-size: 11px; margin-top: 20px; margin-bottom: 0; }
+.no-access__identity { display: grid; grid-template-columns: auto 1fr; gap: 10px 22px; padding: 16px; border-radius: 12px; background: var(--app-bg-control); text-align: left; font-size: 12px; max-width: 400px; margin: auto; } .no-access__identity span { color: var(--app-text-secondary); } .no-access__identity b { font-weight: 500; } .no-access .no-access__hint { font-size: 12px; margin-top: 20px; margin-bottom: 0; }
 @media(max-width: 600px) { .no-access { margin: 0; padding: 28px 18px; } .no-access h1 { font-size: 18px; } }
 </style>
