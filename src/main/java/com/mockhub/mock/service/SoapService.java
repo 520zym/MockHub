@@ -123,9 +123,52 @@ public class SoapService {
     }
     /** Public Mock WSDL uses only the team resolved from the persisted API's real route. */
     public String getWsdlContent(String teamId,String key,String mockUrl){
-        byte[] bytes=readOwned(teamId,key);parseDocument(bytes);
-        String safeUrl=mockUrl.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;").replace("\"","&quot;").replace("'","&apos;");
-        return new String(bytes,java.nio.charset.StandardCharsets.UTF_8).replaceAll("(location=\")[^\"]*?(\")","$1"+java.util.regex.Matcher.quoteReplacement(safeUrl)+"$2");
+        Document doc = parseDocument(readOwned(teamId, key));
+        Element definitions = doc.getDocumentElement();
+        final String wsdl = "http://schemas.xmlsoap.org/wsdl/";
+        // Only actual WSDL definitions/service/port SOAP extension addresses are endpoints.
+        // Imports, schema locations and extension/documentation lookalikes are portable source data.
+        if (isElement(definitions, wsdl, "definitions")) {
+            for (org.w3c.dom.Node service = definitions.getFirstChild(); service != null; service = service.getNextSibling()) {
+                if (!isElement(service, wsdl, "service")) continue;
+                for (org.w3c.dom.Node port = service.getFirstChild(); port != null; port = port.getNextSibling()) {
+                    if (!isElement(port, wsdl, "port")) continue;
+                    for (org.w3c.dom.Node address = port.getFirstChild(); address != null; address = address.getNextSibling()) {
+                        if (isElement(address, "http://schemas.xmlsoap.org/wsdl/soap/", "address")
+                                || isElement(address, "http://schemas.xmlsoap.org/wsdl/soap12/", "address")) {
+                            Element endpoint = (Element) address;
+                            if (endpoint.hasAttribute("location")) endpoint.setAttribute("location", mockUrl);
+                        }
+                    }
+                }
+            }
+        }
+        try {
+            javax.xml.transform.TransformerFactory factory = javax.xml.transform.TransformerFactory.newInstance();
+            factory.setFeature(javax.xml.XMLConstants.FEATURE_SECURE_PROCESSING, true);
+            factory.setAttribute(javax.xml.XMLConstants.ACCESS_EXTERNAL_DTD, "");
+            factory.setAttribute(javax.xml.XMLConstants.ACCESS_EXTERNAL_STYLESHEET, "");
+            javax.xml.transform.Transformer transformer = factory.newTransformer();
+            transformer.setOutputProperty(javax.xml.transform.OutputKeys.ENCODING, "UTF-8");
+            transformer.setOutputProperty(javax.xml.transform.OutputKeys.OMIT_XML_DECLARATION, "no");
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            // JDK 8 identity transformers can reuse Document.xmlEncoding despite OutputKeys.ENCODING.
+            // A fresh DOM retains all nodes/business data without carrying the source byte encoding.
+            Document utf8 = doc.getImplementation().createDocument(null, null, null);
+            utf8.setXmlVersion(doc.getXmlVersion());
+            utf8.setXmlStandalone(doc.getXmlStandalone());
+            for (org.w3c.dom.Node node = doc.getFirstChild(); node != null; node = node.getNextSibling())
+                utf8.appendChild(utf8.importNode(node, true));
+            transformer.transform(new javax.xml.transform.dom.DOMSource(utf8), new javax.xml.transform.stream.StreamResult(out));
+            // The dispatch HTTP contract is text/xml; charset=UTF-8, irrespective of source encoding.
+            return new String(out.toByteArray(), java.nio.charset.StandardCharsets.UTF_8);
+        } catch (javax.xml.transform.TransformerException | IllegalArgumentException e) {
+            throw new BizException(40701, "无法安全序列化WSDL内容");
+        }
+    }
+    private static boolean isElement(org.w3c.dom.Node node, String namespace, String name) {
+        return node.getNodeType() == org.w3c.dom.Node.ELEMENT_NODE
+                && namespace.equals(node.getNamespaceURI()) && name.equals(node.getLocalName());
     }
     /** Called under API aggregate transactions, without substituting DTO team claims for actual ownership. */
     public void assertReference(String teamId,String key){parseDocument(readOwned(teamId,key));}
