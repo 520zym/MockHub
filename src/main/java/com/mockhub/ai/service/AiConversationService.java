@@ -49,6 +49,7 @@ public class AiConversationService {
             if (!teamId.equals(conversation.getTeamId())) {
                 throw new BizException(40102, "会话不属于当前团队，请新建会话");
             }
+            requireConsistentHistory(conversation, repository.listMessages(conversationId));
         }
     }
 
@@ -85,6 +86,8 @@ public class AiConversationService {
             throw new BizException(40002, "未登录");
         }
         validateContext(conversationId, userId, teamId);
+        JsonNode storedCards = cards == null ? objectMapper.createArrayNode() : objectMapper.valueToTree(cards);
+        requireCardScopes(teamId, storedCards);
         AiConversation conversation;
         if (conversationId == null || conversationId.trim().isEmpty()) {
             conversation = new AiConversation();
@@ -122,12 +125,7 @@ public class AiConversationService {
         assistantMessage.setProvider(provider);
         assistantMessage.setModel(model);
         assistantMessage.setCreatedAt(now());
-        try {
-            assistantMessage.setCards(cards == null || cards.isEmpty()
-                    ? "[]" : objectMapper.writeValueAsString(cards));
-        } catch (Exception e) {
-            assistantMessage.setCards("[]");
-        }
+        assistantMessage.setCards(storedCards.toString());
         repository.insertMessage(assistantMessage);
 
         if (conversation.getTitle() == null || conversation.getTitle().trim().isEmpty()) {
@@ -145,6 +143,7 @@ public class AiConversationService {
         for (AiConversation conversation : repository.listByUser(userId, 30)) {
             try {
                 requireReadableTeam(conversation.getTeamId());
+                requireConsistentHistory(conversation, repository.listMessages(conversation.getId()));
             } catch (BizException denied) {
                 if (denied.getCode() == 40102 || denied.getCode() == 40403) continue;
                 throw denied;
@@ -160,6 +159,8 @@ public class AiConversationService {
 
     public Map<String, Object> detail(String id, String userId) {
         AiConversation conversation = requireReadableConversation(id, userId);
+        List<AiConversationMessage> storedMessages = repository.listMessages(id);
+        requireConsistentHistory(conversation, storedMessages);
         Map<String, Object> result = new LinkedHashMap<String, Object>();
         result.put("id", conversation.getId());
         result.put("title", conversation.getTitle());
@@ -167,7 +168,7 @@ public class AiConversationService {
         result.put("createdAt", conversation.getCreatedAt());
         result.put("updatedAt", conversation.getUpdatedAt());
         List<Map<String, Object>> messages = new ArrayList<Map<String, Object>>();
-        for (AiConversationMessage message : repository.listMessages(id)) {
+        for (AiConversationMessage message : storedMessages) {
             Map<String, Object> item = new LinkedHashMap<String, Object>();
             item.put("id", message.getId());
             item.put("role", message.getRole());
@@ -191,15 +192,70 @@ public class AiConversationService {
         repository.delete(id, userId);
     }
 
+    /** Quarantine mixed histories on read; keep the original database rows for owner cleanup/recovery. */
+    private void requireConsistentHistory(AiConversation conversation, List<AiConversationMessage> messages) {
+        for (AiConversationMessage message : messages) {
+            requireCardScopes(conversation.getTeamId(), parseCards(message.getCards()));
+        }
+    }
+
+    private void requireCardScopes(String teamId, JsonNode cards) {
+        if (!cards.isArray()) throw mixedHistory();
+        for (JsonNode card : cards) requireCardScope(teamId, card, false);
+    }
+
+    // Only inspect server card metadata. A response example may legitimately contain business
+    // fields named teamId/apiId; never interpret preview/body JSON as authorization metadata.
+    private boolean requireCardScope(String teamId, JsonNode node, boolean inheritedScope) {
+        if (!node.isObject()) throw mixedHistory();
+        String declaredTeam = metadataText(node, "teamId");
+        if (declaredTeam != null && !teamId.equals(declaredTeam)) throw mixedHistory();
+        boolean scoped = inheritedScope || declaredTeam != null;
+        JsonNode summary = node.get("summary");
+        if (summary != null && !summary.isNull()) scoped |= requireCardScope(teamId, summary, scoped);
+        String apiId = metadataText(node, "apiId");
+        if (apiId != null) {
+            String actualTeam = repository.findApiTeam(apiId);
+            if (actualTeam != null && !teamId.equals(actualTeam)) throw mixedHistory();
+            scoped |= actualTeam != null;
+            if (!scoped) throw mixedHistory();
+        }
+        String actionId = metadataText(node, "actionId");
+        if (actionId != null) {
+            String actualTeam = repository.findActionTeam(actionId);
+            if (actualTeam != null && !teamId.equals(actualTeam)) throw mixedHistory();
+            scoped |= actualTeam != null;
+            if (!scoped) throw mixedHistory();
+        }
+        JsonNode items = node.get("items");
+        if (items != null && !items.isNull()) {
+            if (!items.isArray()) throw mixedHistory();
+            for (JsonNode item : items) requireCardScope(teamId, item, scoped);
+        }
+        return scoped;
+    }
+
+    private String metadataText(JsonNode node, String name) {
+        JsonNode value = node.get(name);
+        if (value == null || value.isNull()) return null;
+        if (!value.isTextual()) throw mixedHistory();
+        return value.asText().trim().isEmpty() ? null : value.asText();
+    }
+
+    private BizException mixedHistory() {
+        return new BizException(40102, "历史会话含跨团队或无法确认团队的卡片，已隔离；可删除该会话后重新开始");
+    }
+
     private JsonNode parseCards(String cards) {
         if (cards == null || cards.trim().isEmpty()) {
             return objectMapper.createArrayNode();
         }
         try {
             JsonNode node = objectMapper.readTree(cards);
-            return node.isArray() ? node : objectMapper.createArrayNode();
+            if (node == null || !node.isArray()) throw mixedHistory();
+            return node;
         } catch (Exception e) {
-            return objectMapper.createArrayNode();
+            throw mixedHistory();
         }
     }
 

@@ -99,6 +99,10 @@ public class AiChatService {
         }
         request.setTeamId(teamId);
         conversationService.validateContext(request.getConversationId(), SecurityContextUtil.getCurrentUserId(), teamId);
+        if (request.getContextApiId() != null && !request.getContextApiId().trim().isEmpty()) {
+            request.setContextApiId(request.getContextApiId().trim());
+            requireScopedApi(teamId, request.getContextApiId());
+        }
         AiSettings settings = settingsService.assertUsable(null, teamId);
 
         log.info("AI 对话请求：teamId={}, conversationId={}, contextApiId={}, messageChars={}",
@@ -150,6 +154,7 @@ public class AiChatService {
         for (TopApiVO api : top) {
             Map<String, Object> item = new LinkedHashMap<String, Object>();
             item.put("apiId", api.getApiId());
+            item.put("teamId", request.getTeamId());
             item.put("method", api.getMethod());
             item.put("path", api.getPath());
             item.put("name", api.getName());
@@ -159,6 +164,7 @@ public class AiChatService {
 
         Map<String, Object> card = new LinkedHashMap<String, Object>();
         card.put("type", "STATS");
+        card.put("teamId", request.getTeamId());
         card.put("title", "近 7 天调用排行");
         card.put("range", "近 7 天");
         card.put("total", overview.getWindowCallCount());
@@ -191,6 +197,7 @@ public class AiChatService {
         }
         Map<String, Object> card = new LinkedHashMap<String, Object>();
         card.put("type", "API_LIST");
+        card.put("teamId", request.getTeamId());
         card.put("title", "找到 " + page.getTotal() + " 个接口");
         card.put("keyword", searchKeyword);
         card.put("items", items);
@@ -351,14 +358,20 @@ public class AiChatService {
         response.setReply("已生成接口修改草稿，确认后才会更新「" + detail.getName() + "」：");
     }
 
+    private ApiDefinitionDetailVO requireScopedApi(String teamId, String apiId) {
+        ApiDefinitionDetailVO detail = apiService.getById(apiId);
+        if (detail == null || teamId == null || !teamId.equals(detail.getTeamId())) {
+            throw new BizException(40102, "接口不属于当前团队，请重新选择上下文接口");
+        }
+        return detail;
+    }
+
     private ApiDefinitionDetailVO resolveUpdateTarget(AiChatRequest request, ChatPlan plan) {
         String contextId = firstNonBlank(plan.apiId, request.getContextApiId());
         if (contextId != null) {
-            try {
-                return apiService.getById(contextId);
-            } catch (BizException ignored) {
-                // 上下文接口可能已删除或无权限，继续按路径查找
-            }
+            // An explicit or model-selected ID must never escape the selected workspace.
+            // Do not swallow a scope error and silently select a different API by path.
+            return requireScopedApi(request.getTeamId(), contextId);
         }
         String path = firstNonBlank(plan.path, extractPath(request.getMessage()));
         if (path == null) {
@@ -372,14 +385,14 @@ public class AiChatService {
         for (ApiDefinitionVO api : page.getItems()) {
             if (path.equals(api.getPath())) {
                 if (method == null || method.equals(api.getMethod())) {
-                    return apiService.getById(api.getId());
+                    return requireScopedApi(request.getTeamId(), api.getId());
                 }
                 if (matched == null) {
                     matched = api;
                 }
             }
         }
-        return matched == null ? null : apiService.getById(matched.getId());
+        return matched == null ? null : requireScopedApi(request.getTeamId(), matched.getId());
     }
 
     private ApiResponse selectResponse(ApiDefinitionDetailVO detail, ChatPlan plan) {

@@ -61,6 +61,17 @@ public class AiConversationRepository {
                 MESSAGE_MAPPER, conversationId);
     }
 
+    /** Resolve immutable resource ownership without reading or returning its private payload. */
+    public String findApiTeam(String apiId) {
+        List<String> teams = jdbcTemplate.queryForList("SELECT team_id FROM api_definition WHERE id = ?", String.class, apiId);
+        return teams.isEmpty() ? null : teams.get(0);
+    }
+
+    public String findActionTeam(String actionId) {
+        List<String> teams = jdbcTemplate.queryForList("SELECT team_id FROM ai_pending_action WHERE id = ?", String.class, actionId);
+        return teams.isEmpty() ? null : teams.get(0);
+    }
+
     public void delete(String id, String userId) {
         jdbcTemplate.update("DELETE FROM ai_conversation_message WHERE conversation_id = ?", id);
         jdbcTemplate.update("DELETE FROM ai_conversation WHERE id = ? AND user_id = ?", id, userId);
