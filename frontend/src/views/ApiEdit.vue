@@ -8,41 +8,43 @@
       </div>
       <div class="editor-page-actions">
         <el-button v-if="isDirty" @click="downloadDraft">导出本地草稿</el-button>
-        <el-button v-if="loadedApiId" @click="historyVisible = true"><FilledIcon name="history" :size="15" />变更记录</el-button>
-        <el-button v-if="!readOnly" type="primary" :loading="saving" :disabled="pageLoading || !!detailError || (isEdit && !loadedApiId)" @click="handleSave"><el-icon><DocumentChecked /></el-icon>{{ isEdit ? '保存' : '创建接口' }}</el-button>
+        <el-button v-if="saving" @click="copyDraft">复制当前草稿</el-button>
+        <el-button v-if="loadedApiId" :disabled="saving" @click="historyVisible = true"><FilledIcon name="history" :size="15" />变更记录</el-button>
+        <el-button v-if="!readOnly" type="primary" :loading="saving" :disabled="saving || wsdlUploading || pageLoading || !!detailError || (isEdit && !loadedApiId)" @click="handleSave"><el-icon><DocumentChecked /></el-icon>{{ isEdit ? '保存' : '创建接口' }}</el-button>
       </div>
     </header>
     <p class="editor-attribution" v-if="loadedApiId">{{ appStore.teams.find(team => team.id === form.teamId)?.name || '当前团队' }} · 创建者 {{ persistedMeta.createdByName || '未记录' }} · 最后修改 {{ persistedMeta.updatedByName || '未记录' }}<span v-if="persistedMeta.updatedAt"> · {{ persistedMeta.updatedAt.replace('T', ' ') }}</span></p>
     <el-alert v-if="revisionConflict" title="版本已变化，当前草稿仍然保留" type="warning" :closable="false" show-icon>
       <p>请先复制需要保留的编辑，再重新加载最新版本。不会自动用新版本号覆盖队友的修改。</p>
-      <el-button size="small" @click="copyDraft">复制当前草稿</el-button><el-button size="small" @click="reloadCurrentVersion">重新加载</el-button>
+      <el-button size="small" @click="copyDraft">复制当前草稿</el-button><el-button size="small" :disabled="saving" @click="reloadCurrentVersion">重新加载</el-button>
     </el-alert>
+    <el-alert v-if="saving" title="保存请求已发送，配置暂时只读，仍可复制。离开页面不会撤销服务端保存。" type="info" :closable="false" show-icon />
     <el-alert v-if="readOnly && !pageLoading && !detailError" title="当前为只读查看，未提交草稿仍然保留，可继续查看和复制。" type="info" :closable="false" show-icon />
-    <el-result v-if="detailError" icon="warning" title="接口详情暂时不可用" :sub-title="detailError"><template #extra><el-button @click="reloadCurrentVersion">重新加载</el-button><el-button @click="goBack">返回列表</el-button></template></el-result>
+    <el-result v-if="detailError" icon="warning" title="接口详情暂时不可用" :sub-title="detailError"><template #extra><el-button :disabled="saving" @click="reloadCurrentVersion">重新加载</el-button><el-button @click="goBack">返回列表</el-button></template></el-result>
     <template v-else>
     <div class="editor-layout" :class="{ 'editor-layout--rules': rulesWorkspace }">
     <section class="soft-card section-card basic-card">
       <h2 class="section-title"><span></span>基础信息 <small>BASIC</small></h2>
       <el-form :model="form" label-position="top">
-        <el-form-item label="接口名称" required><el-input v-model="form.name" :readonly="readOnly" placeholder="如：订单详情" /></el-form-item>
+        <el-form-item label="接口名称" required><el-input v-model="form.name" :readonly="editLocked" placeholder="如：订单详情" /></el-form-item>
         <div class="basic-pair">
-          <el-form-item label="所属团队" required><el-select v-model="form.teamId" :disabled="isEdit || readOnly" placeholder="选择团队"><el-option v-for="team in (isEdit ? appStore.teams : writableTeams)" :key="team.id" :label="team.name" :value="team.id" /></el-select></el-form-item>
-          <el-form-item label="分组"><el-select v-model="form.groupId" :disabled="readOnly || !form.teamId" clearable placeholder="未分组" @change="handleGroupSelectChange"><el-option v-for="g in availableGroups" :key="g.id" :label="g.name" :value="g.id" /><el-option v-if="canCreateGroup" key="__new__" label="+ 新建分组" value="__new__" /></el-select></el-form-item>
+          <el-form-item label="所属团队" required><el-select v-model="form.teamId" :disabled="isEdit || editLocked" placeholder="选择团队"><el-option v-for="team in (isEdit ? appStore.teams : writableTeams)" :key="team.id" :label="team.name" :value="team.id" /></el-select></el-form-item>
+          <el-form-item label="分组"><el-select v-model="form.groupId" :disabled="editLocked || !form.teamId" clearable placeholder="未分组" @change="handleGroupSelectChange"><el-option v-for="g in availableGroups" :key="g.id" :label="g.name" :value="g.id" /><el-option v-if="canCreateGroup" key="__new__" label="+ 新建分组" value="__new__" /></el-select></el-form-item>
         </div>
         <div class="basic-pair">
-          <el-form-item label="接口类型"><el-radio-group v-model="form.type" :disabled="readOnly || pageLoading"><el-radio-button value="REST">REST</el-radio-button><el-radio-button value="SOAP">SOAP</el-radio-button></el-radio-group></el-form-item>
-          <el-form-item label="HTTP 方法"><el-select v-model="form.method" :disabled="readOnly || form.type === 'SOAP'"><el-option v-for="method in ['GET','POST','PUT','DELETE','PATCH','HEAD','OPTIONS']" :key="method" :label="method" :value="method" /></el-select></el-form-item>
+          <el-form-item label="接口类型"><el-radio-group v-model="form.type" :disabled="editLocked || pageLoading"><el-radio-button value="REST">REST</el-radio-button><el-radio-button value="SOAP">SOAP</el-radio-button></el-radio-group></el-form-item>
+          <el-form-item label="HTTP 方法"><el-select v-model="form.method" :disabled="editLocked || form.type === 'SOAP'"><el-option v-for="method in ['GET','POST','PUT','DELETE','PATCH','HEAD','OPTIONS']" :key="method" :label="method" :value="method" /></el-select></el-form-item>
         </div>
-        <el-form-item label="路径" required :error="pathConflictError"><el-input v-model="form.path" :readonly="readOnly" placeholder="/api/order 或 /service.asmx"><template #suffix><el-icon v-if="pathChecking" class="path-status-icon"><Loading /></el-icon><el-icon v-else-if="pathConflictError" class="path-status-icon path-status-icon--error"><CircleClose /></el-icon><el-icon v-else-if="pathChecked" class="path-status-icon path-status-icon--ok"><CircleCheck /></el-icon></template></el-input><p class="field-hint">路径只包含路由；按 Query / Header / Body 返回不同内容，请配置匹配规则。</p></el-form-item>
+        <el-form-item label="路径" required :error="pathConflictError"><el-input v-model="form.path" :readonly="editLocked" placeholder="/api/order 或 /service.asmx"><template #suffix><el-icon v-if="pathChecking" class="path-status-icon"><Loading /></el-icon><el-icon v-else-if="pathConflictError" class="path-status-icon path-status-icon--error"><CircleClose /></el-icon><el-icon v-else-if="pathChecked" class="path-status-icon path-status-icon--ok"><CircleCheck /></el-icon></template></el-input><p class="field-hint">路径只包含路由；按 Query / Header / Body 返回不同内容，请配置匹配规则。</p></el-form-item>
         <el-form-item v-if="form.path" label="Mock 地址"><div class="mock-url-display"><code class="mock-url">{{ mockUrl }}</code><CopyButton :text="mockUrl" :show-label="false" /></div></el-form-item>
-        <div class="editor-enable"><div><b>接口启用</b><small>状态变更随保存提交</small></div><el-switch v-model="form.enabled" :disabled="readOnly || pageLoading" aria-label="接口启用状态" /></div>
+        <div class="editor-enable"><div><b>接口启用</b><small>状态变更随保存提交</small></div><el-switch v-model="form.enabled" :disabled="editLocked || pageLoading" aria-label="接口启用状态" /></div>
       </el-form>
     </section>
 
     <!-- 卡片：接口描述（REST 和 SOAP 都显示） -->
     <div class="soft-card section-card description-card">
       <h3 class="section-title"><span></span>说明与归因 <small>META</small></h3>
-      <RichTextEditor v-model="form.description" :read-only="readOnly" :height="150" placeholder="输入接口描述..." />
+      <RichTextEditor v-model="form.description" :read-only="editLocked" :height="150" placeholder="输入接口描述..." />
     </div>
 
     <!-- SOAP 模式：WSDL 上传及 Operation 配置 -->
@@ -54,18 +56,19 @@
         <el-form-item label="WSDL 文件">
           <div class="wsdl-upload-row">
             <el-upload
+              :disabled="editLocked || pageLoading"
               :auto-upload="false"
               :limit="1"
               accept=".wsdl,.xml"
               :on-change="handleWsdlFileChange"
               :show-file-list="false"
             >
-              <el-button>
+              <el-button :disabled="editLocked">
                 <el-icon><Upload /></el-icon>
                 选择 WSDL 文件
               </el-button>
             </el-upload>
-            <el-button type="primary" :loading="wsdlUploading" @click="handleUploadWsdl" :disabled="!wsdlFile">
+            <el-button type="primary" :loading="wsdlUploading" @click="handleUploadWsdl" :disabled="editLocked || wsdlUploading || !wsdlFile">
               上传并解析
             </el-button>
             <span v-if="form.soapConfig && form.soapConfig.wsdlFileName" class="wsdl-filename">
@@ -92,8 +95,8 @@
         <div class="operations-toolbar">
           <h4 class="operations-title">Operations（{{ form.soapConfig.operations.length }} 个）</h4>
           <div class="operations-actions">
-            <el-button text size="small" @click="expandAllOps">全部展开</el-button>
-            <el-button text size="small" @click="collapseAllOps">全部折叠</el-button>
+            <el-button text size="small" :disabled="saving" @click="expandAllOps">全部展开</el-button>
+            <el-button text size="small" :disabled="saving" @click="collapseAllOps">全部折叠</el-button>
           </div>
         </div>
         <div
@@ -103,7 +106,7 @@
           :class="{ 'operation-card--collapsed': isOpCollapsed(op) }"
         >
           <!-- 标题行可点击整行切换折叠（编辑响应体前必须先展开） -->
-          <div class="operation-header" @click="toggleOpCollapsed(op)">
+          <div class="operation-header" @click="!saving && toggleOpCollapsed(op)">
             <el-icon class="operation-chevron">
               <ArrowDown v-if="isOpCollapsed(op)" />
               <ArrowUp v-else />
@@ -122,7 +125,7 @@
           <template v-if="!isOpCollapsed(op)">
             <el-input
               v-model="op.description"
-              :readonly="readOnly"
+              :readonly="editLocked"
               type="textarea"
               :autosize="{ minRows: 1, maxRows: 4 }"
               placeholder="接口描述（选填，建议 200 字内说明用途 / 参数 / 注意事项）"
@@ -135,7 +138,7 @@
               :team-id="form.teamId"
               :api-context="aiApiContext"
         :api-id="loadedApiId"
-        :read-only="readOnly"
+        :read-only="editLocked"
               default-content-type="text/xml"
               editor-language="xml"
             />
@@ -157,14 +160,14 @@
         :team-id="form.teamId"
         :api-context="aiApiContext"
         :api-id="loadedApiId"
-        :read-only="readOnly"
+        :read-only="editLocked"
       />
     </div>
 
     <!-- 卡片：标签 -->
     <div class="soft-card section-card tags-card">
       <h3 class="section-title">标签</h3>
-      <TagInput v-model="form.tagIds" :team-id="form.teamId" :read-only="readOnly" />
+      <TagInput v-model="form.tagIds" :team-id="form.teamId" :read-only="editLocked" />
     </div>
 
     <!-- 卡片：高级配置 -->
@@ -180,13 +183,13 @@
               :key="idx"
               class="header-row"
             >
-              <el-input v-model="item.key" placeholder="Header Name" class="header-key" />
-              <el-input v-model="item.value" placeholder="Header Value" class="header-value" />
-              <el-button text type="danger" @click="removeHeaderOverride(idx)">
+              <el-input v-model="item.key" :readonly="editLocked" placeholder="Header Name" class="header-key" />
+              <el-input v-model="item.value" :readonly="editLocked" placeholder="Header Value" class="header-value" />
+              <el-button text type="danger" :disabled="editLocked" @click="removeHeaderOverride(idx)">
                 <el-icon><Delete /></el-icon>
               </el-button>
             </div>
-            <el-button size="small" @click="addHeaderOverride">
+            <el-button size="small" :disabled="editLocked" @click="addHeaderOverride">
               <el-icon><Plus /></el-icon>
               添加响应头覆盖
             </el-button>
@@ -198,11 +201,11 @@
     </div>
     </template>
     <!-- 底部操作栏 -->
-    <ApiHistoryDrawer v-model="historyVisible" :api-id="loadedApiId" :team-id="form.teamId" :current-revision="loadedRevision" :read-only="readOnly || isDirty" @changed="historyChanged" />
+    <ApiHistoryDrawer v-model="historyVisible" :api-id="loadedApiId" :team-id="form.teamId" :current-revision="loadedRevision" :read-only="editLocked || isDirty" @changed="historyChanged" />
     <div class="bottom-actions">
-      <span>{{ readOnly ? '只读查看不会写入接口；本地草稿可导出保存。' : '修改属于团队共享配置；保存后队友将看到新版本。' }}</span>
-      <el-button @click="goBack">取消</el-button>
-      <el-button type="primary" :loading="saving" :disabled="saving || pageLoading || !!detailError || readOnly || (isEdit && !loadedApiId)" @click="handleSave">
+      <span>{{ saving ? '保存请求已发送；离开不会撤销服务端操作。' : readOnly ? '只读查看不会写入接口；本地草稿可导出保存。' : '修改属于团队共享配置；保存后队友将看到新版本。' }}</span>
+      <el-button @click="goBack">{{ saving ? '离开页面' : '取消' }}</el-button>
+      <el-button type="primary" :loading="saving" :disabled="saving || wsdlUploading || pageLoading || !!detailError || readOnly || (isEdit && !loadedApiId)" @click="handleSave">
         {{ isEdit ? '保存' : '创建' }}
       </el-button>
     </div>
@@ -252,15 +255,36 @@ const canCreateGroup = computed(() => {
 })
 
 // 是否为编辑模式
-const isEdit = computed(() => !!route.params.id)
+const isEdit = computed(() => !!route.params.id || !!createdApiId.value)
 const pageLoading = ref(false)
 const saving = ref(false)
 const loadedRevision = ref(null)
 const revisionConflict = ref(false)
 const loadedApiId = ref(null)
+const createdApiId = ref(null) // A committed create must not be submitted as another create if navigation is blocked.
 const detailError = ref('')
 let detailRequest = 0, disposed = false
-const readOnly = computed(() => !userStore.canWriteTeam(form.teamId))
+const readOnly = computed(() => !userStore.hasCapability(form.teamId, 'read') || !userStore.canWriteTeam(form.teamId))
+const editLocked = computed(() => readOnly.value || saving.value)
+let editorEpoch = 0, navigationEpoch = 0, activeSave = null
+
+function invalidateEditorContext() {
+  editorEpoch++
+  activeSave = null
+  saving.value = false
+}
+
+function editorContext() {
+  return { epoch: editorEpoch, id: route.params.id, path: route.fullPath, teamId: form.teamId, currentTeamId: appStore.currentTeamId }
+}
+
+function isEditorContextCurrent(context) {
+  return !disposed && context.epoch === editorEpoch
+    && context.id === route.params.id && context.path === route.fullPath
+    && context.teamId === form.teamId && context.currentTeamId === appStore.currentTeamId
+    && userStore.hasCapability(context.teamId, 'read')
+}
+
 const writableTeams = computed(() => appStore.teams.filter(team => userStore.canWriteTeam(team.id)))
 const bodyPanel = ref('body'), historyVisible = ref(false)
 const rulesWorkspace = computed(() => form.type === 'REST' && bodyPanel.value === 'conditions')
@@ -282,6 +306,7 @@ function isOpCollapsed(op) {
 }
 
 function toggleOpCollapsed(op) {
+  if (saving.value) return
   if (collapsedOps.has(op.operationName)) {
     collapsedOps.delete(op.operationName)
   } else {
@@ -295,6 +320,7 @@ function collapseAllOps() {
 }
 
 function expandAllOps() {
+  if (saving.value) return
   collapsedOps.clear()
 }
 
@@ -446,7 +472,10 @@ watch(() => [form.teamId, form.method, form.path, form.type], () => {
 // 之后任意修改都让 isDirty 变 true。保存成功后重置快照让用户能正常导航。
 const formSnapshot = ref('')
 const headerSnapshot = ref('')
-const skipLeaveGuard = ref(false) // 保存成功后绕过守卫
+// Invalidate synchronously, including A → B → A changes within one Vue tick.
+watch(() => [route.params.id, route.fullPath, form.teamId, appStore.currentTeamId,
+  userStore.hasCapability(form.teamId, 'read'), userStore.canWriteTeam(form.teamId)],
+invalidateEditorContext, { flush: 'sync' })
 
 function captureSnapshot() {
   formSnapshot.value = JSON.stringify(form)
@@ -454,13 +483,13 @@ function captureSnapshot() {
 }
 
 const isDirty = computed(() => {
-  if (skipLeaveGuard.value || !formSnapshot.value) return false
+  if (!formSnapshot.value) return false
   return JSON.stringify(form) !== formSnapshot.value
       || JSON.stringify(headerOverrideList.value) !== headerSnapshot.value
 })
 
 function beforeUnloadHandler(e) {
-  if (isDirty.value) {
+  if (saving.value || isDirty.value) {
     // 现代浏览器忽略自定义文案，但仍需 preventDefault + returnValue 触发原生提示
     e.preventDefault()
     e.returnValue = ''
@@ -468,27 +497,24 @@ function beforeUnloadHandler(e) {
   }
 }
 
-onBeforeRouteLeave(async (to, from, next) => {
-  if (!isDirty.value || (form.teamId && !userStore.hasCapability(form.teamId, 'read'))) {
-    next()
-    return
-  }
+async function confirmEditorLeave() {
+  const pending = saving.value && !activeSave?.committed
+  // Navigation intent suppresses auto-navigation, not the already submitted server operation.
+  // If the user cancels the dialog, a genuine success can still acknowledge this exact draft.
+  navigationEpoch++
+  if ((!pending && !isDirty.value) || (form.teamId && !userStore.hasCapability(form.teamId, 'read'))) return true
   try {
     await ElMessageBox.confirm(
-      '当前接口有未保存的修改，确定离开吗？',
-      '未保存提示',
-      { confirmButtonText: '离开', cancelButtonText: '继续编辑', type: 'warning' }
+      pending ? '保存请求已发送，离开不会撤销服务端保存，结果可能仍会生效。确定离开吗？' : '当前接口有未保存的修改，确定离开吗？',
+      pending ? '保存进行中' : '未保存提示',
+      { confirmButtonText: '离开', cancelButtonText: '留在此页', type: 'warning' }
     )
-    next()
-  } catch (e) {
-    next(false)
-  }
-})
+    return true
+  } catch { return false }
+}
 
-onBeforeRouteUpdate(async (to, from) => {
-  if (to.params.id === from.params.id || !isDirty.value) return true
-  try { await ElMessageBox.confirm('当前草稿未保存，切换接口会丢弃未提交编辑。', '切换接口', { type: 'warning' }); return true } catch { return false }
-})
+onBeforeRouteLeave(() => confirmEditorLeave())
+onBeforeRouteUpdate((to, from) => to.params.id === from.params.id ? true : confirmEditorLeave())
 // --- 计算属性 ---
 
 /** 当前选中团队的 identifier */
@@ -520,12 +546,15 @@ const wsdlHostUrl = computed(() => {
 // --- 数据加载（编辑模式） ---
 
 async function loadApiDetail() {
-  if (!route.params.id) return
+  if (disposed || saving.value || !route.params.id) return false
   pageLoading.value = true; detailError.value = ''
-  const id = route.params.id, sequence = ++detailRequest
+  const id = route.params.id, sequence = ++detailRequest, epoch = editorEpoch
+  let attaching = false
   try {
     const data = await getApiDetail(id)
-    if (disposed || sequence !== detailRequest || route.params.id !== id) return
+    if (disposed || epoch !== editorEpoch || sequence !== detailRequest || route.params.id !== id) return false
+    if (data.id !== id) { detailError.value = '接口详情与当前路由不一致，请重新加载'; return false }
+    attaching = true
     loadedApiId.value = id
     Object.assign(persistedMeta, { createdByName: data.createdByName || data.createdBy || '', updatedByName: data.updatedByName || data.updatedBy || '', updatedAt: data.updatedAt || '' })
     loadedRevision.value = data.revision
@@ -669,8 +698,10 @@ async function loadApiDetail() {
     headerOverrideList.value = Object.entries(overridesObj).map(
       ([key, value]) => ({ key, value })
     )
+    captureSnapshot()
+    return true
   } catch (e) {
-    if (disposed || sequence !== detailRequest || route.params.id !== id) return
+    if (disposed || (!attaching && epoch !== editorEpoch) || sequence !== detailRequest || route.params.id !== id) return false
     detailError.value = e.msg || '无法读取接口详情，请检查当前团队权限或稍后重试'
     loadedApiId.value = null
   } finally {
@@ -724,11 +755,13 @@ function createDefaultSoapResponse(operationName, suggestedResponseBody) {
 
 // --- WSDL 上传 ---
 function handleWsdlFileChange(uploadFile) {
+  if (disposed || editLocked.value) return
   wsdlFile.value = uploadFile.raw
 }
 
 async function handleUploadWsdl() {
-  if (readOnly.value) return
+  if (disposed || editLocked.value || wsdlUploading.value) return
+  const context = editorContext()
   if (!wsdlFile.value) return
 
   wsdlUploading.value = true
@@ -738,7 +771,7 @@ async function handleUploadWsdl() {
     formData.append('file', wsdlFile.value)
     formData.append('teamId', teamId)
     const res = await uploadWsdl(formData)
-    if (disposed || readOnly.value || teamId !== form.teamId || form.type !== 'SOAP') return
+    if (!isEditorContextCurrent(context) || editLocked.value || teamId !== form.teamId || form.type !== 'SOAP') return
 
     // 合并策略：
     // - 已存在且有 responses（用户编辑过）→ 保留原 responses，只更新 soapAction
@@ -790,12 +823,12 @@ async function handleUploadWsdl() {
 // --- 全局响应头覆盖 ---
 
 function addHeaderOverride() {
-  if (readOnly.value) return
+  if (disposed || editLocked.value) return
   headerOverrideList.value.push({ key: '', value: '' })
 }
 
 function removeHeaderOverride(idx) {
-  if (readOnly.value) return
+  if (disposed || editLocked.value) return
   headerOverrideList.value.splice(idx, 1)
 }
 
@@ -855,21 +888,28 @@ function downloadDraft() {
   link.href = url; link.download = 'mockhub-api-draft.json'; link.click(); URL.revokeObjectURL(url)
 }
 async function historyChanged(change) {
+  if (disposed || saving.value) return
   if (change.apiId !== loadedApiId.value || change.teamId !== form.teamId) return
   if (isDirty.value) { revisionConflict.value = true; return }
-  await loadApiDetail(); captureSnapshot(); appStore.bumpApiRevision()
+  if (await loadApiDetail()) appStore.bumpApiRevision()
 }
 async function copyDraft() {
   try { await navigator.clipboard.writeText(JSON.stringify({ ...form, expectedRevision: loadedRevision.value }, null, 2)); ElMessage.success('当前草稿已复制') }
   catch { ElMessage.warning('浏览器未授权剪贴板，请手动复制需要保留的内容') }
 }
 async function reloadCurrentVersion() {
-  try { await ElMessageBox.confirm('重新加载将丢弃未提交编辑，是否继续？', '重新加载', { type: 'warning' }); await loadApiDetail(); captureSnapshot() } catch {}
+  if (disposed || saving.value) return
+  const context = editorContext()
+  try {
+    await ElMessageBox.confirm('重新加载将丢弃未提交编辑，是否继续？', '重新加载', { type: 'warning' })
+    if (!isEditorContextCurrent(context) || saving.value) return
+    await loadApiDetail()
+  } catch {}
 }
 async function handleSave() {
-  if (saving.value || pageLoading.value || detailError.value) return
-  if (isEdit.value && loadedApiId.value !== route.params.id) { ElMessage.warning('详情尚未就绪，无法将旧草稿写入其它接口'); return }
-  if (!userStore.canWriteTeam(form.teamId)) { ElMessage.warning('当前团队角色不可修改接口'); return }
+  if (disposed || saving.value || wsdlUploading.value || pageLoading.value || detailError.value) return
+  if (isEdit.value && loadedApiId.value !== (route.params.id || createdApiId.value)) { ElMessage.warning('详情尚未就绪，无法将旧草稿写入其它接口'); return }
+  if (!userStore.hasCapability(form.teamId, 'read') || !userStore.canWriteTeam(form.teamId)) { ElMessage.warning('当前团队角色不可修改接口'); return }
 
   // 基本校验
   if (!form.name.trim()) {
@@ -909,6 +949,12 @@ async function handleSave() {
     return
   }
 
+  // Own both the request and the exact submitted draft, never a later reactive object.
+  editorEpoch++
+  const context = editorContext(), request = { committed: false, navigationEpoch }
+  const submittedForm = JSON.stringify(form), submittedHeaders = JSON.stringify(headerOverrideList.value)
+  const expectedRevision = loadedRevision.value, apiId = route.params.id || createdApiId.value
+  activeSave = request
   saving.value = true
   try {
     // 将 headerOverrideList 转回对象
@@ -954,7 +1000,7 @@ async function handleSave() {
       }
     }
 
-    const payload = {
+    const payload = JSON.parse(JSON.stringify({
       type: form.type,
       name: form.name,
       description: form.description,
@@ -972,21 +1018,29 @@ async function handleSave() {
       soapConfig: soapConfigPayload,
       responseMode: form.responseMode === 'RANDOM' ? 'RANDOM' : 'CONDITION',
       responses: allResponses
-    }
+    }))
 
-    if (isEdit.value) {
-      await updateApi(route.params.id, { ...payload, expectedRevision: loadedRevision.value })
-      ElMessage.success('保存成功')
-    } else {
-      await createApi(payload)
-      ElMessage.success('创建成功')
+    const saved = apiId
+      ? await updateApi(apiId, { ...payload, expectedRevision })
+      : await createApi(payload)
+    if (activeSave !== request || !isEditorContextCurrent(context) || !userStore.canWriteTeam(context.teamId)) return
+    request.committed = true
+    ElMessage.success(apiId ? '保存成功' : '创建成功')
+    formSnapshot.value = submittedForm
+    headerSnapshot.value = submittedHeaders
+    if (!apiId && saved?.id) { createdApiId.value = saved.id; loadedApiId.value = saved.id }
+    if (saved?.revision) loadedRevision.value = saved.revision
+    // A delayed child event must not silently discard a newer local draft, despite the UI freeze.
+    if (isDirty.value) {
+      ElMessage.warning('提交的版本已保存，但本地草稿又有变化，已保留在当前页面；请先导出，再到列表核对服务端版本。')
+      return
     }
-    // 保存成功后清空脏检测，避免离开时弹"未保存"提示
-    skipLeaveGuard.value = true
-    // 刷新团队数据（apiCount 可能变化）
-    appStore.loadTeams()
-    router.push('/apis')
+    if (request.navigationEpoch !== navigationEpoch) return
+    // Refresh counts without converting a refresh/navigation failure into a false save failure.
+    appStore.loadTeams().catch(() => {})
+    try { await router.push('/apis') } catch { /* The committed save remains committed. */ }
   } catch (e) {
+    if (activeSave !== request || !isEditorContextCurrent(context) || !userStore.canWriteTeam(context.teamId)) return
     if (Number(e?.code) === 40921 || Number(e?.code) === 40920) revisionConflict.value = true
     if (e?.isTimeout || e?.isNetworkError) {
       ElMessage.warning('保存请求超时或网络异常，服务端可能已经保存成功。请返回接口列表确认后再决定是否重试，避免重复提交。')
@@ -994,7 +1048,7 @@ async function handleSave() {
       ElMessage.error('保存失败，请稍后重试')
     }
   } finally {
-    saving.value = false
+    if (activeSave === request) { activeSave = null; saving.value = false }
   }
 }
 
@@ -1033,7 +1087,9 @@ watch(
       form.groupId = null
     }
     loadGroups()
-  }
+  },
+  // Reset immediately on user team changes, before detail hydration assigns its own groupId.
+  { flush: 'sync' }
 )
 
 /**
@@ -1041,13 +1097,14 @@ watch(
  * 仅团队管理员/超管能看到该选项。
  */
 async function handleGroupSelectChange(val) {
-  if (readOnly.value) return
+  if (disposed || editLocked.value) return
   if (val !== '__new__') return
 
   // 立即把 select 值还原为 null（弹窗未确认前不应保留 sentinel）
   form.groupId = null
 
   try {
+    const context = editorContext()
     const { value: name } = await ElMessageBox.prompt('请输入分组名', '新建分组', {
       confirmButtonText: '创建',
       cancelButtonText: '取消',
@@ -1061,6 +1118,7 @@ async function handleGroupSelectChange(val) {
       }
     })
 
+    if (!isEditorContextCurrent(context) || editLocked.value) return
     const trimmed = name.trim()
     // sortOrder 取最大值 + 1，新分组排在末尾
     const maxOrder = availableGroups.value.reduce((m, g) => Math.max(m, g.sortOrder || 0), 0)
@@ -1069,6 +1127,7 @@ async function handleGroupSelectChange(val) {
       name: trimmed,
       sortOrder: maxOrder + 1
     })
+    if (!isEditorContextCurrent(context) || editLocked.value) return
     ElMessage.success('分组已创建')
     // 加入本地列表并选中
     availableGroups.value.push(created)
@@ -1079,15 +1138,27 @@ async function handleGroupSelectChange(val) {
 }
 
 // --- 初始化 ---
+watch(() => route.params.id, async (id, previous) => {
+  if (id === previous || disposed) return
+  detailRequest++
+  createdApiId.value = null
+  loadedApiId.value = null
+  loadedRevision.value = null
+  revisionConflict.value = false
+  historyVisible.value = false
+  formSnapshot.value = ''; headerSnapshot.value = ''
+  if (id) await loadApiDetail()
+})
+
 watch(() => appStore.apiRevision, async () => {
-  if (!isEdit.value || pageLoading.value || !loadedApiId.value) return
+  if (disposed || saving.value || !isEdit.value || pageLoading.value || !loadedApiId.value) return
   const id = loadedApiId.value, sequence = detailRequest
   try {
     const latest = await getApiDetail(id)
-    if (disposed || sequence !== detailRequest || loadedApiId.value !== id) return
+    if (disposed || saving.value || sequence !== detailRequest || loadedApiId.value !== id || route.params.id !== id) return
     if (latest.revision === loadedRevision.value) return
     if (isDirty.value) { revisionConflict.value = true; return }
-    await loadApiDetail(); captureSnapshot()
+    await loadApiDetail()
   } catch { /* Keep the draft; the request layer reports lost access. */ }
 })
 
@@ -1112,14 +1183,15 @@ onMounted(async () => {
       form.teamId = appStore.currentTeamId
     }
   }
-  // 拍下初始快照，作为脏检测基线
-  captureSnapshot()
+  // 编辑详情由成功加载本身拍快照，旧初始化回调不能清理新页面的草稿。
+  if (disposed) return
+  if (!isEdit.value) captureSnapshot()
   // 关浏览器/刷新时拦截
   window.addEventListener('beforeunload', beforeUnloadHandler)
 })
 
 onBeforeUnmount(() => {
-  disposed = true; detailRequest++; pathCheckSeq++
+  disposed = true; invalidateEditorContext(); detailRequest++; pathCheckSeq++
   window.removeEventListener('beforeunload', beforeUnloadHandler)
   if (pathCheckTimer) clearTimeout(pathCheckTimer)
 })
