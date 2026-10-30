@@ -2,6 +2,11 @@ package com.mockhub.common.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mockhub.common.filter.JwtAuthFilter;
+import com.mockhub.common.model.BizException;
+import com.mockhub.mock.repository.WsdlReferenceRepository;
+import com.mockhub.mock.service.SoapService;
+import com.mockhub.mock.service.SoapSkeletonGenerator;
+import com.mockhub.system.repository.TeamRepository;
 import com.mockhub.common.util.CurrentUserProvider;
 import com.mockhub.common.util.JwtUtil;
 import com.mockhub.mcp.repository.McpTokenRepository;
@@ -42,7 +47,12 @@ class LegacyDatabaseCompatibilityTest {
     @TempDir Path temp;
     private static final String LEGACY_MCP_TOKEN = "mhk_legacy-credential";
     private static final String BODY = "{\"legacy\":\"正文 & <tag>\"}";
-    private static final String SOAP = "{\"wsdlPath\":\"legacy.wsdl\",\"operations\":[{\"operationName\":\"Ping\",\"responseBody\":\"<reply>旧 SOAP</reply>\",\"responseCode\":202,\"delayMs\":17}]}";
+    private static final String SOAP = "{\"wsdlFileName\":\"legacy.wsdl\",\"operations\":[{\"operationName\":\"Ping\",\"responseBody\":\"<reply>旧 SOAP</reply>\",\"responseCode\":202,\"delayMs\":17}]}";
+
+    private static final String WSDL = "<?xml version='1.0' encoding='UTF-8'?>"
+            + "<definitions xmlns='http://schemas.xmlsoap.org/wsdl/' xmlns:s='http://schemas.xmlsoap.org/wsdl/soap/' xmlns:tns='urn:legacy' targetNamespace='urn:legacy'>"
+            + "<portType name='LegacyType'/><binding name='LegacyBinding' type='tns:LegacyType'><s:binding transport='http://schemas.xmlsoap.org/soap/http'/></binding>"
+            + "<service name='Legacy'><port name='Port' binding='tns:LegacyBinding'><s:address location='http://real-service.example/legacy'/></port></service></definitions>";
 
     static Stream<LegacySchemaFixtures.Snapshot> histories() { return LegacySchemaFixtures.ALL.stream(); }
 
@@ -59,7 +69,7 @@ class LegacyDatabaseCompatibilityTest {
         Files.write(attachment, bytes);
         Path wsdl = temp.resolve("wsdl/legacy.wsdl");
         Files.createDirectories(wsdl.getParent());
-        Files.write(wsdl, "<definitions>historical WSDL</definitions>".getBytes(StandardCharsets.UTF_8));
+        Files.write(wsdl, WSDL.getBytes(StandardCharsets.UTF_8));
         List<String> originalDefinitions = rows(ds, "SELECT id,response_body,soap_config,created_at,updated_at FROM api_definition ORDER BY id");
         List<String> originalAccounts = rows(ds, "SELECT id,username,password_hash,display_name,first_login,created_at,updated_at FROM user ORDER BY id");
         List<String> originalTeams = rows(ds, "SELECT id,name,identifier,color,created_at FROM team ORDER BY id");
@@ -129,7 +139,20 @@ class LegacyDatabaseCompatibilityTest {
         assertLegacyJwtRejected();
         if (hasLegacyAi(history)) assertNull(new McpTokenService(new McpTokenRepository(jdbc)).authenticate(LEGACY_MCP_TOKEN));
         assertArrayEquals(bytes, Files.readAllBytes(attachment));
-        assertEquals("<definitions>historical WSDL</definitions>", new String(Files.readAllBytes(wsdl), StandardCharsets.UTF_8));
+        assertEquals(WSDL, new String(Files.readAllBytes(wsdl), StandardCharsets.UTF_8));
+        // Retained bytes alone are insufficient: old basename references must still work at runtime.
+        DataProperties props = new DataProperties(); props.setPath(temp.toString());
+        SoapService soap = new SoapService(props, mock(SoapSkeletonGenerator.class));
+        TeamRepository teams = new TeamRepository(); ReflectionTestUtils.setField(teams, "jdbcTemplate", jdbc);
+        ReflectionTestUtils.setField(soap, "teamRepository", teams);
+        ReflectionTestUtils.setField(soap, "references", new WsdlReferenceRepository(jdbc, new ObjectMapper()));
+        String mockUrl = "http://127.0.0.1/mock/LEGACY/soap";
+        String served = soap.getWsdlContent("a", "legacy.wsdl", mockUrl);
+        assertTrue(served.contains(mockUrl));
+        assertFalse(served.contains("http://real-service.example/legacy"));
+        assertEquals(40702, assertThrows(BizException.class,
+                () -> soap.getWsdlContent("orphan", "legacy.wsdl", mockUrl)).getCode());
+        assertArrayEquals(WSDL.getBytes(StandardCharsets.UTF_8), Files.readAllBytes(wsdl));
     }
 
     @Test void freshDatabaseUsesSameAtomicStartupPathTwice() throws Exception {
