@@ -44,6 +44,7 @@ import java.util.UUID;
 public class DataSourceConfig {
 
     private static final Logger log = LoggerFactory.getLogger(DataSourceConfig.class);
+    private static final int CURRENT_SCHEMA_VERSION = 11;
 
     @Autowired
     private DataProperties dataProperties;
@@ -52,9 +53,8 @@ public class DataSourceConfig {
      * 自定义 DataSource bean：
      * 1. 先创建数据目录
      * 2. 创建连接池
-     * 3. 启用 WAL 模式
-     * 4. 执行 schema.sql 建表
-     * 5. 按 schema_version 执行迁移
+     * 3. 同一事务内验证旧库、执行 schema.sql 建表及版本迁移
+     * 4. 迁移成功后启用 WAL 模式
      */
     @Bean
     public DataSource dataSource(DataSourceProperties properties) {
@@ -62,13 +62,10 @@ public class DataSourceConfig {
 
         DataSource ds = properties.initializeDataSourceBuilder().build();
 
-        JdbcTemplate jdbcTemplate = new JdbcTemplate(ds);
-        enableWalMode(jdbcTemplate);
-        executeSchemaSql(jdbcTemplate);
+        // 建表、补列、数据迁移及补索引必须使用同一事务；失败不能留下半升级的 schema。
         executeMigrations(ds);
-        // 老库第一次执行 schema.sql 时，部分索引依赖的列还不存在，
-        // 迁移/兼容补列完成后再执行一次，补建这些索引。
-        executeSchemaSql(jdbcTemplate);
+        // 未知未来版本或无效角色拒绝启动时，连 journal_mode 也不要改动。
+        enableWalMode(new JdbcTemplate(ds));
 
         return ds;
     }
@@ -107,7 +104,7 @@ public class DataSourceConfig {
     /**
      * 读取 classpath:schema.sql 并执行建表语句
      */
-    private void executeSchemaSql(JdbcTemplate jdbcTemplate) {
+    private void executeSchemaSql(Connection conn, boolean deferMissingColumnIndexes) throws SQLException {
         try {
             ClassPathResource resource = new ClassPathResource("schema.sql");
             InputStream inputStream = resource.getInputStream();
@@ -129,10 +126,14 @@ public class DataSourceConfig {
                     continue;
                 }
                 try {
-                    jdbcTemplate.execute(trimmed);
-                } catch (org.springframework.dao.DataAccessException e) {
-                    String upper = trimmed.toUpperCase();
-                    if (upper.startsWith("CREATE INDEX") || upper.startsWith("CREATE UNIQUE INDEX")) {
+                    try (Statement st = conn.createStatement()) {
+                        st.execute(trimmed);
+                    }
+                } catch (SQLException e) {
+                    String upper = trimmed.toUpperCase(java.util.Locale.ROOT);
+                    if (deferMissingColumnIndexes && e.getMessage() != null
+                            && e.getMessage().contains("no such column")
+                            && (upper.startsWith("CREATE INDEX") || upper.startsWith("CREATE UNIQUE INDEX"))) {
                         // 极老版本的 api_definition 可能还没有 group_id 等列，先跳过索引，
                         // 等 migrate/ensureCompatibilityColumns 补列后由第二次 schema.sql 补建。
                         log.warn("schema.sql 暂跳过索引（列尚未补齐）：{}", trimmed);
@@ -169,8 +170,16 @@ public class DataSourceConfig {
         try (Connection conn = dataSource.getConnection()) {
             conn.setAutoCommit(false);
             try {
-                int current = getCurrentSchemaVersion(conn);
+                long current = getCurrentSchemaVersion(conn);
                 log.info("DB 当前 schema 版本：v{}", current);
+                if (current > CURRENT_SCHEMA_VERSION) {
+                    throw new IllegalStateException("数据库 schema v" + current + " 高于本程序支持的 v"
+                            + CURRENT_SCHEMA_VERSION + "；请使用匹配的新版本程序，禁止降级或修改版本记录");
+                }
+                validateLegacyRoles(conn);
+                executeSchemaSql(conn, true);
+                // 在 V1 查询/迁入响应前补齐已知旧库可缺少的兼容列；不覆盖任何正文。
+                ensureCompatibilityColumns(conn);
 
                 if (current < 1) {
                     migrateV1(conn);
@@ -215,7 +224,7 @@ public class DataSourceConfig {
                     migrateV9(conn);
                     recordSchemaVersion(conn, 9, "团队角色、归档状态与管理员安全写锁");
                 }
-                ensureCompatibilityColumns(conn);
+                migrateV3(conn); // 已知高版本缺列形态也必须补回统计索引。
                 ensureLifecycleSchema(conn);
                 if (current < 10) {
                     migrateV10(conn);
@@ -223,11 +232,13 @@ public class DataSourceConfig {
                 }
                 migrateV11(conn);
                 if (current < 11) recordSchemaVersion(conn, 11, "MCP个人凭证显式团队能力范围与草稿来源");
+                executeSchemaSql(conn, false);
                 conn.commit();
                 log.info("DB 迁移完成");
             } catch (Exception e) {
                 safeRollback(conn);
-                throw new IllegalStateException("DB 迁移失败，已回滚，拒绝启动", e);
+                String detail = e instanceof IllegalStateException ? "：" + e.getMessage() : "";
+                throw new IllegalStateException("DB 迁移失败，已回滚，拒绝启动" + detail, e);
             }
         } catch (SQLException e) {
             throw new IllegalStateException("获取数据库连接失败，拒绝跳过迁移", e);
@@ -238,9 +249,8 @@ public class DataSourceConfig {
      * 查询当前已应用的最大 schema 版本号。
      * 表不存在或为空时返回 0，代表尚未进入版本化体系。
      */
-    private int getCurrentSchemaVersion(Connection conn) throws SQLException {
-        // 兜底检查表存在性：正常情况下 schema.sql 刚执行过 CREATE TABLE IF NOT EXISTS schema_version，
-        // 表一定存在。这里兜底为单元测试/异常场景保留。
+    private long getCurrentSchemaVersion(Connection conn) throws SQLException {
+        // 必须在执行当前 schema.sql 前读取，才能无写入地拒绝未知未来版本。
         try (PreparedStatement ps = conn.prepareStatement(
                 "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'schema_version'");
              ResultSet rs = ps.executeQuery()) {
@@ -252,7 +262,7 @@ public class DataSourceConfig {
                 "SELECT COALESCE(MAX(version), 0) FROM schema_version");
              ResultSet rs = ps.executeQuery()) {
             rs.next();
-            return rs.getInt(1);
+            return rs.getLong(1);
         }
     }
 
@@ -406,6 +416,54 @@ public class DataSourceConfig {
         }
     }
 
+    /** Only documented historical aliases are accepted. Never infer an editable role from unknown data. */
+    private void validateLegacyRoles(Connection conn) throws SQLException {
+        List<String> problems = new ArrayList<>();
+        validateRoleColumn(conn, "user", "global_role", "id", null,
+                new String[]{"SUPER_ADMIN", "USER", "MEMBER", "TEAM_ADMIN"}, problems);
+        validateRoleColumn(conn, "user_team", "role", "user_id", "team_id",
+                new String[]{"TEAM_ADMIN", "EDITOR", "VIEWER", "MEMBER"}, problems);
+        if (!problems.isEmpty()) {
+            throw new IllegalStateException("角色兼容检查失败；未修改数据库。请备份数据库，根据账号/团队的真实权限人工修复以下记录后重启；"
+                    + "不要将未知值默认设为 EDITOR/管理员。合法全局角色 SUPER_ADMIN/USER（旧 MEMBER/TEAM_ADMIN→USER），"
+                    + "团队角色 TEAM_ADMIN/EDITOR/VIEWER（旧 MEMBER→EDITOR）：" + String.join("; ", problems));
+        }
+    }
+
+    private void validateRoleColumn(Connection conn, String table, String column, String idColumn,
+                                    String secondIdColumn, String[] allowed, List<String> problems) throws SQLException {
+        if (!tableExists(conn, table)) return;
+        boolean hasRole = false;
+        try (Statement st = conn.createStatement(); ResultSet rs = st.executeQuery("PRAGMA table_info(" + table + ")")) {
+            while (rs.next()) if (column.equals(rs.getString("name"))) hasRole = true;
+        }
+        if (!hasRole) {
+            problems.add(table + "." + column + " 缺列（不能推断权限，请恢复历史角色列）");
+            return;
+        }
+        String ids = idColumn + (secondIdColumn == null ? "" : "," + secondIdColumn);
+        try (Statement st = conn.createStatement();
+             ResultSet rs = st.executeQuery("SELECT " + ids + "," + column + " FROM " + table)) {
+            while (rs.next()) {
+                String role = rs.getString(column);
+                boolean known = false;
+                for (String value : allowed) if (value.equals(role)) known = true;
+                if (!known) {
+                    problems.add(table + "[" + idColumn + "=" + reportValue(rs.getString(idColumn))
+                            + (secondIdColumn == null ? "" : "," + secondIdColumn + "=" + reportValue(rs.getString(secondIdColumn)))
+                            + "]." + column + "=" + reportValue(role));
+                }
+            }
+        }
+    }
+
+    /** Report only identifiers/roles, not complete rows (password hashes, API keys or token hashes). */
+    private String reportValue(String value) {
+        if (value == null) return "NULL";
+        return "'" + value.replace("\\", "\\\\").replace("'", "''")
+                .replace("\r", "\\r").replace("\n", "\\n").replace("\t", "\\t") + "'";
+    }
+
     /** V9 不随机修复孤儿团队；保留全部成员关系，由超管明确指派管理员。 */
     private void migrateV9(Connection conn) throws SQLException {
         try (Statement st = conn.createStatement()) {
@@ -422,16 +480,10 @@ public class DataSourceConfig {
                 st.execute("UPDATE user_team SET role = 'EDITOR' WHERE role = 'MEMBER'");
             }
         }
-        // 极老版本测试/数据库可能没有 global_role 列。
+        // 已在事务入口验证真实历史枚举；只转换有依据的旧别名。
         if (tableExists(conn, "user")) {
-            boolean hasRole = false;
-            try (Statement st = conn.createStatement(); ResultSet rs = st.executeQuery("PRAGMA table_info(user)")) {
-                while (rs.next()) { if ("global_role".equals(rs.getString("name"))) hasRole = true; }
-            }
-            if (hasRole) {
-                try (Statement st = conn.createStatement()) {
-                    st.execute("UPDATE user SET global_role = 'USER' WHERE global_role IN ('MEMBER', 'TEAM_ADMIN')");
-                }
+            try (Statement st = conn.createStatement()) {
+                st.execute("UPDATE user SET global_role = 'USER' WHERE global_role IN ('MEMBER', 'TEAM_ADMIN')");
             }
         }
     }
