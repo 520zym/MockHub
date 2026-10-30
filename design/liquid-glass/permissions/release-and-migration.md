@@ -20,7 +20,7 @@
 5. 旧不含 sid/auth_version 的 JWT、旧无显式 scope 的 MCP 凭证失效：网页重新登录，个人 MCP 按当前团队范围重新签发。不要复用旧密钥或分享网页 JWT 给 MCP。
 6. 新建账号仍需首次改密。首次初始化应先仅绑定 loopback，完成初始管理员改密、配置独立签名密钥及受信任 TLS/反向代理后再开放访问。停用/密码变更后的旧 sid 和个人 MCP 不会因恢复账号而复活。
 
-迁移在事务内执行；失败应拒绝启动，不能跳过安全迁移继续运行。迁移不会自动把未知历史 AI 会话重新归队。
+已补充无版本号旧库和 V1–V11 共 17 种真实历史 schema 的升级/重复启动验证，完整矩阵见 [Review 修复与旧库兼容验收](review-fixes-and-db-compatibility.md)。版本与角色预检、建表、补列、数据和索引迁移在同一事务内执行；失败完整回滚并拒绝启动。合法旧 MEMBER/TEAM_ADMIN 按既定映射兼容；未知/NULL/空白角色会明确报告，不能直接默认赋予编辑或管理员权限。未知未来 schema 拒绝降级。迁移不会自动把未知历史 AI 会话重新归队；已有混队卡片会话保留原数据但隔离列表、详情和续聊。
 
 ## 安全回退
 
@@ -55,7 +55,7 @@ node frontend/tests/browser-mcp-confirm-smoke.mjs --isolated --state=target/ui-s
 node frontend/tests/live-lifecycle-mcp-smoke.mjs --isolated --state=target/ui-smoke-state.json
 ~~~
 
-- 最终内嵌前端 JAR 在全新隔离数据库上完成 92 项真实检查；后端 539、前端 278 项单元/集成检查均通过，生产构建与打包成功。
+- 修复后的内嵌前端 JAR 在全新隔离数据库上完成 95 项真实检查；后端 593、前端 301 项单元/集成检查均通过，生产构建与打包成功。
 - 浏览器脚本使用真实 MockHub HTTP、Vue、Element Plus、Monaco 与富文本编辑器，不替换业务 API。其它环境可用 CHROME 指定已有本地 Chromium。
 - 组件 fixture 脚本明确使用 API stub，只证明组件协议、状态和布局；不能把它们宣称为后端或真实外部模型调用。
 - 基线 shell 的“无团队”用例要求全新库；不要在创建了生命周期测试团队后再次把同一库当全新库测试。
@@ -69,7 +69,7 @@ node frontend/tests/live-lifecycle-mcp-smoke.mjs --isolated --state=target/ui-sm
 - 回收站 API 不可公共调用。路径冲突恢复 40922，不覆盖替代接口；恢复后默认停用。回滚不恢复创建者/归属或运行计数。
 - 历史/回收站/有效草稿引用和有效上传租约保护文件；外队和未知附件引用拒绝。
 - WSDL 上传需要真实同队写权限，原始文件名仅展示。新文件随机同队安全 key；任意路径/符号链接/危险 XML/外队引用拒绝，公开 ?wsdl 只读实际路由团队文件。
-- 完整 SOAP ZIP 导入他队时有新的目标 WSDL key，文件/规则/操作/标签保留；导入中失败不会留下部分 API/历史或删除旧 WSDL。
+- 完整 SOAP ZIP 导入他队时有新的目标 WSDL key，文件/规则/操作/标签保留；导入失败不留下部分 API/历史；本次新 FILE/WSDL 有事务回滚补偿，不删除旧文件。
 - MCP token 只见显式团队与能力；超管 owner 也不能越过 token 范围。普通网页退出 MCP 仍可用；安全改密/撤销后旧 MCP 401。
 - 源 MCP token 撤销/过期/owner 停用后，关联草稿即使走 Web 显式确认也被拒绝。DRAFT_ONLY 不等于禁止人类确认；自动 apply 仍需原/现 APPLY 能力及 DIRECT 策略。
 - 离队后私有 AI 标题/preview/messages/cards 不可读；不能将 Team A conversationId 搭配 Team B 续聊。超管不因此获得别人私人会话内容。
