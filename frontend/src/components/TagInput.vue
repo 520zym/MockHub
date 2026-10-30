@@ -274,13 +274,13 @@ function hexToRgba(hex, alpha) {
     font-size: 13px;
 
     &:hover {
-      background: #F7F8FA;
+      background: var(--app-bg-control);
     }
 
     // 创建新标签选项的特殊样式
     &--create {
-      color: #6366F1;
-      border-top: 1px solid #F0F0F5;
+      color: var(--app-text-accent);
+      border-top: 1px solid var(--app-divider);
       margin-top: 4px;
       padding-top: 10px;
     }
@@ -300,13 +300,13 @@ function hexToRgba(hex, alpha) {
 
   &__check {
     margin-left: auto;
-    color: #6366F1;
+    color: var(--app-text-accent);
   }
 
   &__empty {
     padding: 12px;
     text-align: center;
-    color: #A3AED0;
+    color: var(--app-text-secondary);
     font-size: 13px;
   }
 }

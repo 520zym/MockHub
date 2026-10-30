@@ -165,7 +165,7 @@ watch(normalizedSearch, (kw) => {
 .tree-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .tree-search { flex: 1; min-width: 0; }
 .tree-search :deep(.el-input__wrapper) { background: #F4F6F9; box-shadow: none; border-radius: 7px; }
-.field-count { font-size: 10px; color: #969ca5; white-space: nowrap; }
-.tree-body { max-height: 260px; overflow: auto; scrollbar-width: thin; font: 11px/1.8 'SF Mono', Menlo, Consolas, monospace; padding-top: 6px; }
-.tree-empty { color: #969ca5; font-size: 11px; text-align: center; padding: 18px 8px; background: #F8F9FB; border-radius: 9px; line-height: 1.8; }
+.field-count { font-size: 12px; color: var(--app-text-muted); white-space: nowrap; }
+.tree-body { max-height: 260px; overflow: auto; scrollbar-width: thin; font: 12px/1.8 'SF Mono', Menlo, Consolas, monospace; padding-top: 6px; }
+.tree-empty { color: var(--app-text-muted); font-size: 12px; text-align: center; padding: 18px 8px; background: #F8F9FB; border-radius: 9px; line-height: 1.8; }
 </style>

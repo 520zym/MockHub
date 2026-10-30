@@ -20,13 +20,13 @@ function pick() { if (!props.readOnly && !props.usedPaths.has(props.node.path) &
 </script>
 <style scoped>
 .tree-node { min-width: 0; }
-.branch, .leaf { display: flex; align-items: center; gap: 7px; width: 100%; border: 0; color: #333a47; background: transparent; font: inherit; text-align: left; padding: 6px; border-radius: 6px; cursor: pointer; }
-.branch { color: #8c939e; }
+.branch, .leaf { display: flex; align-items: center; gap: 7px; width: 100%; border: 0; color: var(--app-text-regular); background: transparent; font: inherit; text-align: left; padding: 6px; border-radius: 6px; cursor: pointer; }
+.branch { color: var(--app-text-secondary); }
 .leaf:hover:not(:disabled), .leaf.used { background: #f0f4fc; }
 .leaf:disabled { cursor: default; }
-.leaf.used .key { color: #3568D4; }
+.leaf.used .key { color: var(--app-text-accent); }
 .key { flex: 0 0 auto; max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.value { min-width: 0; color: #8a919c; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.type-tag { margin-left: auto; flex-shrink: 0; color: #9aa1ab; font: 9px system-ui, sans-serif; }
-.caret, .meta { color: #969da8; }
+.value { min-width: 0; color: var(--app-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.type-tag { margin-left: auto; flex-shrink: 0; color: var(--app-text-secondary); font: 11px/1.5 'SF Mono', Menlo, Consolas, monospace; }
+.caret, .meta { color: var(--app-text-muted); }
 </style>

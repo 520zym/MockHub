@@ -1,7 +1,7 @@
 <template>
   <div ref="root" class="model-picker">
     <div ref="controlRef" class="model-control" :class="{ 'model-control--open': open }" @click="toggle">
-      <span class="model-value" :class="{ 'model-value--empty': !modelValue }">
+      <span class="model-value" :class="{ 'model-value--empty': !modelValue }" :title="modelValue || '选择模型'">
         {{ modelValue || '选择模型' }}
       </span>
       <span v-if="sourceLabel" class="model-source">{{ sourceLabel }}</span>
@@ -36,8 +36,8 @@
               @click="choose(id)"
             >
               <div class="model-item__main">
-                <div class="model-item__id">{{ id }}</div>
-                <div class="model-item__desc">{{ hintFor(id) }}</div>
+                <div class="model-item__id" :title="id">{{ id }}</div>
+                <div class="model-item__desc" :title="hintFor(id)">{{ hintFor(id) }}</div>
               </div>
               <span class="model-tag model-tag--rec">{{ tagFor(id) }}</span>
               <el-icon v-if="id === modelValue" class="model-item__check"><Check /></el-icon>
@@ -58,8 +58,8 @@
               @click="choose(item.id)"
             >
               <div class="model-item__main">
-                <div class="model-item__id">{{ item.id }}</div>
-                <div class="model-item__desc">{{ liveHint(item) }}</div>
+                <div class="model-item__id" :title="item.id">{{ item.id }}</div>
+                <div class="model-item__desc" :title="liveHint(item)">{{ liveHint(item) }}</div>
               </div>
               <span class="model-tag model-tag--live">服务商</span>
               <el-icon v-if="item.id === modelValue" class="model-item__check"><Check /></el-icon>
@@ -311,8 +311,8 @@ onBeforeUnmount(() => {
   flex: 1;
   min-width: 0;
   font-family: 'SF Mono', Menlo, Monaco, Consolas, monospace;
-  font-size: 12.5px;
-  color: #1B2559;
+  font-size: 13px;
+  color: var(--app-text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -320,7 +320,7 @@ onBeforeUnmount(() => {
 
 .model-value--empty {
   font-family: inherit;
-  color: #A3AED0;
+  color: var(--app-text-muted);
 }
 
 .model-source {
@@ -328,16 +328,16 @@ onBeforeUnmount(() => {
   height: 18px;
   padding: 0 6px;
   border-radius: 5px;
-  background: #EEF0FF;
-  color: #4F46E5;
-  font-size: 9.5px;
+  background: var(--app-bg-selected);
+  color: var(--app-text-accent);
+  font-size: 11px;
   font-weight: 600;
   line-height: 18px;
 }
 
 .model-arrow {
   flex-shrink: 0;
-  color: #A3AED0;
+  color: var(--app-text-muted);
   transition: transform .15s ease;
 }
 
@@ -363,7 +363,7 @@ onBeforeUnmount(() => {
   gap: 8px;
   padding: 10px 12px;
   border-bottom: 1px solid #F1F5F9;
-  color: #A3AED0;
+  color: var(--app-text-secondary);
 }
 
 .model-search input {
@@ -371,12 +371,12 @@ onBeforeUnmount(() => {
   border: none;
   outline: none;
   background: transparent;
-  font-size: 12.5px;
-  color: #1B2559;
+  font-size: 13px;
+  color: var(--app-text-primary);
 }
 
 .model-search input::placeholder {
-  color: #A3AED0;
+  color: var(--app-text-muted);
 }
 
 .model-list {
@@ -395,8 +395,8 @@ onBeforeUnmount(() => {
   display: flex;
   justify-content: space-between;
   padding: 4px 8px 6px;
-  font-size: 10.5px;
-  color: #A3AED0;
+  font-size: 12px;
+  color: var(--app-text-secondary);
 }
 
 .model-item {
@@ -427,8 +427,8 @@ onBeforeUnmount(() => {
 
 .model-item__id {
   font-family: 'SF Mono', Menlo, Monaco, Consolas, monospace;
-  font-size: 12px;
-  color: #1B2559;
+  font-size: 13px;
+  color: var(--app-text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -436,8 +436,8 @@ onBeforeUnmount(() => {
 
 .model-item__desc {
   margin-top: 1px;
-  font-size: 10.5px;
-  color: #A3AED0;
+  font-size: 12px;
+  color: var(--app-text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -445,36 +445,36 @@ onBeforeUnmount(() => {
 
 .model-tag {
   flex-shrink: 0;
-  height: 17px;
-  padding: 0 5px;
+  height: 18px;
+  padding: 0 6px;
   border-radius: 4px;
-  background: #F1F5F9;
-  color: #64748B;
-  font-size: 9px;
+  background: var(--app-bg-control);
+  color: var(--app-text-secondary);
+  font-size: 11px;
   font-weight: 600;
-  line-height: 17px;
+  line-height: 18px;
 }
 
 .model-tag--rec {
-  background: #EEF0FF;
-  color: #4F46E5;
+  background: var(--app-bg-selected);
+  color: var(--app-text-accent);
 }
 
 .model-tag--live {
-  background: #ECFDF5;
-  color: #0F9D6E;
+  background: var(--el-color-success-light-9);
+  color: var(--app-text-success);
 }
 
 .model-item__check {
   flex-shrink: 0;
-  color: #6366F1;
+  color: var(--app-text-accent);
 }
 
 .model-state {
   padding: 18px 10px;
   text-align: center;
-  font-size: 11.5px;
-  color: #A3AED0;
+  font-size: 12px;
+  color: var(--app-text-secondary);
 }
 
 .model-error {
@@ -484,10 +484,10 @@ onBeforeUnmount(() => {
   margin: 8px;
   padding: 8px 10px;
   border-radius: 8px;
-  background: #FFF7ED;
-  border: 1px solid #FDE9D7;
-  color: #B45309;
-  font-size: 11px;
+  background: var(--el-color-warning-light-9);
+  border: 1px solid var(--el-color-warning-light-8);
+  color: var(--app-text-warning);
+  font-size: 12px;
   line-height: 1.6;
 }
 
@@ -498,8 +498,8 @@ onBeforeUnmount(() => {
 .model-retry {
   border: none;
   background: transparent;
-  color: #B45309;
-  font-size: 11px;
+  color: var(--app-text-warning);
+  font-size: 12px;
   text-decoration: underline;
   cursor: pointer;
 }
@@ -509,16 +509,16 @@ onBeforeUnmount(() => {
 }
 
 .model-manual__label {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
-  color: #4A5568;
+  color: var(--app-text-regular);
   margin-bottom: 6px;
 }
 
 .model-manual__hint {
   margin: 6px 0 10px;
-  font-size: 10.5px;
-  color: #A3AED0;
+  font-size: 12px;
+  color: var(--app-text-secondary);
 }
 
 .model-manual__actions {
@@ -541,25 +541,25 @@ onBeforeUnmount(() => {
   gap: 4px;
   border: none;
   background: transparent;
-  color: #6366F1;
-  font-size: 11px;
+  color: var(--app-text-accent);
+  font-size: 12px;
   cursor: pointer;
 }
 
 .model-foot__btn:disabled {
-  color: #C0C6D4;
+  color: var(--app-text-disabled);
   cursor: not-allowed;
 }
 
 .model-foot__btn--muted {
   margin-left: auto;
-  color: #4A5568;
+  color: var(--app-text-regular);
 }
 
 .model-foot-hint {
   padding: 0 12px 8px;
   background: #FBFBFD;
-  font-size: 10.5px;
-  color: #A3AED0;
+  font-size: 12px;
+  color: var(--app-text-secondary);
 }
 </style>

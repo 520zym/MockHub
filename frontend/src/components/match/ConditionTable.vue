@@ -59,17 +59,17 @@ function onOperatorChange(c) { if (!props.readOnly) changeOperator(conditions.va
 .condition-table { min-width: 0; }
 .table-scroll { max-width: 100%; overflow: auto; max-height: 360px; scrollbar-width: thin; padding-bottom: 4px; }
 .condition-grid { display: grid; grid-template-columns: 86px minmax(155px, 1.3fr) 112px minmax(125px, 1fr) 62px 24px; gap: 8px; align-items: center; min-width: 640px; }
-.table-head { color: #8b9099; font-size: 11px; padding: 6px 0 10px; }
+.table-head { color: var(--app-text-secondary); font-size: 11px; padding: 6px 0 10px; }
 .condition-row { margin-bottom: 12px; font-size: 12px; }
 .condition-row :deep(.el-input__wrapper), .condition-row :deep(.el-select__wrapper) { min-height: 38px; background: #F4F6F9; border: 1px solid transparent; border-radius: 9px; box-shadow: none; padding: 0 10px; }
 .condition-row :deep(.el-input__wrapper:focus-within), .condition-row :deep(.el-select__wrapper.is-focused) { border-color: #3568D4; box-shadow: none; }
-.condition-row :deep(.el-input__inner), .condition-row :deep(.el-select__selected-item) { color: #17191D; font-size: 12px; }
+.condition-row :deep(.el-input__inner), .condition-row :deep(.el-select__selected-item) { color: var(--app-text-primary); font-size: 12px; }
 .condition-row :deep(.el-input__inner) { font-family: 'SF Mono', Menlo, Consolas, monospace; }
-.col-type-tag { justify-self: start; font: 10px 'SF Mono', Menlo, monospace; color: #60759a; background: #edf2fb; border-radius: 5px; padding: 3px 5px; white-space: nowrap; }
-.delete-row { border: 0; background: transparent; color: #90959e; cursor: pointer; font-size: 20px; padding: 0; }
-.delete-row:hover { color: #b24c48; }
-.add-row { width: 100%; margin-top: 4px; min-height: 38px; border: 0; border-radius: 9px; background: #F4F6F9; color: #3568D4; font: inherit; font-size: 12px; cursor: pointer; }
+.col-type-tag { justify-self: start; font: 11px 'SF Mono', Menlo, monospace; color: var(--app-text-accent); background: #edf2fb; border-radius: 5px; padding: 3px 5px; white-space: nowrap; }
+.delete-row { border: 0; background: transparent; color: var(--app-text-secondary); cursor: pointer; font-size: 20px; padding: 0; }
+.delete-row:hover { color: var(--app-text-danger); }
+.add-row { width: 100%; margin-top: 4px; min-height: 38px; border: 0; border-radius: 9px; background: #F4F6F9; color: var(--app-text-accent); font: inherit; font-size: 12px; cursor: pointer; }
 .add-row:hover { background: #edf2fb; }
-.add-row:disabled { cursor: not-allowed; color: #9298a2; }
-.value-na { color: #9298a2; text-align: center; }
+.add-row:disabled { cursor: not-allowed; color: var(--app-text-disabled); }
+.value-na { color: var(--app-text-muted); text-align: center; }
 </style>
