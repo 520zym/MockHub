@@ -20,7 +20,6 @@
             AI 生成响应体
             <span class="ai-beta">Beta</span>
           </div>
-          <div class="ai-panel__desc">根据接口信息和你的描述生成内容，确认后才会写入编辑器</div>
         </div>
         <el-button text circle class="ai-panel__close" aria-label="关闭响应生成" @click="visible = false">
           <el-icon><Close /></el-icon>
@@ -129,7 +128,6 @@
               <el-icon><MagicStick /></el-icon>
             </div>
             <div class="ai-empty__title">描述你想要的响应</div>
-            <div class="ai-empty__desc">例如：返回用户详情，包含昵称、头像、等级和注册时间</div>
           </div>
         </div>
 
@@ -390,7 +388,6 @@ async function copyContent() {
 .ai-panel__title-wrap { flex: 1; min-width: 0; }
 .ai-panel__title { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 16px; font-weight: 600; }
 .ai-beta { padding: 1px 6px; border-radius: 6px; line-height: 18px; font-size: 11px; font-weight: 500; color: var(--app-accent, #3568D4); background: var(--app-bg-control, #F4F6F9); }
-.ai-panel__desc { margin-top: 4px; font-size: 12px; line-height: 1.7; color: var(--app-text-secondary, #6F757E); overflow-wrap: anywhere; }
 .ai-panel__close { color: var(--app-text-secondary, #6F757E); }
 .ai-panel__ctx { display: flex; align-items: center; flex-wrap: wrap; flex-shrink: 0; gap: 6px; padding: 8px 20px 14px; background: var(--app-bg-surface, #FFFFFF); }
 .ctx-method, .ctx-chip { min-width: 0; max-width: 100%; padding: 3px 8px; border-radius: 6px; font-size: 12px; line-height: 1.5; background: var(--app-bg-control, #F4F6F9); }
@@ -421,7 +418,6 @@ async function copyContent() {
 .ai-empty { margin: auto; padding: 28px 16px; text-align: center; }
 .ai-empty__icon { width: 44px; height: 44px; margin: 0 auto 12px; border-radius: 12px; font-size: 22px; }
 .ai-empty__title { font-size: 14px; font-weight: 500; }
-.ai-empty__desc { margin-top: 6px; font-size: 12px; line-height: 1.8; color: var(--app-text-secondary, #6F757E); overflow-wrap: anywhere; }
 .ai-code { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .ai-code__toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; background: var(--app-bg-control, #F4F6F9); }
 .ai-code__hint { font-size: 12px; color: var(--app-text-secondary, #6F757E); }

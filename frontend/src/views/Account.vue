@@ -2,9 +2,7 @@
   <div class="account-page">
     <header class="account-page__header">
       <div>
-        <div class="account-eyebrow">MY ACCOUNT</div>
         <h1>个人账号</h1>
-        <p>管理本人的资料、安全与团队访问身份。</p>
       </div>
       <el-button :loading="identityLoading" :disabled="busy" @click="reloadIdentity">刷新资料</el-button>
     </header>
@@ -32,7 +30,7 @@
           <div class="account-two-column">
             <section class="account-card" aria-labelledby="account-profile-title">
               <div class="account-card__header">
-                <div><h2 id="account-profile-title">基本资料</h2><p>个人身份独立于团队角色。</p></div>
+                <div><h2 id="account-profile-title">基本资料</h2></div>
                 <span class="account-badge">{{ globalRoleLabel }}</span>
               </div>
               <div class="account-profile-hero">
@@ -48,7 +46,7 @@
                 <el-form-item label="显示名" prop="displayName">
                   <el-input v-model="profileForm.displayName" name="displayName" autocomplete="nickname" maxlength="64" show-word-limit :disabled="busy" placeholder="填写显示名" />
                 </el-form-item>
-                <p class="account-note">显示名为 1–64 个字符，保存时会去除首尾空格。登录名与系统身份不可自行修改。</p>
+                <p class="account-note">显示名为 1–64 个字符，保存时会去除首尾空格。</p>
                 <p v-if="profileError" class="account-error" role="alert">{{ profileError }}</p>
                 <div class="account-form-actions">
                   <el-button native-type="submit" type="primary" :loading="profileSaving" :disabled="!profileDirty || !!pendingAction">保存资料</el-button>
@@ -59,15 +57,14 @@
 
             <aside class="account-stack">
               <section class="account-card" aria-labelledby="account-security-summary">
-                <div class="account-card__header"><div><h2 id="account-security-summary">安全摘要</h2><p>只管理本人的密码与会话。</p></div><FilledIcon name="shield" :size="22" /></div>
-                <div class="account-summary-row"><div><b>登录密码</b><small>{{ identity.firstLogin ? '初始密码待修改' : '不展示密码内容' }}</small></div><el-button link type="primary" @click="activeTab = 'security'">修改密码</el-button></div>
-                <div class="account-summary-row"><div><b>网页登录会话</b><small>查看设备并撤销不再使用的登录。</small></div><el-button link type="primary" @click="activeTab = 'sessions'">查看会话</el-button></div>
+                <div class="account-card__header"><div><h2 id="account-security-summary">安全摘要</h2></div><FilledIcon name="shield" :size="22" /></div>
+                <div class="account-summary-row"><div><b>登录密码</b><small v-if="identity.firstLogin">初始密码待修改</small></div><el-button link type="primary" @click="activeTab = 'security'">修改密码</el-button></div>
+                <div class="account-summary-row"><div><b>网页登录会话</b></div><el-button link type="primary" @click="activeTab = 'sessions'">查看会话</el-button></div>
                 <div class="account-hint">修改密码会使所有网页会话及本人的 MCP 凭证失效；单独撤销网页会话不会撤销 MCP 凭证。</div>
               </section>
               <section class="account-card" aria-labelledby="account-team-summary">
-                <div class="account-card__header"><div><h2 id="account-team-summary">团队身份</h2><p>同一账号在各团队的角色相互独立。</p></div><FilledIcon name="team" :size="22" /></div>
+                <div class="account-card__header"><div><h2 id="account-team-summary">团队身份</h2></div><FilledIcon name="team" :size="22" /></div>
                 <p class="account-team-count"><strong>{{ memberTeams.length }}</strong> 个所属团队<span v-if="maintenanceTeams.length"> · {{ maintenanceTeams.length }} 个系统维护访问</span></p>
-                <p class="account-note">团队管理员不等于超级管理员。系统维护访问也不代表已加入团队。</p>
                 <el-button type="primary" link @click="activeTab = 'teams'">查看我的团队与访问身份</el-button>
               </section>
             </aside>
@@ -77,7 +74,7 @@
         <el-tab-pane label="账号安全" name="security" lazy>
           <div class="account-two-column">
             <section class="account-card" aria-labelledby="account-password-title">
-              <div class="account-card__header"><div><h2 id="account-password-title">修改登录密码</h2><p>需要验证当前密码，不能修改其他人的账号。</p></div><FilledIcon name="key" :size="22" /></div>
+              <div class="account-card__header"><div><h2 id="account-password-title">修改登录密码</h2></div><FilledIcon name="key" :size="22" /></div>
               <el-form ref="passwordFormRef" :model="passwordForm" :rules="passwordRules" label-position="top" class="account-password-form" @submit.prevent="changePassword">
                 <el-form-item label="当前密码" prop="oldPassword"><el-input v-model="passwordForm.oldPassword" name="currentPassword" type="password" autocomplete="current-password" show-password :disabled="busy" /></el-form-item>
                 <el-form-item label="新密码" prop="newPassword"><el-input v-model="passwordForm.newPassword" name="newPassword" type="password" autocomplete="new-password" show-password :disabled="busy" placeholder="至少 6 个字符" /></el-form-item>
@@ -87,7 +84,7 @@
               </el-form>
             </section>
             <aside class="account-stack">
-              <section class="account-card"><div class="account-card__header"><div><h2>修改后会发生什么</h2><p>请先完成未保存的工作。</p></div></div><ul class="account-guidance"><li>当前浏览器和其它设备上的所有网页会话都会失效，需要重新登录。</li><li>本人已创建的 MCP 访问凭证也将失效，相关客户端需要重新配置凭证。</li><li>不会更改团队成员关系、团队角色或团队资源。</li></ul><div class="account-hint">应用不会把密码写入浏览器本地存储。离开安全标签页时会清空表单。</div></section>
+              <section class="account-card"><div class="account-card__header"><div><h2>修改后会发生什么</h2></div></div><ul class="account-guidance"><li>当前浏览器和其它设备上的所有网页会话都会失效，需要重新登录。</li><li>本人已创建的 MCP 访问凭证也将失效，相关客户端需要重新配置凭证。</li><li>不会更改团队成员关系、团队角色或团队资源。</li></ul><div class="account-hint">应用不会把密码写入浏览器本地存储。离开安全标签页时会清空表单。</div></section>
               <section class="account-card"><div class="account-card__header"><div><h2>退出当前登录</h2><p>仅撤销当前网页会话，不影响其它设备或 MCP 凭证。</p></div></div><p v-if="logoutError" class="account-error" role="alert">{{ logoutError }}</p><el-button :loading="pendingAction === 'logout'" :disabled="busy && pendingAction !== 'logout'" @click="logout">退出当前登录</el-button></section>
             </aside>
           </div>
@@ -113,10 +110,9 @@
 
         <el-tab-pane label="团队身份" name="teams" lazy>
           <section class="account-card" aria-labelledby="account-teams-title">
-            <div class="account-card__header"><div><h2 id="account-teams-title">我的团队与访问身份</h2><p>这里仅查看身份与进入工作区，不能修改自己的团队角色。</p></div><span class="account-badge">{{ teams.length }} 个可访问团队</span></div>
-            <div v-if="!teams.length" class="account-state"><FilledIcon name="team" :size="32" /><h3>尚无可访问的团队</h3><p>请联系团队管理员添加成员关系。个人资料和账号安全仍可正常管理。</p></div>
-            <ul v-else class="account-team-list"><li v-for="team in teams" :key="team.teamId" class="account-team"><span class="account-team__mark account-mono" aria-hidden="true">{{ team.identifier || 'TEAM' }}</span><div class="account-team__copy"><h3>{{ team.teamName || '未命名团队' }}</h3><p>{{ teamDescription(team) }}</p><span v-if="team.identifier" class="account-code account-mono">{{ team.identifier }}</span></div><div class="account-team__actions"><span class="account-badge" :class="{ 'account-badge--blue': isMaintenance(team) || membershipRole(team) === 'TEAM_ADMIN' }">{{ teamRoleLabel(team) }}</span><el-button type="primary" link :disabled="busy || team.capabilities?.read === false" @click="openTeam(team)">进入工作区</el-button></div></li></ul>
-            <div class="account-hint account-team-note"><FilledIcon name="shield" :size="18" /><p>团队身份由管理员分配。系统维护访问来自超级管理员权限，不是团队成员身份；进入工作区不会自动加入团队。</p></div>
+            <div class="account-card__header"><div><h2 id="account-teams-title">我的团队与访问身份</h2><p>团队角色由管理员分配，此处只读。</p></div><span class="account-badge">{{ teams.length }} 个可访问团队</span></div>
+            <div v-if="!teams.length" class="account-state"><FilledIcon name="team" :size="32" /><h3>尚无可访问的团队</h3><p>请联系团队管理员添加成员关系。</p></div>
+            <ul v-else class="account-team-list"><li v-for="team in teams" :key="team.teamId" class="account-team"><span class="account-team__mark account-mono" aria-hidden="true">{{ team.identifier || 'TEAM' }}</span><div class="account-team__copy"><h3>{{ team.teamName || '未命名团队' }}</h3><span v-if="team.identifier" class="account-code account-mono">{{ team.identifier }}</span></div><div class="account-team__actions"><span class="account-badge" :class="{ 'account-badge--blue': isMaintenance(team) || membershipRole(team) === 'TEAM_ADMIN' }">{{ teamRoleLabel(team) }}</span><el-button type="primary" link :disabled="busy || team.capabilities?.read === false" @click="openTeam(team)">进入工作区</el-button></div></li></ul>
           </section>
         </el-tab-pane>
       </el-tabs>
@@ -356,11 +352,6 @@ function teamRoleLabel(team) {
   if (isMaintenance(team)) return '系统维护访问'
   return ({ TEAM_ADMIN: '团队管理员', EDITOR: '可编辑成员', MEMBER: '可编辑成员', VIEWER: '只读成员' })[membershipRole(team)] || '未知团队身份'
 }
-function teamDescription(team) {
-  if (isMaintenance(team)) return '使用超级管理员的系统维护权限访问；不是该团队成员。'
-  if (identity.value?.globalRole === 'SUPER_ADMIN') return '团队成员身份为' + teamRoleLabel(team) + '；同时持有超级管理员的系统维护权限。'
-  return ({ TEAM_ADMIN: '管理团队资源与成员；团队角色只在本团队生效。', EDITOR: '可维护团队资源，不管理团队成员。', MEMBER: '可维护团队资源，不管理团队成员。', VIEWER: '只读访问团队资源，不可写入。' })[membershipRole(team)] || '请刷新资料或联系管理员确认团队权限。'
-}
 async function openTeam(team) {
   if (busy.value || !team.teamId || team.capabilities?.read === false) return
   await appStore.setFilter(team.teamId)
@@ -401,8 +392,7 @@ onBeforeUnmount(() => {
 .account-page { min-width: 0; width: 100%; max-width: 1400px; margin-inline: auto; color: var(--app-text-primary); }
 .account-page__header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-bottom: 20px; }
 .account-page__header h1 { font-size: clamp(24px, 2vw, 28px); font-weight: 600; line-height: 1.3; letter-spacing: -.025em; margin: 4px 0 6px; }
-.account-page__header p, .account-card__header p { margin: 4px 0 0; color: var(--app-text-secondary); font-size: 13px; line-height: 1.6; }
-.account-eyebrow { font: 12px/1.5 var(--app-font-mono); letter-spacing: .1em; color: var(--app-text-secondary); }
+.account-card__header p { margin: 4px 0 0; color: var(--app-text-secondary); font-size: 13px; line-height: 1.6; }
 .account-tabs { min-width: 0; }
 .account-tabs :deep(.el-tabs__header) { margin-bottom: 20px; }
 .account-tabs :deep(.el-tabs__nav-wrap::after) { height: 0; }
@@ -474,13 +464,9 @@ onBeforeUnmount(() => {
 .account-team__mark { flex-shrink: 0; display: grid; place-items: center; width: 48px; min-height: 44px; background: var(--app-bg-surface); color: var(--app-text-regular); border-radius: var(--app-radius-small); padding: 6px; font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
 .account-team__copy { flex: 1; min-width: 0; }
 .account-team__copy h3 { margin: 0; font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
-.account-team__copy p { margin: 5px 0 0; color: var(--app-text-secondary); font-size: 12px; line-height: 1.7; }
 .account-team__copy .account-code { display: inline-block; margin: 6px 0 0; }
 .account-team__actions { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; flex-shrink: 0; }
 .account-team__actions .account-badge:not(.account-badge--blue) { background: var(--app-bg-surface); }
-.account-team-note { display: flex; align-items: flex-start; gap: 10px; margin-top: 20px; }
-.account-team-note .filled-icon { flex-shrink: 0; margin-top: 2px; }
-.account-team-note p { margin: 0; }
 @media (max-width: 900px) { .account-two-column { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 600px) {
   .account-card { padding: 20px 16px; }

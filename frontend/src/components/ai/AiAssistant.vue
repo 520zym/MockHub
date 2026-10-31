@@ -56,7 +56,7 @@
 
         <div class="ai-chat__ctx">
           <span class="ctx-chip">范围：{{ teamName || '未选择团队' }}</span>
-          <span class="ctx-chip"><el-icon><Lock /></el-icon>{{ canWrite ? '按团队写入权限运行' : '只读 · 仅查询与解释' }}</span>
+          <span class="ctx-chip"><el-icon><Lock /></el-icon>{{ canWrite ? '可编辑' : '只读' }}</span>
         </div>
 
         <div ref="bodyRef" class="ai-chat__body">
@@ -77,9 +77,6 @@
               <el-icon><MagicStick /></el-icon>
             </div>
             <div class="ai-welcome__title">有什么可以帮你？</div>
-            <div class="ai-welcome__desc">
-              {{ canWrite ? '可以查询调用统计、搜索接口、生成响应体或创建接口草稿；写入前必须由你确认。' : '可以查询当前团队统计、搜索接口与解释配置。当前身份只读，不能创建或修改接口。' }}
-            </div>
             <div class="ai-welcome__prompts">
               <button
                 v-for="prompt in quickPrompts"
@@ -197,7 +194,7 @@
                       </div>
                       <div class="ai-confirm__note">
                         <el-icon><Lock /></el-icon>
-                        {{ canWrite ? '确认后服务端会重新校验权限并写入，操作记入日志。' : '当前身份只读，不能执行写操作；可查看预览或取消本人草稿。' }}
+                        {{ canWrite ? '确认后写入接口。' : '当前身份只读，不能确认写入。' }}
                       </div>
                       <p v-if="card.error" class="ai-card-error" role="alert">{{ card.error }}</p>
                       <div class="ai-confirm__actions">

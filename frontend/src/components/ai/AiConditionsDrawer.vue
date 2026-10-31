@@ -18,7 +18,6 @@
             AI 生成响应规则
             <span class="ai-beta">Beta</span>
           </div>
-          <div class="ai-rules__desc">把自然语言描述转成现有 conditions 结构，应用前可逐条确认</div>
         </div>
         <el-button text circle class="ai-rules__close" @click="visible = false">
           <el-icon><Close /></el-icon>
@@ -28,7 +27,6 @@
       <div class="ai-rules__ctx">
         <span class="ctx-chip">{{ responseName }}</span>
         <span class="ctx-chip">{{ bodySample ? 'Body 示例已提供' : '未提供 Body 示例' }}</span>
-        <span class="ctx-chip">支持 Body / Query / Header</span>
       </div>
 
       <div class="ai-rules__body">
@@ -49,7 +47,7 @@
 
         <div class="ai-rules__hint">
           <el-icon><InfoFilled /></el-icon>
-          支持 BODY / QUERY / HEADER 三类来源；Header 条件填写请求头名称（不区分大小写）。
+          Header 条件填写请求头名称（不区分大小写）。
         </div>
 
         <div class="ai-preview-head">
@@ -116,7 +114,6 @@
               <el-icon><MagicStick /></el-icon>
             </div>
             <div class="ai-rule-empty__title">描述命中条件</div>
-            <div class="ai-rule-empty__desc">生成后可逐条勾选，未通过校验的规则默认不应用</div>
           </div>
         </div>
 
@@ -395,12 +392,6 @@ function displayValue(rule) {
   line-height: 18px;
 }
 
-.ai-rules__desc {
-  font-size: 13px;
-  color: var(--app-text-secondary);
-  margin-top: 2px;
-}
-
 .ai-rules__close {
   color: var(--app-text-secondary);
 }
@@ -637,12 +628,6 @@ function displayValue(rule) {
   font-size: 13px;
   font-weight: 600;
   color: var(--app-text-primary);
-}
-
-.ai-rule-empty__desc {
-  font-size: 12px;
-  color: var(--app-text-secondary);
-  margin-top: 3px;
 }
 
 .ai-apply {

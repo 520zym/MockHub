@@ -1,7 +1,7 @@
 <template>
   <el-drawer :model-value="modelValue" class="api-history-drawer" size="min(1120px, 100vw)" :destroy-on-close="true" :close-on-click-modal="false" @update:model-value="emit('update:modelValue', $event)">
     <template #header>
-      <div class="history-heading"><span class="history-heading__icon"><FilledIcon name="history" :size="22" /></span><div><h2>变更记录</h2><p>{{ teamName }} · {{ currentSnapshot?.config?.method || '接口' }} {{ currentSnapshot?.config?.path || '' }} · 发布快照不可原位编辑</p></div><span class="history-count">{{ versions.length }} 个版本</span></div>
+      <div class="history-heading"><span class="history-heading__icon"><FilledIcon name="history" :size="22" /></span><div><h2>变更记录</h2><p>{{ teamName }} · {{ currentSnapshot?.config?.method || '接口' }} {{ currentSnapshot?.config?.path || '' }}</p></div><span class="history-count">{{ versions.length }} 个版本</span></div>
     </template>
     <div v-if="error" class="history-notice history-notice--error" role="alert">{{ error }} <el-button text @click="loadHistory">重新加载记录</el-button></div>
     <div v-if="conflict || outOfDate" class="history-notice history-notice--warning" role="alert">{{ conflict || '服务器已有新版本。请关闭历史并刷新接口，核对后重新确认；不会自动使用新版本重试。' }}</div>
@@ -13,7 +13,7 @@
           <span class="version-number">v{{ version.revision }}</span><span class="version-copy"><b>{{ historyAction(version.action) }}</b><span>{{ version.actorNameSnapshot || '系统' }} · {{ sourceLabel(version.source) }}</span><time>{{ formatDate(version.createdAt) }}</time></span>
         </button>
         <p v-if="!loading && !versions.length" class="history-empty">没有可读取的版本记录。</p>
-        <p class="history-retention">只展示留存窗口内的版本。升级基线不是伪造的旧修改历史。</p>
+        <p class="history-retention">仅展示留存期内版本。</p>
       </aside>
       <main class="history-comparison" v-loading="detailLoading">
         <div class="history-mobile-selector"><label for="history-version-select">查看版本</label><el-select id="history-version-select" :model-value="selectedId" aria-label="查看版本" @update:model-value="selectVersion"><el-option v-for="version in versions" :key="version.id" :label="'v' + version.revision + ' · ' + historyAction(version.action)" :value="version.id" /></el-select></div>
@@ -25,9 +25,9 @@
             <div class="comparison-group__heading"><h4>{{ group.title }}</h4><span v-if="group.added" class="change-badge">当前新增</span><span v-else-if="group.removed" class="change-badge change-badge--removed">当前已移除</span><span v-else class="change-badge" :class="{ 'is-equal': !group.changed }">{{ group.changed ? '配置有差异' : '相同' }}</span></div>
             <div v-for="field in group.rows" :key="field.key" class="comparison-field" :class="{ 'has-change': field.changed }"><h5>{{ field.label }}</h5><div class="comparison-values"><div><small>所选版本</small><pre>{{ field.beforePreview.text }}</pre></div><div><small>当前发布</small><pre>{{ field.afterPreview.text }}</pre></div></div></div>
           </section>
-          <div v-if="comparisonSupported && !visibleGroups.length" class="history-empty"><FilledIcon name="shield" :size="28" /><h3>两个版本没有配置差异</h3><p>版本仍保留实际操作人、来源和时间；不会人为生成差异。</p></div>
+          <div v-if="comparisonSupported && !visibleGroups.length" class="history-empty"><h3>两个版本没有配置差异</h3></div>
         </template>
-        <div v-else-if="!loading && !detailLoading && versions.length" class="history-empty">选择一个版本读取真实快照。</div>
+        <div v-else-if="!loading && !detailLoading && versions.length" class="history-empty">选择一个版本查看快照。</div>
       </main>
     </div>
     <template #footer>
