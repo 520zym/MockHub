@@ -2,27 +2,24 @@
   <div class="condition-panel">
     <section class="rules-card">
       <div class="eyebrow">RESPONSE RULES</div>
-      <header class="rules-heading"><h3>{{ responseName }}</h3><span v-if="selectedResponse" class="state-badge">{{ selectedResponse.isActive ?? selectedResponse.active ? '已启用' : '未启用' }}</span></header>
-      <p class="card-description">{{ readOnly ? '当前规则只读；可使用请求样例试配已保存配置。' : '只编辑当前返回体的条件，不改动其他返回体。' }}</p>
+      <header class="rules-heading"><h3>{{ responseName }}</h3><span v-if="selectedResponse" class="state-badge">{{ selectedResponse.isActive ?? selectedResponse.active ? '已启用' : '未启用' }}</span><button type="button" class="help-button" aria-label="匹配规则用法说明" title="匹配规则用法说明" @click="helpVisible = true">?</button></header>
       <div class="rules-toolbar">
         <button v-if="!readOnly && !isRandom && aiStore.capabilities.conditions" type="button" class="soft-button" @click="openAi"><span aria-hidden="true">⌘</span> AI 生成规则</button>
-        <button type="button" class="soft-button unavailable" disabled title="从请求日志导入暂未开放">从日志导入 · 暂未开放</button>
+        <button v-if="!isRandom" type="button" class="soft-button" :aria-expanded="samplesOpen" @click="samplesOpen = !samplesOpen">{{ samplesOpen ? '收起试匹配' : '试匹配' }}</button>
         <span class="rule-count">{{ conditions.length }} 条条件</span>
       </div>
       <p v-if="parseError" class="inline-error" role="alert">{{ parseError }}</p>
-      <div v-if="isRandom" class="mode-notice"><h4>等概率随机</h4><p>忽略条件与顺序，从启用返回体中等概率选择一个。</p><p>已配置条件会保留，切回条件匹配后继续使用。</p></div>
+      <div v-if="isRandom" class="mode-notice"><h4>等概率随机</h4><p>忽略条件与顺序，等概率选一个启用返回体；已配置的条件会保留。</p></div>
       <template v-else>
         <div v-if="conditions.length" class="and-heading"><span>AND</span> 以下条件必须全部满足</div>
-        <div v-else-if="!parseError" class="mode-notice fallback-notice"><h4>无条件 · 兜底返回体</h4><p>其他带规则的返回体都未命中时，再使用此返回体。</p><p>多个启用返回体时，条件模式只能保留一个无规则兜底。</p></div>
+        <div v-else-if="!parseError" class="mode-notice fallback-notice"><h4>无条件 · 兜底返回体</h4><p>其他返回体都没命中时才用它；条件模式只能有一个无规则兜底。</p></div>
         <ConditionTable v-if="!parseError" :model-value="conditions" :default-source="source" :read-only="readOnly" @update:model-value="onConditionsUpdate" />
-        <p class="type-note">ⓘ 类型由示例字段推断，为只读标签。数字字段才出现大小比较；Header 名称不区分大小写。</p>
       </template>
-      <p class="strategy-note">{{ isRandom ? '随机模式不支持权重，也不以条件或返回体顺序决定结果。' : '按返回体顺序选择首个命中项；都未命中时，最后使用无规则兜底。不是按条件数量排序。' }}</p>
       <section v-if="!hideReturnPreview" class="return-preview"><header><strong>命中后返回</strong><button type="button" class="text-button" @click="emit('edit-response')">{{ readOnly ? '查看返回体' : '编辑返回体' }} →</button></header><slot name="return-preview"><p class="preview-placeholder">响应模板由返回体编辑区提供；试配只返回选择元信息。</p></slot></section>
       <p class="local-note">● {{ readOnly ? '规则只读 · 请求样例不保存' : '未提交草稿仅供本次试配，保存接口后才生效' }}</p>
     </section>
 
-    <aside class="sample-card" aria-label="请求样例">
+    <aside v-show="samplesOpen" class="sample-card" aria-label="请求样例">
       <header class="sample-heading"><h3>请求样例</h3><span>仅此页本地使用</span></header>
       <div class="source-tabs" role="tablist" aria-label="请求样例来源"><button v-for="item in sources" :key="item" type="button" role="tab" :aria-selected="source === item" :class="{ active: source === item }" @click="source = item">{{ sourceLabels[item] }}</button></div>
       <label class="sample-label" :for="sampleInputId">{{ sampleLabel }}</label>
@@ -46,6 +43,15 @@
         <p class="privacy-note">仅选择返回体，不执行 Mock 请求，不写调用记录。不返回响应正文或文件内容；不提供逐条件执行轨迹。</p>
       </section>
     </aside>
+    <el-dialog v-model="helpVisible" title="匹配规则怎么用" width="min(560px, 92vw)" append-to-body class="match-help-dialog">
+      <div class="match-help">
+        <section><h4>条件从哪来</h4><p>点「试匹配」粘贴一段真实请求（Body / Query / Header），再点右侧字段即可生成条件；也可以手动选位置、运算符和值。同一返回体里的多条条件必须全部满足（AND）。</p></section>
+        <section><h4>类型与大小写</h4><p>字段类型由样例值推断并固定显示：只有数字能选大小比较；Header 名称不区分大小写；数组元素用 items[0].amount 这样的路径表示。</p></section>
+        <section><h4>谁会被返回</h4><p>按返回体顺序逐个判断，第一个条件全部满足的返回体被返回，与条件条数无关。都未命中时使用唯一的无规则返回体兜底；多个启用返回体时必须保留一个兜底。</p></section>
+        <section><h4>等概率随机</h4><p>忽略条件与顺序，每次从启用的返回体中等概率选一个，不支持权重；已配置的条件会保留，切回条件匹配后继续生效。</p></section>
+        <section><h4>试匹配做什么</h4><p>只决定“该返回哪一个”，不执行 Mock 请求、不写调用记录，也不返回响应正文。未保存的草稿只对本次试配有效；规则只读时按已保存配置试配。</p></section>
+      </div>
+    </el-dialog>
     <AiConditionsDrawer v-if="!readOnly" v-model="aiDrawerVisible" :read-only="readOnly" :team-id="teamId" :api-context="apiContext" :response-name="responseName" :conditions="modelValue" :body-sample="sampleInputs.BODY" :sample-kind="bodySampleKind" @apply="applyAiRules" />
   </div>
 </template>
@@ -72,6 +78,9 @@ const props = defineProps({
 })
 const emit = defineEmits(['update:modelValue', 'edit-response'])
 const aiStore = useAiStore(), aiDrawerVisible = ref(false)
+// Standalone usage (e.g. the matching fixture) keeps the sample card open; the inline
+// response tab starts collapsed so rules stay compact next to the body editor.
+const samplesOpen = ref(!props.hideReturnPreview), helpVisible = ref(false)
 const sampleInputId = 'match-sample-' + (getCurrentInstance()?.uid ?? 'isolated')
 const sources = SAMPLE_SOURCES, sourceLabels = { BODY: 'Body', QUERY: 'Query', HEADER: 'Header' }
 const source = ref('BODY'), sampleInputs = reactive({ BODY: '', QUERY: '', HEADER: '' })
@@ -167,27 +176,29 @@ onBeforeUnmount(() => { disposed = true; invalidatePreview() })
 </script>
 
 <style scoped>
-.condition-panel { --match-bg: var(--app-bg-control); --match-text: var(--app-text-primary); --match-blue: var(--app-accent); display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 300px); gap: 16px; min-width: 0; color: var(--match-text); font-size: 12px; }
-.rules-card, .sample-card { min-width: 0; background: #fff; border-radius: 18px; padding: 20px; }
+.condition-panel { --match-bg: var(--app-bg-control); --match-text: var(--app-text-primary); --match-blue: var(--app-accent); display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; min-width: 0; color: var(--match-text); font-size: 12px; }
+.rules-card, .sample-card { min-width: 0; background: #fff; border-radius: 14px; padding: 16px; }
 .rules-card { display: flex; flex-direction: column; }
 .eyebrow { color: var(--app-text-secondary); font-size: 12px; letter-spacing: 1.5px; margin-bottom: 13px; }
 .rules-heading, .sample-heading, .rules-toolbar, .return-preview > header, .sample-preview > header { display: flex; align-items: center; gap: 10px; min-width: 0; }
-h3 { margin: 0; font-size: 17px; font-weight: 650; overflow-wrap: anywhere; }
+h3 { margin: 0; font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
 .state-badge { margin-left: auto; flex-shrink: 0; color: var(--app-text-success); background: #edf6f2; border-radius: 6px; padding: 3px 7px; font-size: 11px; }
-.card-description { color: var(--app-text-secondary); line-height: 1.8; margin: 10px 0 20px; }
-.rules-toolbar { flex-wrap: wrap; margin-bottom: 20px; }
+.rules-toolbar { flex-wrap: wrap; margin-bottom: 14px; align-items: center; }
+.help-button { flex: 0 0 auto; margin-left: 4px; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--app-divider); background: transparent; color: var(--app-text-secondary); font: 12px/1 var(--app-font-mono); cursor: pointer; }
+.help-button:hover { border-color: var(--app-accent); color: var(--app-text-accent); }
+.match-help { display: grid; gap: 14px; font-size: 13px; line-height: 1.8; }
+.match-help h4 { margin: 0 0 4px; font-size: 13px; font-weight: 600; }
+.match-help p { margin: 0; color: var(--app-text-secondary); }
 .soft-button { border: 0; border-radius: 8px; background: var(--match-bg); padding: 8px 10px; color: var(--app-text-regular); font: inherit; cursor: pointer; white-space: nowrap; }
 .soft-button:hover:not(:disabled) { background: #eaf0fa; color: var(--app-text-accent); }
 .soft-button:disabled { color: var(--app-text-disabled); cursor: not-allowed; background: #f8f9fb; }
 .rule-count { margin-left: auto; border-radius: 6px; background: var(--match-bg); color: var(--app-text-secondary); padding: 3px 8px; white-space: nowrap; }
 .and-heading { display: flex; align-items: center; gap: 8px; color: var(--app-text-secondary); margin-bottom: 12px; }
 .and-heading > span { color: var(--app-text-accent); background: #edf2fc; padding: 4px 8px; border-radius: 6px; font-size: 11px; }
-.mode-notice { background: var(--match-bg); padding: 24px 18px; border-radius: 12px; line-height: 1.8; margin-bottom: 14px; }
-.mode-notice h4 { margin: 0 0 10px; font-size: 16px; }
+.mode-notice { background: var(--match-bg); padding: 14px 16px; border-radius: 10px; line-height: 1.7; margin-bottom: 12px; }
+.mode-notice h4 { margin: 0 0 6px; font-size: 13px; font-weight: 600; }
 .mode-notice p { margin: 3px 0; color: var(--app-text-secondary); }
-.type-note, .privacy-note { color: var(--app-text-muted); line-height: 1.9; font-size: 12px; }
-.type-note { margin: 14px 0 18px; }
-.strategy-note { margin: 8px 0 18px; color: var(--app-text-secondary); padding: 12px; background: var(--match-bg); border-radius: 10px; line-height: 1.8; }
+.privacy-note { color: var(--app-text-muted); line-height: 1.9; font-size: 12px; }
 .return-preview { margin-top: auto; padding: 14px; background: #F7F8FA; border-radius: 12px; min-width: 0; overflow: hidden; }
 .return-preview header { justify-content: space-between; flex-wrap: wrap; margin-bottom: 10px; }
 .text-button { border: 0; background: transparent; color: var(--app-text-accent); cursor: pointer; font: inherit; padding: 0; }

@@ -64,7 +64,8 @@ try {
   saved.revision = afterSave.revision
   const revisionsBeforePreview = await request('/apis/' + saved.id + '/revisions','GET',undefined,editor.token)
   const logsBeforePreview = await request('/logs/request?teamId=' + team.id,'GET',undefined,editor.token)
-  await browser.waitFor('!!document.querySelector(".sample-card .run-preview")','inline matching workspace')
+  await browser.evaluate(`(() => { const b = [...document.querySelectorAll('.rules-toolbar button')].find(x => x.textContent.trim() === '试匹配'); if (b) b.click() })()`)
+  await browser.waitFor('!!document.querySelector(".sample-card .run-preview") && document.querySelector(".sample-card").offsetParent !== null','inline matching workspace')
   await browser.input('.sample-card textarea','{"amount":100,"channel":"web"}')
   await browser.evaluate('document.querySelector(".sample-card .sample-actions button").click();document.querySelector(".sample-card .run-preview").click()')
   await browser.waitFor('document.querySelector(".sample-card .preview-result")?.innerText.includes("唯一启用返回体")','real matcher result')
