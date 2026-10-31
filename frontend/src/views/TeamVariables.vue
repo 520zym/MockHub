@@ -12,7 +12,6 @@
       </div>
     </div>
 
-    <p class="page-description">当前团队的变量、候选值与分组。可编辑成员可维护内容，只读成员仅查看。</p>
     <div v-if="loadError" class="resource-state panel" role="alert"><strong>变量加载失败</strong><p>{{ loadError }}</p><el-button @click="loadVariables">重试</el-button></div>
     <p v-if="writeError" class="resource-error" role="alert">{{ writeError }}</p>
     <!-- 三栏主内容 -->
@@ -185,7 +184,7 @@
     </div>
 
     <div v-else-if="!canRead" class="empty-hint" style="padding: 48px 0; text-align: center">
-      请在侧栏选择有访问权限的团队。不会加载其它团队变量。
+      请在侧栏选择有访问权限的团队。
     </div>
 
     <!-- 变量新建/编辑对话框 -->
@@ -472,7 +471,7 @@ watch(filteredGroupValues, () => { if (showGroupDialog.value) { syncingSelection
 <style scoped>
 .team-variables { min-width: 0; display: flex; flex-direction: column; gap: 16px; color: var(--app-text-primary); }
 .page-header, .page-header__left, .page-header__right { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }.page-header { justify-content: space-between; }
-.page-title { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -.025em; color: var(--app-text-primary); }.page-description { margin: 0; font-size: 13px; color: var(--app-text-secondary); }
+.page-title { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -.025em; color: var(--app-text-primary); }
 .team-context { font-size: var(--app-font-caption); color: var(--app-text-secondary); padding: 7px 10px; background: var(--app-bg-surface); border-radius: 8px; }.page-header__right :deep(.el-tag--success) { color: var(--app-text-success); background: var(--el-color-success-light-9); }.page-header__right :deep(.el-tag--info) { color: var(--app-text-secondary); background: var(--app-bg-control); }
 .panels { display: grid; grid-template-columns: minmax(180px, 230px) minmax(0, 1fr) minmax(200px, 260px); gap: 14px; min-width: 0; align-items: start; }
 .panel { min-width: 0; background: var(--app-bg-surface); border-radius: 16px; display: flex; flex-direction: column; }

@@ -2,7 +2,7 @@
   <section class="no-access app-surface">
     <div class="no-access__mark"><FilledIcon name="shield" :size="28" /></div>
     <h1>当前账号没有此页面的访问权限</h1>
-    <p>你可能已被移出团队、角色被调整，或打开了其他团队的链接。链接本身不会授予资源访问权。</p>
+    <p>你可能已被移出团队、角色被调整，或打开了其他团队的链接。</p>
     <div class="no-access__actions"><el-button type="primary" @click="router.push('/apis')">返回我的工作区</el-button><el-button @click="router.push('/account?tab=teams')">查看我的团队</el-button></div>
     <div class="no-access__identity"><span>当前账号</span><b>{{ userStore.user?.username }}</b><span>全局身份</span><b>{{ userStore.isSuperAdmin ? '超级管理员' : '普通账号' }}</b></div>
     <p class="no-access__hint">需要访问？请联系目标团队管理员添加成员；平台账号或团队设置问题请联系系统管理员。</p>

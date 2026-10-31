@@ -21,7 +21,6 @@
             <span v-if="item.badge" class="nav-badge">{{ item.badge }}</span>
           </button>
         </div>
-        <div class="settings-nav__hint">仅超级管理员可修改全局设置，保存后对全部团队生效。</div>
       </aside>
 
       <div class="settings-card">
@@ -29,13 +28,12 @@
           <!-- AI 供应商 -->
           <section v-show="activeSection === 'provider'" class="settings-section">
             <h3 class="section-title">AI 供应商 <span class="api-chip">API 接入</span></h3>
-            <p class="section-desc">选择模型服务商，用 API Key 接入。请求全部由服务端发出，浏览器不会直接访问模型服务。</p>
 
             <div v-if="aiForm.provider === 'MOCK'" class="mock-banner">
               <div class="mock-banner__logo">M</div>
               <div class="mock-banner__main">
                 <div class="mock-banner__title">正在使用内置演示模型</div>
-                <div class="mock-banner__desc">本地模板生成，不需要 API Key；适合演示、离线环境和 UI 验证。</div>
+                <div class="mock-banner__desc">本地模板生成，不需要 API Key。</div>
               </div>
               <el-button text @click="useApiProvider">改用 API 供应商</el-button>
             </div>
@@ -61,11 +59,10 @@
                   <FilledIcon v-if="aiForm.vendor === p.key" class="provider-check" name="shield" :size="17" />
                 </button>
               </div>
-              <div class="input-hint provider-hint">选择供应商会自动填入默认地址与模型，仍可手动修改；自定义用于任意 OpenAI 兼容服务。</div>
 
               <el-form-item label="API 地址">
                 <el-input v-model="aiForm.baseUrl" class="ai-field" placeholder="https://api.deepseek.com/v1" />
-                <div class="input-hint">服务端会拼接 /chat/completions；也可直接粘贴完整地址。</div>
+                <div class="input-hint">自动拼接 /chat/completions；也可直接粘贴完整地址。</div>
               </el-form-item>
 
               <el-form-item label="默认模型">
@@ -77,7 +74,6 @@
                   :can-fetch="canFetchModels"
                   :dirty="aiFormDirty"
                 />
-                <div class="input-hint">推荐列表随版本维护；可从服务商实时拉取，或手动输入模型 ID。</div>
               </el-form-item>
 
               <el-form-item label="API Key">
@@ -134,7 +130,6 @@
           <!-- 助手与能力 -->
           <section v-show="activeSection === 'assistant'" class="settings-section">
             <h3 class="section-title">助手与能力 <span class="ai-badge">Beta</span></h3>
-            <p class="section-desc">配置助手是否启用、可用的生成能力与使用范围。供应商与 Key 在「AI 供应商」里单独维护。</p>
 
             <div class="ai-provider-summary">
               <div class="ai-provider-summary__logo">{{ providerSummary.letter }}</div>
@@ -152,7 +147,6 @@
             <div class="ai-switch-row">
               <div>
                 <div class="ai-switch-title">启用 AI 助手</div>
-                <div class="ai-switch-desc">关闭后隐藏全部 AI 入口，不影响已有接口与规则</div>
               </div>
               <div class="ai-switch-actions">
                 <span class="ai-state" :class="{ 'ai-state--on': aiForm.enabled }">{{ aiForm.enabled ? '运行中' : '已停用' }}</span>
@@ -163,19 +157,19 @@
             <el-form-item label="能力开关">
               <div class="ai-cap-list">
                 <div class="ai-cap-row">
-                  <div><div class="ai-cap-title">生成响应体</div><div class="ai-cap-desc">在返回体编辑器里根据接口信息生成 JSON / XML 示例</div></div>
+                  <div><div class="ai-cap-title">生成响应体</div></div>
                   <el-switch v-model="aiForm.capResponseBody" />
                 </div>
                 <div class="ai-cap-row">
-                  <div><div class="ai-cap-title">生成条件规则</div><div class="ai-cap-desc">把自然语言描述转成现有 conditions 结构，可逐条确认</div></div>
+                  <div><div class="ai-cap-title">生成条件规则</div></div>
                   <el-switch v-model="aiForm.capConditions" />
                 </div>
                 <div class="ai-cap-row">
-                  <div><div class="ai-cap-title">解释匹配结果</div><div class="ai-cap-desc">在请求日志里解释某次请求为什么命中 / 未命中</div></div>
+                  <div><div class="ai-cap-title">解释匹配结果</div></div>
                   <el-switch v-model="aiForm.capExplain" />
                 </div>
                 <div class="ai-cap-row">
-                  <div><div class="ai-cap-title">创建 / 修改接口草稿</div><div class="ai-cap-desc">在对话中创建或修改接口，需回到确认卡片才会写入</div></div>
+                  <div><div class="ai-cap-title">创建 / 修改接口草稿</div></div>
                   <el-switch v-model="aiForm.capDrafts" />
                 </div>
               </div>
@@ -187,7 +181,6 @@
                   <el-radio value="ALL_MEMBERS">所有成员（继承各自权限）</el-radio>
                   <el-radio value="SUPER_ADMIN_ONLY">仅超级管理员</el-radio>
                 </el-radio-group>
-                <div class="input-hint" style="margin-left: 0">AI 始终继承当前登录用户的权限，团队数据保持隔离</div>
               </div>
             </el-form-item>
 
@@ -207,22 +200,21 @@
 
           <!-- Instance policy only. Personal credentials live in /account/tokens. -->
           <section v-show="activeSection === 'mcp'" class="settings-section mcp-policy">
-            <div class="policy-heading"><div><h3 class="section-title">MCP 实例策略</h3><p class="section-desc">控制全实例 MCP 接入与工具，个人凭证仍须逐队显式授权。</p></div><span class="policy-badge">仅超级管理员</span></div>
-            <div class="policy-notice"><FilledIcon name="key" :size="19" /><span><b>个人凭证已移到个人账号</b><br>此处不创建或显示个人 Token。<router-link to="/account/tokens">管理我的个人凭证</router-link>，能力始终按凭证范围 ∩ 本人当前权限 ∩ 实例策略求交。</span></div>
+            <div class="policy-heading"><div><h3 class="section-title">MCP 实例策略</h3></div><span class="policy-badge">仅超级管理员</span></div>
+            <div class="policy-notice"><FilledIcon name="key" :size="19" /><span><b>个人凭证已移到个人账号</b><br>此处不创建或显示个人 Token。<router-link to="/account/tokens">管理我的个人凭证</router-link>。</span></div>
             <div v-if="mcpError" class="policy-error" role="alert">{{ mcpError }} <el-button text :disabled="mcpSaving" @click="loadMcpSettings">重新加载</el-button></div>
             <div class="mcp-endpoint"><span class="policy-http">POST</span><code>{{ mcpEndpoint }}</code><el-button text size="small" @click="copyText(mcpEndpoint)">复制地址</el-button></div>
             <div class="input-hint">Streamable HTTP · POST /mcp · JSON 响应，非 SSE。地址不包含凭证。</div>
             <div class="ai-switch-row"><div><div class="ai-switch-title">启用 MCP Server</div><div class="ai-switch-desc">停用后所有 MCP 客户端停止接入，关联 MCP 草稿也不能继续确认。</div></div><div class="ai-switch-actions"><span class="ai-state" :class="{ 'ai-state--on': mcpSaved?.enabled }">{{ mcpReady ? (mcpSaved?.enabled ? '已保存：启用' : '已保存：停用') : '状态待加载' }}</span><el-switch v-model="mcpForm.enabled" :disabled="!mcpReady || mcpSaving" /></div></div>
-            <el-form-item label="实例写入策略"><el-radio-group v-model="mcpForm.writeMode" class="ai-scope" :disabled="!mcpReady || mcpSaving"><el-radio value="DRAFT_ONLY">草稿 + Web 明确确认（推荐）</el-radio><el-radio value="DIRECT">允许 MCP 应用来源草稿</el-radio></el-radio-group><div class="input-hint" style="margin-left: 0">DIRECT 不是绕过权限直接写库：还需要来源快照、当前凭证的 DRAFT_APPLY、当前角色与应用工具开关同时允许。网页确认也会复核来源凭证。</div></el-form-item>
+            <el-form-item label="实例写入策略"><el-radio-group v-model="mcpForm.writeMode" class="ai-scope" :disabled="!mcpReady || mcpSaving"><el-radio value="DRAFT_ONLY">草稿 + Web 明确确认（推荐）</el-radio><el-radio value="DIRECT">允许 MCP 应用来源草稿</el-radio></el-radio-group><div class="input-hint" style="margin-left: 0">DIRECT 不会绕过权限：仍需来源快照、凭证 DRAFT_APPLY 与角色工具开关同时允许。</div></el-form-item>
             <div class="policy-tools"><table><thead><tr><th>工具</th><th>对应个人能力</th><th>实例允许</th></tr></thead><tbody><tr v-for="tool in mcpToolOptions" :key="tool.key"><td><code>{{ tool.name }}</code><p>{{ tool.desc }}</p></td><td><span class="policy-scope">{{ tool.scope }}</span><small v-if="tool.key === 'toolApplyApiDraft' && mcpForm.writeMode !== 'DIRECT'">DRAFT_ONLY 下不可用</small></td><td><el-switch v-model="mcpForm[tool.key]" :disabled="!mcpReady || mcpSaving || (tool.key === 'toolApplyApiDraft' && mcpForm.writeMode !== 'DIRECT')" :aria-label="tool.name + ' 实例开关'" /></td></tr></tbody></table></div>
-            <p class="policy-foot">禁用工具会同时从 tools/list 隐藏，并拒绝直接工具调用。这里的系统策略不授予团队、成员管理或平台账号管理能力。</p>
+            <p class="policy-foot">禁用工具会同时从 tools/list 隐藏并拒绝直接调用。</p>
             <div class="ai-save-row"><span v-if="mcpDirty" class="unsaved-note">有未保存修改，尚未影响实例</span><el-button type="primary" :loading="mcpSaving" :disabled="!mcpReady || !mcpDirty || !userStore.isSuperAdmin" @click="handleSaveMcp">保存实例 MCP 策略</el-button></div>
           </section>
 
           <!-- 基础设置 -->
           <section v-show="activeSection === 'basic'" class="settings-section">
             <h3 class="section-title">基础设置</h3>
-            <p class="section-desc">服务地址与 Mock 跨域。日志保留、文件存储已经拆到左侧独立分类。</p>
 
             <el-form-item label="服务器地址">
               <el-input v-model="form.serverAddress" class="ai-field" placeholder="如：http://192.168.1.100:8080" clearable />
@@ -244,7 +236,6 @@
           <!-- 日志与保留 -->
           <section v-show="activeSection === 'logs'" class="settings-section">
             <h3 class="section-title">日志与保留</h3>
-            <p class="section-desc">配置操作日志和请求日志的自动清理规则。</p>
 
             <el-form-item label="保留模式">
               <el-radio-group v-model="form.logRetainMode">
@@ -709,9 +700,9 @@ onMounted(() => {
 .nav-item .el-icon { color: var(--app-text-secondary); }
 .nav-item--on .el-icon { color: var(--app-accent); }
 .nav-badge { margin-left: auto; padding: 0 5px; border-radius: 5px; background: var(--app-bg-selected); border: 1px solid var(--app-divider); color: var(--app-text-accent); font-size: var(--app-font-micro); font-weight: 600; line-height: 16px; }
-.settings-nav__hint { margin-top: 14px; padding: 10px; border-radius: 8px; background: #FAFBFC; color: var(--app-text-secondary); font-size: var(--app-font-caption); line-height: 1.7; }
 .settings-card { min-height: 640px; padding: 20px; background: #fff; border-radius: 12px; }
 .settings-section .section-title { margin: 0 0 4px; font-size: 20px; font-weight: 700; color: #1B2559; letter-spacing: -.2px; }
+.settings-section .section-title + :not(.section-desc) { margin-top: 16px; }
 .settings-section .section-desc { margin: 0 0 20px; font-size: 13px; color: var(--app-text-secondary); line-height: 1.75; }
 .api-chip { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; margin-left: 6px; border-radius: 6px; background: var(--app-bg-selected); color: var(--app-text-accent); font-size: var(--app-font-micro); font-weight: 600; vertical-align: middle; }
 .settings-form :deep(.el-form-item__label) { font-size: 13px; font-weight: 600; color: #4A5568; }
@@ -719,7 +710,7 @@ onMounted(() => {
 .settings-form :deep(.el-input-number) { width: 200px; }
 .ai-field { width: 100% !important; max-width: 520px; }
 .input-hint { margin-left: 12px; font-size: var(--app-font-caption); line-height: 1.6; color: var(--app-text-muted); }
-.provider-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.provider-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 16px; }
 .provider-card { position: relative; display: flex; align-items: center; gap: 10px; height: 74px; padding: 0 12px; border: 1px solid #EDF0F5; border-radius: 10px; background: #fff; text-align: left; cursor: pointer; }
 .provider-card:hover { border-color: #DDE2EE; }
 .provider-card--on { border-color: #C7D2FE; background: #FBFCFF; box-shadow: none; }
@@ -729,7 +720,6 @@ onMounted(() => {
 .provider-local { padding: 0 4px; border-radius: 4px; background: #F1F5F9; color: var(--app-text-muted); font-size: var(--app-font-micro); font-weight: 600; line-height: 16px; }
 .provider-host { display: block; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--app-text-muted); font-size: var(--app-font-caption); line-height: 1.5; }
 .provider-check { position: absolute; top: 8px; right: 8px; color: var(--app-accent); }
-.provider-hint { margin: 8px 0 18px; }
 .mock-banner { display: flex; align-items: center; gap: 12px; padding: 14px; border: 1px solid #F1F5F9; border-radius: 10px; background: #FBFBFE; }
 .mock-banner__logo { display: grid; place-items: center; flex-shrink: 0; width: 34px; height: 34px; border-radius: 10px; background: #EEF0FF; color: var(--app-accent); font-size: 15px; font-weight: 700; }
 .mock-banner__main { flex: 1; }
@@ -759,7 +749,6 @@ onMounted(() => {
 .ai-cap-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 12px; background: #fff; }
 .ai-cap-row + .ai-cap-row { border-top: 1px solid #F8FAFC; }
 .ai-cap-title { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #1B2559; }
-.ai-cap-desc { margin-top: 2px; font-size: var(--app-font-caption); color: var(--app-text-muted); }
 .ai-scope-wrap { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
 .ai-scope { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 .ai-security { margin-top: 4px; }
@@ -780,9 +769,8 @@ onMounted(() => {
 .settings-layout { height:100%; min-height:0; grid-template-columns:190px minmax(0,1fr); align-items:stretch; }
 .settings-nav { overflow:auto; min-height:0; position:static; }
 .settings-card { overflow:auto; min-height:0; box-shadow:none; border-radius:16px; }
-.settings-nav__hint { font-weight:400; }
 .nav-item--on { background: var(--app-bg-selected); color: var(--app-text-accent); }
-.policy-heading { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; }
+.policy-heading { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; margin-bottom:16px; }
 .policy-badge { background:#f2f4f8; color:var(--app-text-secondary); padding:6px 9px; border-radius:7px; font-size:var(--app-font-micro); white-space:nowrap; }
 .policy-notice { display:flex; align-items:flex-start; gap:12px; padding:14px; background:#eaf0fb; color:var(--app-text-secondary); border-radius:11px; font-size:var(--app-font-caption); line-height:1.9; margin-bottom:22px; }
 .policy-notice a { color:var(--app-text-accent); text-decoration:none; }
@@ -807,5 +795,5 @@ onMounted(() => {
 .policy-access-denied { min-height:280px; display:grid; place-content:center; justify-items:center; gap:12px; background:white; border-radius:16px; color:var(--app-text-muted); }
 .policy-access-denied h2 { font-size:17px; color:var(--app-text-regular); }
 @media(max-width:850px) { .settings-layout { grid-template-columns:150px minmax(0,1fr); gap:12px; }.settings-card { padding:16px; }.policy-heading { flex-wrap:wrap; } }
-@media(max-width:620px) { .page-settings { height:auto; }.settings-layout { display:flex; flex-direction:column; }.settings-nav { display:flex; flex-wrap:wrap; gap:10px; }.nav-group { flex:1; min-width:135px; }.settings-nav__hint { display:none; }.settings-card { overflow:visible; } }
+@media(max-width:620px) { .page-settings { height:auto; }.settings-layout { display:flex; flex-direction:column; }.settings-nav { display:flex; flex-wrap:wrap; gap:10px; }.nav-group { flex:1; min-width:135px; }.settings-card { overflow:visible; } }
 </style>

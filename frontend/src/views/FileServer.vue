@@ -1,7 +1,7 @@
 <template>
   <div class="file-server-page">
-    <header class="resource-header"><div><h1>文件服务器</h1><p>{{ appStore.currentTeam?.name || '未选择团队' }} · 管理模拟文件与公开下载链接</p></div><el-tag>{{ canWrite ? '可编辑' : '只读' }}</el-tag></header>
-    <div v-if="!canRead" class="soft-card resource-state" role="status">请选择有访问权限的团队。不会加载全部团队文件。</div>
+    <header class="resource-header"><div><h1>文件服务器</h1></div><el-tag>{{ canWrite ? '可编辑' : '只读' }}</el-tag></header>
+    <div v-if="!canRead" class="soft-card resource-state" role="status">请选择有访问权限的团队。</div>
     <div class="toolbar soft-card">
       <div class="toolbar__filters">
         <el-input v-model="keyword" class="toolbar__search" clearable placeholder="搜索 fileId、文件名或别名"
@@ -74,7 +74,7 @@
         </el-form-item>
         <el-form-item label="文件" required>
           <el-upload :auto-upload="false" :limit="1" :on-change="handleUploadFileChange" :on-remove="resetUploadFile">
-            <el-button>选择文件</el-button><template #tip><div class="el-upload__tip">上传后生成可公开下载、支持 Range 请求的链接。</div></template>
+            <el-button>选择文件</el-button>
           </el-upload>
         </el-form-item>
         <el-form-item v-if="uploadProgress > 0" label="上传进度"><el-progress :percentage="uploadProgress" /></el-form-item>
@@ -102,7 +102,7 @@
         </el-descriptions>
         <el-form label-position="top" class="detail-form">
           <el-form-item label="别名"><el-input v-model="editForm.alias" :disabled="!canEdit(detail)" maxlength="200" show-word-limit /></el-form-item>
-          <el-form-item label="标签"><TagInput v-model="editForm.tagIds" :team-id="teamId" :read-only="!canEdit(detail)" /><p class="tag-hint">与接口共用同一套团队标签，在这里新建也会出现在接口标签里。</p></el-form-item>
+          <el-form-item label="标签"><TagInput v-model="editForm.tagIds" :team-id="teamId" :read-only="!canEdit(detail)" /><p class="tag-hint">与接口共用团队标签。</p></el-form-item>
         </el-form>
         <el-divider>内容预览</el-divider>
         <div v-loading="previewLoading" class="preview-area">
@@ -119,7 +119,7 @@
             <el-empty v-else description="此文件暂不支持在线预览，请下载查看。" />
           </template>
         </div>
-        <p v-if="['pdf', 'audio', 'video', 'image'].includes(detail.previewType)" class="preview-note">该预览会通过公开下载链接加载，可能增加下载次数和传输量。</p>
+        <p v-if="['pdf', 'audio', 'video', 'image'].includes(detail.previewType)" class="preview-note">预览通过公开链接加载，会计入下载次数与传输量。</p>
       </template>
     </el-drawer>
   </div>
@@ -313,8 +313,7 @@ function excelColumnName(index) { let value = '', n = index + 1; while (n) { con
 <style lang="scss" scoped>
 .file-server-page { display: flex; flex-direction: column; gap: 16px; min-width: 0; color: var(--app-text-primary); }
 .resource-header, .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-.resource-header h1 { margin: 0 0 6px; font-size: 26px; font-weight: 600; letter-spacing: -.025em; }
-.resource-header p { margin: 0; font-size: 13px; color: var(--app-text-secondary); }
+.resource-header h1 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -.025em; }
 .toolbar { padding: 16px; }
 .toolbar__filters, .toolbar__actions, .tag-list, .url-row, .detail-actions { display: flex; align-items: center; gap: 10px; min-width: 0; flex-wrap: wrap; }
 .toolbar__filters { flex: 1; }

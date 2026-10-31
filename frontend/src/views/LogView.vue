@@ -5,7 +5,7 @@
 -->
 <template>
   <div class="page-log-view">
-    <header class="resource-header"><div><h1>团队日志</h1><p>{{ appStore.currentTeam?.name || '未选择团队' }} · 查看操作记录与请求快照</p></div></header>
+    <header class="resource-header"><div><h1>团队日志</h1></div></header>
     <div class="log-toolbar">
       <div class="log-tabs" role="tablist" aria-label="日志类型">
         <button type="button" class="log-tab" role="tab" :aria-selected="logType === 'operation'" :class="{ active: logType === 'operation' }" @click="switchTab('operation')">操作日志</button>
@@ -13,7 +13,7 @@
       </div>
       <div class="toolbar-actions"><span class="team-context">{{ appStore.currentTeam?.name || '未选择团队' }}</span><el-button :disabled="!canRead" :loading="loading" @click="loadLogs">刷新</el-button></div>
     </div>
-    <div v-if="!canRead" class="resource-state" role="status">请选择有访问权限的团队。日志不会自动扩展到全部团队。</div>
+    <div v-if="!canRead" class="resource-state" role="status">请选择有访问权限的团队。</div>
     <div v-if="loadError" class="resource-state" role="alert"><strong>日志加载失败</strong><p>{{ loadError }}</p><el-button @click="loadLogs">重试</el-button></div>
 
     <!-- 日志卡片 -->
@@ -301,7 +301,7 @@ onBeforeUnmount(() => { disposed = true; contextVersion++; listSequence++; detai
 </script>
 
 <style lang="scss" scoped>
-.page-log-view { min-width: 0; color: var(--app-text-primary); }.resource-header { margin-bottom: 20px; }.resource-header h1 { margin: 0 0 6px; font-size: 26px; font-weight: 600; letter-spacing: -.025em; }.resource-header p { margin: 0; font-size: 13px; color: var(--app-text-secondary); }
+.page-log-view { min-width: 0; color: var(--app-text-primary); }.resource-header { margin-bottom: 20px; }.resource-header h1 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -.025em; }
 .log-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; margin-bottom: 16px; }.log-tabs { display: flex; gap: 4px; background: var(--app-bg-control); border-radius: 10px; padding: 4px; }.log-tab { padding: 8px 18px; font: inherit; border: 0; border-radius: 8px; color: var(--app-text-secondary); cursor: pointer; background: var(--app-bg-control); }.log-tab:hover { color: var(--app-text-primary); }.log-tab.active { color: var(--app-accent); background: var(--app-bg-surface); }.toolbar-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }.team-context { font-size: 12px; color: var(--app-text-secondary); padding: 8px 12px; background: var(--app-bg-surface); border-radius: 8px; }
 .log-card { min-width: 0; background: var(--app-bg-surface); border-radius: 16px; padding: 20px; }.target-tag { margin-right: 6px; border-color: transparent; background: var(--app-bg-selected); color: var(--app-text-accent); }
 .cell-title { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.action-tag, .status-code-tag { display: inline-block; padding: 3px 8px; border-radius: 8px; font-size: var(--app-font-caption); font-weight: 500; line-height: 1.6; white-space: nowrap; }.duration-text { color: var(--app-text-secondary); font-size: 12px; }.pagination-wrapper { display: flex; justify-content: flex-end; margin-top: 16px; padding-top: 12px; min-width: 0; }.empty-state { padding: 36px 16px; text-align: center; color: var(--app-text-secondary); font-size: 13px; }.empty-state p { margin: 0; }.resource-state { padding: 32px 20px; border-radius: 16px; background: var(--app-bg-surface); color: var(--app-text-secondary); text-align: center; font-size: 13px; }.resource-state p { margin: 12px 0; }

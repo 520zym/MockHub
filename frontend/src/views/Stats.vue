@@ -6,7 +6,6 @@
     <div class="stats-header">
       <div class="stats-header__title">
         <h1 class="page-title">使用统计</h1>
-        <p class="page-subtitle">查看 Mock 接口的调用情况，识别活跃和僵尸接口</p>
       </div>
       <div class="stats-header__filters">
         <span class="team-context">{{ appStore.currentTeam?.name || '未选择团队' }}</span>
@@ -22,7 +21,7 @@
       </div>
     </div>
 
-    <div v-if="!canRead" class="resource-state" role="status">请选择有访问权限的团队。统计不会自动扩展到全部团队。</div>
+    <div v-if="!canRead" class="resource-state" role="status">请选择有访问权限的团队。</div>
     <div v-if="errors.overview" class="resource-error" role="alert">概览加载失败：{{ errors.overview }} <el-button link @click="loadAll">重试</el-button></div>
     <!-- KPI 卡片 -->
     <div v-if="canRead && !errors.overview" class="kpi-grid" v-loading="loadingOverview">
@@ -69,7 +68,6 @@
         <div class="chart-card__header">
           <div>
             <div class="chart-card__title">{{ windowDays }} 日调用趋势</div>
-            <div class="chart-card__hint">每日调用次数</div>
           </div>
         </div>
         <p v-if="errors.trend" class="resource-error" role="alert">趋势加载失败：{{ errors.trend }} <el-button link @click="loadAll">重试</el-button></p>
@@ -79,7 +77,6 @@
         <div class="chart-card__header">
           <div>
             <div class="chart-card__title">接口热度 TOP 10</div>
-            <div class="chart-card__hint">{{ windowDays }} 日内调用最多的接口</div>
           </div>
         </div>
         <p v-if="errors.top" class="resource-error" role="alert">热度加载失败：{{ errors.top }} <el-button link @click="loadAll">重试</el-button></p>
@@ -236,7 +233,7 @@ onBeforeUnmount(() => { disposed = true; generation++; observer?.disconnect(); w
 </script>
 
 <style lang="scss" scoped>
-.page-stats { min-width: 0; color: var(--app-text-primary); }.stats-header { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px; margin-bottom: 20px; }.stats-header__title .page-title { margin: 0 0 6px; font-size: 26px; font-weight: 600; color: var(--app-text-primary); letter-spacing: -.025em; }.page-subtitle { margin: 0; font-size: 13px; color: var(--app-text-secondary); }.stats-header__filters { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.page-stats { min-width: 0; color: var(--app-text-primary); }.stats-header { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px; margin-bottom: 20px; }.stats-header__title .page-title { margin: 0; font-size: 26px; font-weight: 600; color: var(--app-text-primary); letter-spacing: -.025em; }.stats-header__filters { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
 .stats-header__filters :deep(.el-button) { height: 38px; }.days-select { width: 140px; }.team-context { display: inline-flex; align-items: center; height: 38px; padding: 0 12px; border-radius: 8px; background: var(--app-bg-surface); font-size: 12px; color: var(--app-text-secondary); }
 .kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 14px; margin-bottom: 14px; }.kpi { display: grid; grid-template-columns: minmax(0,1fr) 32px; gap: 8px; min-width: 0; background: var(--app-bg-surface); border-radius: 16px; padding: 20px; }.kpi__icon { grid-column: 2; grid-row: 1 / span 2; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; background: var(--app-bg-control); color: var(--app-accent); font-size: 18px; }.kpi__label { grid-column: 1; grid-row: 1; color: var(--app-text-secondary); font-size: 12px; }.kpi__value { grid-column: 1; grid-row: 2; font-size: clamp(22px,2.2vw,30px); font-weight: 500; line-height: 1.3; letter-spacing: -.03em; overflow-wrap: anywhere; }.kpi__unit { font-size: 13px; color: var(--app-text-secondary); margin-left: 4px; }.kpi__hint { grid-column: 1 / -1; font-size: 12px; color: var(--app-text-secondary); }
 .charts-row { display: grid; grid-template-columns: minmax(0,1.3fr) minmax(0,1fr); align-items: stretch; gap: 14px; margin-bottom: 14px; }.chart-card, .zombie-card { min-width: 0; background: var(--app-bg-surface); border-radius: 16px; padding: 20px; }.chart-card { display: flex; flex-direction: column; position: relative; }.chart-card__header, .zombie-card__header { margin-bottom: 16px; }.chart-card__title { font-size: 15px; font-weight: 600; }.chart-card__hint { font-size: 12px; color: var(--app-text-secondary); margin-top: 5px; }.chart { flex: 1 1 auto; width: 100%; min-width: 0; min-height: 280px; }.chart-empty { position: absolute; left: 20px; right: 20px; top: 50%; transform: translateY(-50%); margin: 0; pointer-events: none; text-align: center; color: var(--app-text-secondary); font-size: 13px; }.zombie-badge { margin-left: 8px; background: var(--app-bg-control); color: var(--app-text-secondary); font-size: 12px; padding: 3px 8px; border-radius: 8px; }.zombie-card__more { text-align: center; font-size: 12px; color: var(--app-text-secondary); margin: 12px 0 0; }.path-text { font: 13px var(--app-font-mono); color: var(--app-text-regular); }.duration-text { color: var(--app-text-secondary); font-size: 12px; }.btn-icon { margin-left: 4px; font-size: 12px; }.resource-state, .resource-error { padding: 16px 20px; border-radius: 10px; font-size: 13px; margin: 0 0 14px; background: var(--app-bg-surface); color: var(--app-text-secondary); overflow-wrap: anywhere; }.resource-error { color: var(--app-text-danger); background: var(--el-color-danger-light-9); }.cell-title { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.soft-table :deep(.el-button.is-link) { min-height: 28px; }

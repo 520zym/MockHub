@@ -35,7 +35,7 @@
           <p>此草稿的目标是「{{ teamLabel(targetTeamId) }}」，当前侧栏是「{{ teamLabel(appStore.currentTeamId) }}」。不会自动切换或在其他团队确认。</p>
           <el-button :disabled="busy || !canViewAction" @click="switchToTargetTeam">切换到目标团队</el-button>
         </aside>
-        <p class="mcp-notice">这里只展示服务端返回的摘要，可能已截断，不代表完整草稿。当前详情接口未完整提供 SOAP 操作列表、响应头或文件信息；未展示不代表草稿中不存在。确认会应用服务端保存的草稿，而非此摘要文本。</p>
+        <p class="mcp-notice">仅展示摘要，可能已截断或省略 SOAP 操作列表、响应头、文件信息；确认会应用服务端保存的完整草稿。</p>
 
         <div v-if="responses.length" class="mcp-responses">
           <div class="mcp-responses-head"><h3>返回体摘要（{{ responses.length }} 个）</h3><span class="mcp-mode">{{ responseModeLabel }}</span></div>
