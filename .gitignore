@@ -48,3 +48,6 @@ docs/
 
 # Agent-owned isolated working trees (never source deliverables)
 .agents/
+
+# 本地试运行目录（含打包 jar 与运行数据，不入库）
+/test/
