@@ -14,14 +14,14 @@
       <button type="button" class="match-guide-entry" @click="matchGuideVisible = true">图解用法 <span aria-hidden="true">↗</span></button>
     </div>
     <!-- Tab 栏 -->
-    <div class="tabs-header">
+    <div ref="tabsHeader" class="tabs-header">
       <div
         v-for="(resp, idx) in responses"
         :key="idx"
         class="tab-item"
         :class="{
           active: activeIndex === idx,
-          disabled: !resp.isActive
+          inactive: !resp.isActive
         }"
         role="button" tabindex="0" :aria-pressed="activeIndex === idx"
         @keydown.enter="activeIndex = idx" @keydown.space.prevent="activeIndex = idx"
@@ -43,6 +43,7 @@
         <span v-if="editingTabIndex !== idx" class="tab-name" :title="resp.name || 'Response ' + (idx + 1)" @dblclick="startEditTabName(idx)">
           {{ resp.name || 'Response ' + (idx + 1) }}
         </span>
+        <span v-if="activeIndex === idx" class="tab-current"><span aria-hidden="true">✓</span> {{ readOnly ? '正在查看' : '正在编辑' }}</span>
         <span class="tab-status">{{ resp.responseCode || 200 }}</span>
         <span v-if="conditionCount(resp.conditions) > 0" class="tab-cond">{{ conditionCount(resp.conditions) }} 条件</span>
         <span v-if="editingTabIndex !== idx && !resp.isActive" class="disabled-badge">未启用</span>
@@ -391,7 +392,7 @@
  * REST 模式下 operationName 为 null，SOAP 模式下为对应的 operation 名称。
  * 支持添加、删除、切换、设为生效等操作。
  */
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import {
   Plus, Check, MagicStick, Upload, Delete, ArrowDown, Search,
   StarFilled, WarningFilled, EditPen
@@ -645,6 +646,26 @@ const currentResponse = computed(() => {
   }
   return null
 })
+
+// Keep the current editing target visible when the tab strip overflows or resizes.
+const tabsHeader = ref(null)
+let tabStripObserver = null
+function revealCurrentTab() {
+  const strip = tabsHeader.value, selected = strip?.querySelector('.tab-item.active')
+  if (!strip || !selected) return
+  const bounds = strip.getBoundingClientRect(), item = selected.getBoundingClientRect()
+  if (item.left < bounds.left) strip.scrollLeft += item.left - bounds.left
+  else if (item.right > bounds.right) strip.scrollLeft += item.right - bounds.right
+}
+watch(() => [activeIndex.value, currentResponse.value?.name, props.readOnly], async () => { await nextTick(); revealCurrentTab() })
+onMounted(() => {
+  if (typeof ResizeObserver !== 'undefined' && tabsHeader.value) {
+    tabStripObserver = new ResizeObserver(revealCurrentTab)
+    tabStripObserver.observe(tabsHeader.value)
+  }
+  revealCurrentTab()
+})
+onBeforeUnmount(() => { tabStripObserver?.disconnect() })
 
 const isCurrentFileResponse = computed(() => {
   return !!currentResponse.value && currentResponse.value.bodyType === 'FILE'
@@ -1038,8 +1059,16 @@ async function handleUploadFile(uploadFile) {
 .content-type-bar :deep(.el-radio) { min-height: 28px; display: inline-flex; align-items: center; }
 .response-mode-label { font-size: 12px; color: var(--app-text-secondary); }.response-mode-help { font-size: 12px; line-height: 1.6; color: var(--app-text-secondary); flex: 1; min-width: 180px; }
 .tabs-header { display: flex; gap: 7px; align-items: stretch; overflow-x: auto; min-width: 0; padding-bottom: 3px; }
-.tab-item { display: flex; align-items: center; gap: 6px; padding: 9px 11px; color: var(--app-text-secondary); background: var(--app-bg-control); border-radius: 9px; font-size: 12px; cursor: pointer; flex-shrink: 0; }
-.tab-item.active { color: var(--app-accent); background: var(--app-bg-selected); }.tab-item.disabled { opacity: .72; }
+.tab-item { display: flex; align-items: center; gap: 7px; padding: 8px 10px; min-height: 42px; border: 2px solid transparent; color: var(--app-text-regular); background: var(--app-bg-control); border-radius: 9px; font-size: 12px; cursor: pointer; flex-shrink: 0; }
+.tab-item:hover { border-color: var(--app-divider); }
+.tab-item:focus-visible { outline: 2px solid var(--app-focus-color); outline-offset: 2px; }
+/* Editing selection is independent from runtime enablement. Never fade the selected draft. */
+.tab-item.active { color: var(--app-text-inverse); background: var(--app-accent); border-color: var(--app-accent); font-weight: 600; }
+.tab-item.inactive { opacity: 1; }
+.tab-current { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; white-space: nowrap; }
+.tab-item.active .tab-index, .tab-item.active .tab-status, .tab-item.active .disabled-badge, .tab-item.active .fallback-star { color: var(--app-text-inverse); }
+.tab-item.active .tab-cond { color: var(--app-text-inverse); background: transparent; }
+.tab-item.active .active-dot { outline: 1px solid var(--app-text-inverse); outline-offset: 1px; }
 .tab-index { font: 11px var(--app-font-mono); }.tab-name { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.tab-status { font: 11px var(--app-font-mono); color: var(--app-text-success); }.disabled-badge { font-size: 11px; color: var(--app-text-secondary); }.tab-name-input { width: 125px; }
 .tab-cond { font-size: var(--app-font-micro); color: var(--app-text-secondary); background: var(--app-bg-hover); border-radius: 6px; padding: 1px 5px; }
 .active-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }.active-dot.on { background: var(--el-color-success); }.active-dot.off { background: var(--app-text-secondary); }.fallback-star { color: var(--app-accent); font-size: 12px; }
@@ -1067,7 +1096,7 @@ async function handleUploadFile(uploadFile) {
 .condition-return-preview { padding: 16px; border-radius: 12px; background: var(--app-bg-control); margin-top: 18px; min-width: 0; }.condition-return-preview > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; }.condition-return-preview b { font-size: 12px; }.condition-return-preview p,.condition-return-preview small { color: var(--app-text-secondary); font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }.condition-return-preview pre { white-space: pre-wrap; word-break: break-word; font: 12px/1.8 var(--app-font-mono); max-height: 230px; overflow: auto; }
 @media(max-width: 1100px) { .tab-content :deep(.el-col) { flex: 0 0 50%; max-width: 50%; } }
 @media(max-width: 760px) { .response-mode-help { min-width: 0; flex-basis: 100%; }.response-readonly { display: none; }.editor-container { height: 360px; } }
-@media(max-width: 500px) { .tab-content :deep(.el-col) { flex: 0 0 100%; max-width: 100%; }.condition-return-preview > div { align-items: flex-start; flex-wrap: wrap; } }
+@media(max-width: 500px) { .tab-item.active .tab-name { max-width: 120px; }.tab-item.active .tab-index,.tab-item.active .tab-status,.tab-item.active .tab-cond,.tab-item.active .active-dot { display: none; }.tab-content :deep(.el-col) { flex: 0 0 100%; max-width: 100%; }.condition-return-preview > div { align-items: flex-start; flex-wrap: wrap; } }
 </style>
 
 <!-- 动态变量 popover 样式（非 scoped，因 popover 渲染在 body 下） -->
