@@ -100,7 +100,7 @@ class DomainReadOnlyGuardTest {
                 case "tag-create": Tag t = new Tag(); t.setTeamId("a"); new TagService(tags, apiTags, permission,apis).create(t); break;
                 case "variable-create": new CustomVariableService(variables, permission).createVariable("a", "test", ""); break;
                 case "headers": new GlobalHeaderService(headers, permission).replaceAll("a", Collections.emptyList()); break;
-                case "upload": new FileServerService(files, mock(TeamRepository.class), permission, temp.toString(), 1024).uploadManaged("a", null); break;
+                case "upload": new FileServerService(files, mock(TeamRepository.class), mock(com.mockhub.mock.repository.TagRepository.class), permission, temp.toString(), 1024).uploadManaged("a", null); break;
                 case "merge": importer().importApis("a", new ImportExportData(), "merge"); break;
                 case "override": importer().importApis("a", new ImportExportData(), "override"); break;
                 case "ai-create": pending().createApiDraft(dto, "test"); break;

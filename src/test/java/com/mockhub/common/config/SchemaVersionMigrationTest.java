@@ -114,7 +114,7 @@ class SchemaVersionMigrationTest {
     }
 
     @ParameterizedTest
-    @ValueSource(longs = {12L, 2147483648L, Long.MAX_VALUE})
+    @ValueSource(longs = {13L, 2147483648L, Long.MAX_VALUE})
     void unknownFutureVersionIsRejectedWithoutDowngradeSchemaOrJournalChanges(long version) throws Exception {
         SQLiteDataSource ds = database(LegacySchemaFixtures.named("v11"));
         JdbcTemplate jdbc = new JdbcTemplate(ds);

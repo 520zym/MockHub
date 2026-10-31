@@ -7,7 +7,11 @@
         <el-input v-model="keyword" class="toolbar__search" clearable placeholder="搜索 fileId、文件名或别名"
           prefix-icon="Search" @keyup.enter="loadFiles" @clear="loadFiles" />
         <span class="team-context">{{ appStore.currentTeam?.name || '未选择团队' }}</span>
-        <el-input v-model="tag" class="toolbar__tag" clearable placeholder="按标签筛选" @keyup.enter="loadFiles" @clear="loadFiles" />
+        <el-select v-model="filterTagId" class="toolbar__tag" clearable placeholder="按标签筛选" :loading="tagsLoading" @change="handleFilterChange" @clear="handleFilterChange">
+          <el-option v-for="item in teamTags" :key="item.id" :label="item.name" :value="item.id">
+            <span class="tag-option"><i class="tag-option__dot" :style="{ backgroundColor: item.color }" />{{ item.name }}</span>
+          </el-option>
+        </el-select>
       </div>
       <div class="toolbar__actions">
         <el-button type="primary" :disabled="!canWrite" @click="openUploadDialog"><el-icon><Upload /></el-icon>上传文件</el-button>
@@ -42,7 +46,7 @@
         </el-table-column>
         <el-table-column label="标签" min-width="110" show-overflow-tooltip>
           <template #default="{ row }">
-            <div v-if="row.tags?.length" class="tag-list"><el-tag v-for="item in row.tags" :key="item" size="small" round>{{ item }}</el-tag></div>
+            <div v-if="row.tags?.length" class="tag-list"><el-tag v-for="item in row.tags" :key="item.id" size="small" round :style="tagStyle(item)">{{ item.name }}</el-tag></div>
             <span v-else class="muted">-</span>
           </template>
         </el-table-column>
@@ -98,7 +102,7 @@
         </el-descriptions>
         <el-form label-position="top" class="detail-form">
           <el-form-item label="别名"><el-input v-model="editForm.alias" :disabled="!canEdit(detail)" maxlength="200" show-word-limit /></el-form-item>
-          <el-form-item label="标签"><el-select v-model="editForm.tags" :disabled="!canEdit(detail)" multiple filterable allow-create default-first-option placeholder="输入后回车添加标签" style="width: 100%"><el-option v-for="item in editForm.tags" :key="item" :label="item" :value="item" /></el-select></el-form-item>
+          <el-form-item label="标签"><TagInput v-model="editForm.tagIds" :team-id="teamId" :read-only="!canEdit(detail)" /><p class="tag-hint">与接口共用同一套团队标签，在这里新建也会出现在接口标签里。</p></el-form-item>
         </el-form>
         <el-divider>内容预览</el-divider>
         <div v-loading="previewLoading" class="preview-area">
@@ -128,8 +132,11 @@ import { useAppStore } from '@/stores/app'
 import { useUserStore } from '@/stores/user'
 import { batchDeleteFiles, deleteFile, getFileDetail, getFilePreview, getFiles, updateFile, uploadFile } from '@/api/files'
 import { getServerAddress } from '@/api/settings'
+import { getTags } from '@/api/tags'
 import { formatFull } from '@/utils/time'
+import { hexToRgba, tagTextColor } from '@/utils/tag-color'
 import CopyButton from '@/components/CopyButton.vue'
+import TagInput from '@/components/TagInput.vue'
 
 const appStore = useAppStore()
 const userStore = useUserStore()
@@ -144,7 +151,9 @@ const listError = ref('')
 const actionError = ref('')
 const selectedRows = ref([])
 const keyword = ref('')
-const tag = ref('')
+const filterTagId = ref('')
+const teamTags = ref([])
+const tagsLoading = ref(false)
 const page = ref(1)
 const size = ref(20)
 const total = ref(0)
@@ -163,7 +172,7 @@ const detailFileId = ref('')
 const preview = ref(null)
 const previewLoading = ref(false)
 const saving = ref(false)
-const editForm = ref({ alias: '', tags: [] })
+const editForm = ref({ alias: '', tagIds: [] })
 let contextVersion = 0
 let listRequestSequence = 0
 let detailRequestSequence = 0
@@ -187,8 +196,8 @@ watch([teamId, canRead, canWrite, canPurge, () => userStore.user?.id], () => {
   contextVersion++; listRequestSequence++; resetDetail()
   files.value = []; total.value = 0; selectedRows.value = []; tableRef.value?.clearSelection()
   listError.value = ''; actionError.value = ''; detailVisible.value = false; uploadDialogVisible.value = false
-  page.value = 1; keyword.value = ''; tag.value = ''; resetUpload(); loading.value = false; batchDeleting.value = false
-  if (canRead.value) { loadFiles(); resolveServerAddress(snapshot()) }
+  page.value = 1; keyword.value = ''; filterTagId.value = ''; teamTags.value = []; resetUpload(); loading.value = false; batchDeleting.value = false
+  if (canRead.value) { loadTeamTags(snapshot()); loadFiles(); resolveServerAddress(snapshot()) }
 }, { immediate: true, flush: 'sync' })
 onBeforeUnmount(() => { disposed = true; contextVersion++; listRequestSequence++; resetDetail() })
 function serverBase() { return (serverAddress.value || window.location.origin).replace(/\/$/, '') }
@@ -198,6 +207,16 @@ function publicBase() {
   return marker >= 0 ? url.substring(0, marker).replace(/\/$/, '') : serverBase()
 }
 async function resolveServerAddress(ctx) { try { const result = await getServerAddress(); if (current(ctx)) serverAddress.value = result.address || '' } catch { if (current(ctx)) serverAddress.value = '' } }
+function tagStyle(item) {
+  const color = item?.color || '#3568D4'
+  return { backgroundColor: hexToRgba(color, 0.15), color: tagTextColor(color), borderColor: 'transparent' }
+}
+async function loadTeamTags(ctx) {
+  tagsLoading.value = true
+  try { const data = await getTags(ctx.teamId); if (current(ctx)) teamTags.value = data || [] }
+  catch { if (current(ctx)) teamTags.value = [] }
+  finally { if (current(ctx)) tagsLoading.value = false }
+}
 function handleFilterChange() { page.value = 1; clearSelection(); loadFiles() }
 function handleSizeChange() { handleFilterChange() }
 async function loadFiles() {
@@ -205,7 +224,7 @@ async function loadFiles() {
   if (!canRead.value) { files.value = []; total.value = 0; return }
   loading.value = true; listError.value = ''
   try {
-    const data = await getFiles({ teamId: ctx.teamId, keyword: keyword.value.trim() || undefined, tag: tag.value.trim() || undefined, page: page.value, size: size.value })
+    const data = await getFiles({ teamId: ctx.teamId, keyword: keyword.value.trim() || undefined, tagId: filterTagId.value || undefined, page: page.value, size: size.value })
     if (!current(ctx) || sequence !== listRequestSequence) return
     files.value = data.items || []; total.value = data.total || 0; clearSelection()
   } catch (error) { if (current(ctx) && sequence === listRequestSequence) { files.value = []; total.value = 0; listError.value = message(error, '文件加载失败，请重试。') } }
@@ -251,10 +270,10 @@ async function submitUpload() {
 }
 function openDetail(row) {
   if (!canRead.value || row.teamId !== teamId.value) return
-  resetDetail(); detailFileId.value = row.fileId; detail.value = row; editForm.value = { alias: row.alias || '', tags: [...(row.tags || [])] }
+  resetDetail(); detailFileId.value = row.fileId; detail.value = row; editForm.value = { alias: row.alias || '', tagIds: (row.tags || []).map(item => item.id) }
   detailVisible.value = true; loadDetail(row.fileId)
 }
-function resetDetail() { detailRequestSequence++; previewRequestSequence++; detail.value = null; preview.value = null; detailFileId.value = ''; editForm.value = { alias: '', tags: [] }; detailError.value = ''; previewLoading.value = false; saving.value = false }
+function resetDetail() { detailRequestSequence++; previewRequestSequence++; detail.value = null; preview.value = null; detailFileId.value = ''; editForm.value = { alias: '', tagIds: [] }; detailError.value = ''; previewLoading.value = false; saving.value = false }
 async function loadDetail(fileId) {
   if (!canRead.value) return
   const ctx = snapshot(), sequence = ++detailRequestSequence
@@ -263,7 +282,7 @@ async function loadDetail(fileId) {
     const data = await getFileDetail(fileId)
     if (!current(ctx) || sequence !== detailRequestSequence || fileId !== detailFileId.value) return
     if (data.teamId !== ctx.teamId) { detail.value = null; detailError.value = '文件不属于当前团队。'; return }
-    detail.value = data; editForm.value = { alias: data.alias || '', tags: [...(data.tags || [])] }; loadPreview(fileId, sequence, ctx)
+    detail.value = data; editForm.value = { alias: data.alias || '', tagIds: (data.tags || []).map(item => item.id) }; loadPreview(fileId, sequence, ctx)
   } catch (error) { if (current(ctx) && sequence === detailRequestSequence) { detail.value = null; detailError.value = message(error, '文件详情加载失败。') } }
 }
 async function loadPreview(fileId, detailSequence, ctx) {
@@ -275,12 +294,12 @@ async function loadPreview(fileId, detailSequence, ctx) {
 }
 async function saveDetail() {
   if (!canEdit(detail.value)) return
-  const ctx = snapshot(), fileId = detail.value.fileId, payload = { alias: editForm.value.alias, tags: [...editForm.value.tags] }
+  const ctx = snapshot(), fileId = detail.value.fileId, payload = { alias: editForm.value.alias, tagIds: [...editForm.value.tagIds] }
   saving.value = true; detailError.value = ''
   try {
     const data = await updateFile(fileId, payload)
     if (!current(ctx) || !canWrite.value || fileId !== detailFileId.value) return
-    detail.value = data; editForm.value = { alias: data.alias || '', tags: [...(data.tags || [])] }; ElMessage.success('文件信息已保存'); await loadFiles()
+    detail.value = data; editForm.value = { alias: data.alias || '', tagIds: (data.tags || []).map(item => item.id) }; ElMessage.success('文件信息已保存'); await Promise.all([loadFiles(), loadTeamTags(ctx)])
   } catch (error) { if (current(ctx)) detailError.value = message(error, '文件信息保存失败。') }
   finally { if (current(ctx)) saving.value = false }
 }
@@ -307,6 +326,8 @@ function excelColumnName(index) { let value = '', n = index + 1; while (n) { con
 .file-name-cell__original, .muted, .preview-note { color: var(--app-text-secondary); font-size: var(--app-font-caption); }.file-id { color: var(--app-accent); font: 13px var(--app-font-mono); }
 .tag-list { gap: 4px; }.url-row { width: 100%; flex-wrap: nowrap; }.url-row code { flex: 1; min-width: 0; color: var(--app-text-regular); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; }
 .upload-example { width: 100%; margin-top: 8px; padding: 10px 12px; border-radius: 8px; background: var(--app-bg-control); color: var(--app-text-secondary); font: 12px/1.7 var(--app-font-mono); overflow-wrap: anywhere; }
+.tag-option { display: flex; align-items: center; gap: 8px; }.tag-option__dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.tag-hint { margin: 6px 0 0; font-size: var(--app-font-caption); color: var(--app-text-secondary); }
 .file-detail :deep(.copy-button), .file-detail :deep(.copy-button:hover) { color: var(--app-accent); }
 .detail-actions { justify-content: flex-end; margin-bottom: 14px; }.detail-meta { margin: 16px 0; }.detail-meta :deep(.el-descriptions__content) { overflow-wrap: anywhere; }.detail-form { margin-top: 18px; }
 .preview-area { min-height: 120px; min-width: 0; }.preview-notice { margin-bottom: 12px; }.text-preview { max-height: 410px; margin: 0; padding: 14px; white-space: pre-wrap; overflow: auto; background: var(--app-bg-control); border-radius: 10px; font: 12px/1.8 var(--app-font-mono); overflow-wrap: anywhere; }

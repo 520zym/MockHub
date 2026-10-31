@@ -98,4 +98,23 @@ public class TagRepository {
     public int deleteById(String id) {
         return jdbcTemplate.update("DELETE FROM tag WHERE id = ?", id);
     }
+
+    /**
+     * 文件服务器引用清理：文件与接口共用同一套标签，删除标签后关联必须一起失效。
+     *
+     * @param tagId 标签 ID
+     */
+    public void deleteFileLinks(String tagId) {
+        jdbcTemplate.update("DELETE FROM file_server_tag WHERE tag_id = ?", tagId);
+    }
+
+    /**
+     * 直接写入共享标签行（调用方已自行校验团队权限，例如文件元数据保存时的标签复用）。
+     */
+    public Tag insertRaw(Tag tag) {
+        if (tag.getId() == null || tag.getId().isEmpty()) tag.setId(java.util.UUID.randomUUID().toString());
+        if (tag.getColor() == null || tag.getColor().isEmpty()) tag.setColor("#3568D4");
+        insert(tag);
+        return tag;
+    }
 }

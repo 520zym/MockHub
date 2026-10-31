@@ -6,6 +6,8 @@ import com.mockhub.common.util.PermissionChecker;
 import com.mockhub.common.util.SecurityContextUtil;
 import com.mockhub.files.model.StoredFile;
 import com.mockhub.files.repository.FileRepository;
+import com.mockhub.mock.model.entity.Tag;
+import com.mockhub.mock.repository.TagRepository;
 import com.mockhub.system.model.entity.Team;
 import com.mockhub.system.repository.TeamRepository;
 import org.slf4j.Logger;
@@ -33,14 +35,15 @@ public class FileServerService {
     private static final Logger log = LoggerFactory.getLogger(FileServerService.class);
     private final FileRepository repository;
     private final TeamRepository teams;
+    private final TagRepository tags;
     private final PermissionChecker permission;
     private final Path root;
     private final long maxBytes;
 
-    public FileServerService(FileRepository repository, TeamRepository teams, PermissionChecker permission,
+    public FileServerService(FileRepository repository, TeamRepository teams, TagRepository tags, PermissionChecker permission,
                              @Value("${data.path:./data}") String dataPath,
                              @Value("${file-server.max-size-bytes:104857600}") long maxBytes) {
-        this.repository = repository; this.teams = teams; this.permission = permission;
+        this.repository = repository; this.teams = teams; this.tags = tags; this.permission = permission;
         this.root = Paths.get(dataPath, "file-server").toAbsolutePath().normalize(); this.maxBytes = maxBytes;
     }
 
@@ -112,27 +115,55 @@ public class FileServerService {
         permission.checkTeamAccess(file.getTeamId());
         return file;
     }
-    public PageResult<StoredFile> list(String teamId, String keyword, String tag, int page, int size) {
+    public PageResult<StoredFile> list(String teamId, String keyword, String tagId, String tag, int page, int size) {
         if (teamId != null && !teamId.isEmpty()) permission.checkTeamAccess(teamId);
         if (page < 1 || size < 1 || size > 100) throw new BizException(40000, "分页范围不正确");
         String userId = SecurityContextUtil.isSuperAdmin() ? null : SecurityContextUtil.getCurrentUserId();
-        return repository.list(teamId, userId, keyword, tag, page, size);
+        return repository.list(teamId, userId, keyword, tagId, tag, page, size);
     }
 
-    public synchronized StoredFile update(String id, String alias, List<String> tags) {
+    /**
+     * 更新别名与标签。标签使用团队共享标签（与接口同一套）：
+     * 优先按 tagIds 保存；旧调用方仍可传标签名，服务端会复用同名共享标签，不存在才新建。
+     */
+    public synchronized StoredFile update(String id, String alias, List<String> tagIds, List<String> tagNames) {
         StoredFile file = detail(id);
         permission.checkTeamWrite(file.getTeamId());
         alias = alias == null ? "" : alias.trim();
         if (alias.length() > 200) throw new BizException(40000, "别名不能超过 200 个字符");
         LinkedHashSet<String> normalized = new LinkedHashSet<>();
-        if (tags != null) for (String tag : tags) {
-            if (tag == null || tag.trim().isEmpty()) continue;
-            if (tag.trim().length() > 40) throw new BizException(40000, "单个标签不能超过 40 个字符");
-            normalized.add(tag.trim());
+        if (tagIds != null && !tagIds.isEmpty()) {
+            List<Tag> teamTags = tags.findByTeamId(file.getTeamId());
+            java.util.Map<String, String> nameById = new java.util.HashMap<>();
+            for (Tag tag : teamTags) nameById.put(tag.getId(), tag.getName());
+            for (String tagId : tagIds) {
+                if (tagId == null || tagId.trim().isEmpty()) continue;
+                if (!nameById.containsKey(tagId.trim())) throw new BizException(40000, "标签不属于当前团队");
+                normalized.add(tagId.trim());
+            }
+        } else if (tagNames != null) {
+            for (String name : tagNames) {
+                if (name == null || name.trim().isEmpty()) continue;
+                String trimmed = name.trim();
+                if (trimmed.length() > 40) throw new BizException(40000, "单个标签不能超过 40 个字符");
+                normalized.add(reuseOrCreateTag(file.getTeamId(), trimmed).getId());
+            }
         }
         if (normalized.size() > 20) throw new BizException(40000, "每个文件最多 20 个标签");
         repository.update(id, alias, new ArrayList<>(normalized));
         return detail(id);
+    }
+
+    /** 复用团队内同名共享标签（不区分大小写），不存在时按传入颜色默认值新建。 */
+    private Tag reuseOrCreateTag(String teamId, String name) {
+        for (Tag tag : tags.findByTeamId(teamId)) {
+            if (tag.getName().equalsIgnoreCase(name)) return tag;
+        }
+        Tag created = new Tag();
+        created.setTeamId(teamId);
+        created.setName(name);
+        created.setColor("#3568D4");
+        return tags.insertRaw(created);
     }
 
     public synchronized void delete(List<String> ids) {

@@ -44,7 +44,7 @@ import java.util.UUID;
 public class DataSourceConfig {
 
     private static final Logger log = LoggerFactory.getLogger(DataSourceConfig.class);
-    private static final int CURRENT_SCHEMA_VERSION = 11;
+    private static final int CURRENT_SCHEMA_VERSION = 12;
 
     @Autowired
     private DataProperties dataProperties;
@@ -232,6 +232,10 @@ public class DataSourceConfig {
                 }
                 migrateV11(conn);
                 if (current < 11) recordSchemaVersion(conn, 11, "MCP个人凭证显式团队能力范围与草稿来源");
+                if (current < 12) {
+                    migrateV12(conn);
+                    recordSchemaVersion(conn, 12, "文件标签并入团队共享标签；文件下载计入请求日志");
+                }
                 executeSchemaSql(conn, false);
                 conn.commit();
                 log.info("DB 迁移完成");
@@ -511,6 +515,85 @@ public class DataSourceConfig {
         }
     }
 
+    /**
+     * v12：
+     * 1) 文件服务器标签由自由文本并入团队共享标签表 tag（与接口标签同一套）；
+     * 2) request_log 增加 target_type，区分 Mock 接口调用与文件下载。
+     * 迁移只搬运已存在的文本标签，不改写任何文件名、别名或下载计数。
+     */
+    private void migrateV12(Connection conn) throws SQLException {
+        if (tableExists(conn, "request_log")) {
+            addColumnIfNotExists(conn, "request_log", "target_type", "TEXT NOT NULL DEFAULT 'API'");
+        }
+        if (!tableExists(conn, "file_server_tag") || !hasColumn(conn, "file_server_tag", "tag")) {
+            return;
+        }
+        java.util.Map<String, String> teamByFile = new java.util.HashMap<>();
+        if (tableExists(conn, "file_server_file")) {
+            try (Statement st = conn.createStatement();
+                 ResultSet rs = st.executeQuery("SELECT file_id, team_id FROM file_server_file")) {
+                while (rs.next()) {
+                    teamByFile.put(rs.getString(1), rs.getString(2));
+                }
+            }
+        }
+        try (Statement st = conn.createStatement()) {
+            st.execute("CREATE TABLE IF NOT EXISTS file_server_tag_shared (file_id TEXT NOT NULL, tag_id TEXT NOT NULL, PRIMARY KEY (file_id, tag_id))");
+        }
+        int migrated = 0;
+        try (Statement st = conn.createStatement();
+             ResultSet rs = st.executeQuery("SELECT file_id, tag FROM file_server_tag")) {
+            while (rs.next()) {
+                String fileId = rs.getString(1);
+                String name = rs.getString(2);
+                String teamId = teamByFile.get(fileId);
+                if (teamId == null || name == null || name.trim().isEmpty()) {
+                    continue;
+                }
+                String tagId = findOrCreateSharedTag(conn, teamId, name.trim());
+                try (PreparedStatement ps = conn.prepareStatement(
+                        "INSERT OR IGNORE INTO file_server_tag_shared(file_id, tag_id) VALUES(?, ?)")) {
+                    ps.setString(1, fileId);
+                    ps.setString(2, tagId);
+                    ps.executeUpdate();
+                }
+                migrated++;
+            }
+        }
+        try (Statement st = conn.createStatement()) {
+            st.execute("DROP TABLE file_server_tag");
+            st.execute("ALTER TABLE file_server_tag_shared RENAME TO file_server_tag");
+            st.execute("CREATE INDEX IF NOT EXISTS idx_file_server_tag_tag_id ON file_server_tag(tag_id)");
+        }
+        log.info("数据库迁移：{} 条文件标签并入团队共享标签", migrated);
+    }
+
+    /** 在团队内按名称复用共享标签；不存在时按名称哈希取一个稳定颜色新建。 */
+    private String findOrCreateSharedTag(Connection conn, String teamId, String name) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(
+                "SELECT id FROM tag WHERE team_id = ? AND lower(name) = lower(?) LIMIT 1")) {
+            ps.setString(1, teamId);
+            ps.setString(2, name);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getString(1);
+                }
+            }
+        }
+        String id = java.util.UUID.randomUUID().toString();
+        String[] palette = {"#3B6D11", "#3568D4", "#B45309", "#933B36", "#6D28D9", "#0F766E"};
+        String color = palette[Math.abs(name.hashCode()) % palette.length];
+        try (PreparedStatement ps = conn.prepareStatement(
+                "INSERT INTO tag(id, team_id, name, color) VALUES(?, ?, ?, ?)")) {
+            ps.setString(1, id);
+            ps.setString(2, teamId);
+            ps.setString(3, name);
+            ps.setString(4, color);
+            ps.executeUpdate();
+        }
+        return id;
+    }
+
     private void ensureCompatibilityColumns(Connection conn) throws SQLException {
         migrateV8(conn);
         migrateV9(conn);
@@ -636,6 +719,18 @@ public class DataSourceConfig {
         for (String[] column : columns) {
             addColumnIfNotExists(conn, table, column[0], column[1]);
         }
+    }
+
+    private boolean hasColumn(Connection conn, String table, String column) throws SQLException {
+        try (Statement st = conn.createStatement();
+             ResultSet rs = st.executeQuery("PRAGMA table_info(" + table + ")")) {
+            while (rs.next()) {
+                if (column.equalsIgnoreCase(rs.getString("name"))) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private boolean tableExists(Connection conn, String table) throws SQLException {

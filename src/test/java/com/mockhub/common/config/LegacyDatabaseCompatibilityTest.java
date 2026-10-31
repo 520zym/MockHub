@@ -79,8 +79,8 @@ class LegacyDatabaseCompatibilityTest {
         String oldRevision = history.version >= 10 ? jdbc.queryForObject("SELECT snapshot_json FROM api_revision WHERE api_id='rest'", String.class) : null;
 
         start(); // exact DataSource bean path: no test-run schema.sql prepass
-        assertEquals(11, jdbc.queryForObject("SELECT MAX(version) FROM schema_version", Integer.class));
-        assertEquals(11, jdbc.queryForObject("SELECT count(*) FROM schema_version", Integer.class));
+        assertEquals(12, jdbc.queryForObject("SELECT MAX(version) FROM schema_version", Integer.class));
+        assertEquals(12, jdbc.queryForObject("SELECT count(*) FROM schema_version", Integer.class));
         assertEquals(originalDefinitions, rows(ds, "SELECT id,response_body,soap_config,created_at,updated_at FROM api_definition ORDER BY id"));
         assertEquals(originalAccounts, rows(ds, "SELECT id,username,password_hash,display_name,first_login,created_at,updated_at FROM user ORDER BY id"));
         assertEquals(originalTeams, rows(ds, "SELECT id,name,identifier,color,created_at FROM team ORDER BY id"));
@@ -159,7 +159,7 @@ class LegacyDatabaseCompatibilityTest {
         start();
         SQLiteDataSource ds = dataSource();
         JdbcTemplate jdbc = new JdbcTemplate(ds);
-        assertEquals(11, jdbc.queryForObject("SELECT count(*) FROM schema_version", Integer.class));
+        assertEquals(12, jdbc.queryForObject("SELECT count(*) FROM schema_version", Integer.class));
         assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM api_definition", Integer.class));
         List<String> first = dump(ds); start(); assertEquals(first, dump(ds));
     }

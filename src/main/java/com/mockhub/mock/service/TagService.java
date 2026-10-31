@@ -64,6 +64,16 @@ public class TagService {
     public Tag create(Tag tag) {
         return apiRepository.write(() -> createInternal(tag));
     }
+
+    /**
+     * 复用共享标签：调用方已校验团队写权限（如保存文件元数据时按旧标签名创建）。
+     */
+    public Tag createShared(Tag tag) {
+        if (tag.getTeamId() == null || tag.getTeamId().isEmpty()) throw new BizException(40000, "缺少团队");
+        if (tag.getName() == null || tag.getName().trim().isEmpty()) throw new BizException(40000, "标签名称不能为空");
+        tag.setName(tag.getName().trim());
+        return tagRepository.insertRaw(tag);
+    }
     private Tag createInternal(Tag tag) {
         permissionChecker.checkTeamWrite(tag.getTeamId());
 
@@ -131,6 +141,8 @@ public class TagService {
         apiRepository.claimMetadataRevisions(affected,tag.getTeamId());
         // 清理 api_tag 关联记录
         apiTagRepository.deleteByTagId(id);
+        // 文件服务器与接口共用标签，删除后文件上的该标签同步消失
+        tagRepository.deleteFileLinks(id);
         log.info("清除标签关联: tagId={}", id);
 
         tagRepository.deleteById(id);

@@ -429,16 +429,28 @@ function pageAudit(options) {
   const byRule = {}
   for (const p of unique) byRule[p.rule] = (byRule[p.rule] || 0) + 1
   return { vw, vh, scrollWidth: document.documentElement.scrollWidth, scrollHeight: document.documentElement.scrollHeight, byRule, problems: unique.slice(0, 150) }
+  function parseColor(value) {
+    const m = String(value).match(/rgba?\(([^)]+)\)/)
+    if (!m) return null
+    const p = m[1].split(',').map(Number)
+    return p.length >= 3 ? { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 } : null
+  }
+  // Translucent chips (colored el-tag backgrounds) must be composited over the card below,
+  // otherwise a 15%-alpha tint is scored as if it were an opaque block of the same hue.
   function bgOf(el) {
+    const layers = []
     for (let n = el; n; n = n.parentElement) {
-      const c = getComputedStyle(n).backgroundColor
-      const m = c.match(/rgba?\(([^)]+)\)/)
-      if (!m) continue
-      const p = m[1].split(',').map(Number)
-      if (p.length === 4 && p[3] === 0) continue
-      return c
+      const c = parseColor(getComputedStyle(n).backgroundColor)
+      if (!c || c.a === 0) continue
+      layers.push(c)
+      if (c.a >= 1) break
     }
-    return 'rgb(255,255,255)'
+    let base = { r: 255, g: 255, b: 255 }
+    for (let i = layers.length - 1; i >= 0; i--) {
+      const l = layers[i]
+      base = { r: l.r * l.a + base.r * (1 - l.a), g: l.g * l.a + base.g * (1 - l.a), b: l.b * l.a + base.b * (1 - l.a) }
+    }
+    return 'rgb(' + Math.round(base.r) + ',' + Math.round(base.g) + ',' + Math.round(base.b) + ')'
   }
   function contrast(el) {
     const parse = c => { const m = String(c).match(/rgba?\(([^)]+)\)/); if (!m) return null; const p = m[1].split(',').map(Number); return p.length >= 3 ? [p[0], p[1], p[2]] : null }

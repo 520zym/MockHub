@@ -214,7 +214,9 @@ CREATE TABLE IF NOT EXISTS request_log (
     request_params  TEXT,    -- JSON 字符串
     response_code   INTEGER,
     duration_ms     INTEGER,
-    created_at      TEXT NOT NULL
+    created_at      TEXT NOT NULL,
+    -- API：Mock 接口调用；FILE：文件服务器公开链接下载
+    target_type     TEXT NOT NULL DEFAULT 'API'
 );
 
 CREATE INDEX IF NOT EXISTS idx_request_log_team_id ON request_log(team_id);
@@ -330,12 +332,15 @@ CREATE TABLE IF NOT EXISTS file_server_file (
     deleted INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_file_server_team_time ON file_server_file(team_id, uploaded_at);
+-- 文件标签复用团队共享标签表 tag：与接口标签是同一套，删除标签时关联自动失效。
 CREATE TABLE IF NOT EXISTS file_server_tag (
     file_id TEXT NOT NULL,
-    tag TEXT NOT NULL,
-    PRIMARY KEY (file_id, tag)
+    tag_id  TEXT NOT NULL,
+    PRIMARY KEY (file_id, tag_id),
+    FOREIGN KEY (file_id) REFERENCES file_server_file(file_id) ON DELETE CASCADE,
+    FOREIGN KEY (tag_id) REFERENCES tag(id) ON DELETE CASCADE
 );
-CREATE INDEX IF NOT EXISTS idx_file_server_tag_name ON file_server_tag(tag);
+CREATE INDEX IF NOT EXISTS idx_file_server_tag_tag_id ON file_server_tag(tag_id);
 
 -- ========== AI 助手（issue #6） ==========
 -- 单行配置表：id 固定为 'default'。API Key 只在服务端使用，接口永不回显明文。

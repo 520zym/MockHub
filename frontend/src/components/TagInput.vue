@@ -6,7 +6,7 @@
         v-for="tag in selectedTags"
         :key="tag.id"
         :closable="!readOnly"
-        :style="{ backgroundColor: hexToRgba(tag.color, 0.15), color: tag.color, borderColor: 'transparent' }"
+        :style="tagStyle(tag)"
         @close="removeTag(tag.id)"
       >
         {{ tag.name }}
@@ -75,6 +75,7 @@
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { Check, Plus } from '@element-plus/icons-vue'
 import { getTags, createTag } from '@/api/tags'
+import { hexToRgba, tagTextColor } from '@/utils/tag-color'
 import { ElMessage } from 'element-plus'
 
 // 新标签随机颜色预设色板
@@ -96,6 +97,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update:modelValue'])
+
 
 const searchText = ref('')
 const popoverVisible = ref(false)
@@ -232,12 +234,9 @@ function handleBlur() {
   }, 200)
 }
 
-function hexToRgba(hex, alpha) {
-  const h = (hex || '#6366F1').replace('#', '')
-  const r = parseInt(h.substring(0, 2), 16)
-  const g = parseInt(h.substring(2, 4), 16)
-  const b = parseInt(h.substring(4, 6), 16)
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+function tagStyle(tag) {
+  const color = tag.color || '#3568D4'
+  return { backgroundColor: hexToRgba(color, 0.15), color: tagTextColor(color), borderColor: 'transparent' }
 }
 </script>
 
