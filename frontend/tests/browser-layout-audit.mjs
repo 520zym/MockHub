@@ -131,48 +131,68 @@ for (const width of WIDTHS) {
 const DIALOG_PASSES = [
   { page: '/teams', labels: ['新建团队', '创建团队', '＋ 新建团队'], name: 'teams-create' },
   { page: '/users', labels: ['新建账号', '创建账号'], name: 'users-create' },
-  { page: '/variables', labels: ['新建变量', '添加变量'], name: 'variables-create' },
+  { page: '/variables', labels: ['新建变量', '新建'], name: 'variables-create' },
   { page: '/apis', labels: ['导入'], name: 'apis-import' },
   { page: '/apis', labels: ['分组 / 标签', '分组'], name: 'apis-manage' },
-  { page: '/account/tokens', labels: ['新建凭证', '新建', '创建'], name: 'tokens-create' }
+  // Token creation is an inline panel rather than a dialog, so it is audited as a page state.
+  { page: '/account/tokens', labels: ['添加', '新建凭证'], name: 'tokens-create', mode: 'page' }
 ]
+// Dialogs and drawers are measured at both ends of the width range: they are laid out
+// independently of the page and break differently on a phone than on a desktop.
+const DIALOG_WIDTHS = [...new Set([WIDTHS[0], WIDTHS[WIDTHS.length - 1]])]
 if (DIALOGS) {
-  await viewport(WIDTHS[0])
-  for (const pass of DIALOG_PASSES) {
-    try {
-      await browser.evaluate('location.hash = ' + JSON.stringify('#' + pass.page))
-      await browser.waitFor('location.hash === ' + JSON.stringify('#' + pass.page), 'hash ' + pass.page)
-      await settle()
-      const opened = await browser.evaluate(`(() => {
-        const labels = ${JSON.stringify(pass.labels)}
-        const buttons = [...document.querySelectorAll('button, .el-button, [role="button"]')].filter(b => b.offsetParent && b.getBoundingClientRect().width > 0)
-        for (const label of labels) {
-          const hit = buttons.find(b => (b.textContent || '').trim().includes(label))
-          if (hit) { hit.click(); return (hit.textContent || '').trim().slice(0, 24) }
+  for (const width of DIALOG_WIDTHS) {
+    await viewport(width)
+    for (const pass of DIALOG_PASSES) {
+      const label = pass.name.padEnd(18) + ' @' + String(width).padStart(4) + ' '
+      try {
+        await browser.evaluate('location.hash = ' + JSON.stringify('#' + pass.page))
+        await browser.waitFor('location.hash === ' + JSON.stringify('#' + pass.page), 'hash ' + pass.page)
+        await settle()
+        // Close anything left open by the previous pass before clicking a trigger.
+        await browser.evaluate('(() => { const b = document.querySelector(".el-dialog__headerbtn, .el-drawer__close-btn"); if (b) b.click() })()')
+        await new Promise(r => setTimeout(r, 150))
+        const opened = await browser.evaluate(`(() => {
+          const labels = ${JSON.stringify(pass.labels)}
+          const buttons = [...document.querySelectorAll('button, .el-button, [role="button"]')].filter(b => b.offsetParent && b.getBoundingClientRect().width > 0)
+          for (const wanted of labels) {
+            const hit = buttons.find(b => (b.textContent || '').trim() === wanted) || buttons.find(b => (b.textContent || '').trim().includes(wanted))
+            if (hit) { hit.click(); return (hit.textContent || '').trim().slice(0, 24) }
+          }
+          return ''
+        })()`)
+        if (!opened) {
+          report.dialogs.push({ page: pass.page, name: pass.name, width, error: 'trigger not found' })
+          console.log('     dialog ' + label + 'SKIPPED (trigger not found)')
+          continue
         }
-        return ''
-      })()`)
-      if (!opened) {
-        report.dialogs.push({ page: pass.page, name: pass.name, error: 'trigger not found' })
-        console.log('     dialog ' + pass.name.padEnd(18) + ' SKIPPED (trigger not found)')
-        continue
+        if (pass.mode === 'page') {
+          await new Promise(r => setTimeout(r, 500))
+          await settle()
+          const result = await browser.evaluate('(' + pageAudit.toString() + ')()')
+          report.dialogs.push({ page: pass.page, name: pass.name, width, trigger: opened, ...result })
+          console.log('     dialog ' + label + 'issues=' + String(result.problems.length).padStart(3) + ' ' + Object.entries(result.byRule || {}).map(([k, v]) => k + ':' + v).join(' '))
+          continue
+        }
+        await browser.waitFor('!!document.querySelector(".el-dialog, .el-drawer")', 'dialog ' + pass.name)
+        // Let the open transition finish before measuring geometry.
+        await new Promise(r => setTimeout(r, 400))
+        await settle()
+        const result = await browser.evaluate('(' + pageAudit.toString() + ')({ dialogOnly: true })')
+        report.dialogs.push({ page: pass.page, name: pass.name, width, trigger: opened, ...result })
+        console.log('     dialog ' + label + 'issues=' + String(result.problems.length).padStart(3) + ' ' + Object.entries(result.byRule || {}).map(([k, v]) => k + ':' + v).join(' '))
+        await browser.evaluate('(() => { const b = document.querySelector(".el-dialog__headerbtn, .el-drawer__close-btn"); if (b) b.click() })()')
+        await new Promise(r => setTimeout(r, 300))
+      } catch (error) {
+        report.dialogs.push({ page: pass.page, name: pass.name, width, error: String(error.message).slice(0, 200) })
+        console.log('     dialog ' + label + 'FAILED ' + String(error.message).slice(0, 90))
+        await browser.evaluate('(() => { const b = document.querySelector(".el-dialog__headerbtn, .el-drawer__close-btn"); if (b) b.click() })()').catch(() => {})
       }
-      await browser.waitFor('!!document.querySelector(".el-dialog, .el-drawer")', 'dialog ' + pass.name)
-      await settle()
-      const result = await browser.evaluate('(' + pageAudit.toString() + ')({ dialogOnly: true })')
-      report.dialogs.push({ page: pass.page, name: pass.name, trigger: opened, ...result })
-      console.log('     dialog ' + pass.name.padEnd(18) + ' issues=' + String(result.issues).padStart(3) + ' ' + Object.entries(result.byRule || {}).map(([k, v]) => k + ':' + v).join(' '))
-      await browser.evaluate('(() => { const b = document.querySelector(".el-dialog__headerbtn, .el-drawer__close-btn"); if (b) b.click() })()')
-      await new Promise(r => setTimeout(r, 300))
-    } catch (error) {
-      report.dialogs.push({ page: pass.page, name: pass.name, error: String(error.message).slice(0, 200) })
-      console.log('     dialog ' + pass.name.padEnd(18) + ' FAILED ' + String(error.message).slice(0, 90))
-      await browser.evaluate('(() => { const b = document.querySelector(".el-dialog__headerbtn, .el-drawer__close-btn"); if (b) b.click() })()').catch(() => {})
     }
   }
 }
 
-for (const page of [...report.pages, ...(report.dialogs || []).map(d => ({ route: 'dialog:' + d.name + ' (' + d.page + ')', width: WIDTHS[0], ...d }))]) for (const [rule, count] of Object.entries(page.byRule || {})) {
+for (const page of [...report.pages, ...(report.dialogs || []).map(d => ({ route: 'dialog:' + d.name + ' (' + d.page + ')', width: d.width || WIDTHS[0], ...d }))]) for (const [rule, count] of Object.entries(page.byRule || {})) {
   report.totals[rule] = report.totals[rule] || { count: 0, pages: [] }
   report.totals[rule].count += count
   const key = page.route + '@' + page.width
@@ -281,8 +301,10 @@ function pageAudit(options) {
     if (!el.matches('button, a, [role="button"], [role="tab"], .el-switch, .el-checkbox__inner, .el-radio__inner, .el-radio-button__inner, .el-select, .el-input__wrapper')) continue
     if (el.matches('a') && getComputedStyle(el).display === 'inline') continue
     if (thirdPartyOf(el, 'icon, hit')) continue
-    // A 14px glyph inside a 28px label is a 28px target: measure the control's box.
-    const target = el.closest('label, .el-radio, .el-radio-button, .el-checkbox, button, a, [role="button"], .el-switch') || el
+    // A composite control is measured as a whole: number-field spinner halves or a
+    // 14px glyph inside a 28px label are not separate targets.
+    const composite = el.closest('.el-input-number')
+    const target = composite || el.closest('label, .el-radio, .el-radio-button, .el-checkbox, button, a, [role="button"], .el-switch') || el
     const r = target.getBoundingClientRect()
     if (r.height < 24 || r.width < 24) push('tap-target', el, Math.round(r.width) + 'x' + Math.round(r.height))
   }
@@ -315,12 +337,20 @@ function pageAudit(options) {
       if (drift > 3) push('table-columns', th, 'column ' + i + ' drifts ' + Math.round(drift) + 'px')
     })
   }
-  const overlays = all.filter(el => { const cs = getComputedStyle(el); return (cs.position === 'fixed' || cs.position === 'sticky') && parseInt(cs.zIndex || 0, 10) > 0 && el.getBoundingClientRect().height > 20 })
+  // A sticky table header is part of the table, not floating chrome, and a modal
+  // legitimately covers the page underneath it.
+  const modalOf = element => element.closest('.el-overlay, .el-dialog, .el-drawer')
+  const overlays = all.filter(el => {
+    if (el.matches('th, thead, tr, caption')) return false
+    const cs = getComputedStyle(el)
+    return (cs.position === 'fixed' || cs.position === 'sticky') && parseInt(cs.zIndex || 0, 10) > 0 && el.getBoundingClientRect().height > 20
+  })
   for (const overlay of overlays) {
     const o = overlay.getBoundingClientRect()
     if (o.width > vw * 0.9 && o.height > vh * 0.6) continue
     for (const el of all) {
       if (overlay.contains(el) || el.contains(overlay) || el.matches('.el-loading-mask, .el-overlay, .el-popper, [class*="drawer"], [class*="dialog"], [class*="topbar"], [class*="sidebar"]')) continue
+      if (modalOf(overlay) !== modalOf(el)) continue
       if (!el.matches('button, a, input, h1, h2, h3, .page-title, .app-page-title')) continue
       const r = el.getBoundingClientRect()
       const w = Math.min(o.right, r.right) - Math.max(o.left, r.left), h = Math.min(o.bottom, r.bottom) - Math.max(o.top, r.top)
@@ -386,6 +416,8 @@ function pageAudit(options) {
   // 15. Controls sharing one toolbar should share one height.
   for (const parent of new Set(all.filter(el => el.matches('button, .el-button, [role="button"]')).map(el => el.parentElement))) {
     if (!parent) continue
+    // Only toolbar-like rows: a composite widget grids its own internals.
+    if (parent.matches('.el-input-number, .el-input, .el-select, .el-form-item__content, .el-radio-group, .el-checkbox-group')) continue
     const controls = [...parent.children].filter(c => c.matches('button, .el-button, .el-dropdown, [role="button"], .el-input, .el-select') && visible(c))
     if (controls.length < 2) continue
     const hs = controls.map(c => c.getBoundingClientRect().height)

@@ -682,6 +682,21 @@
   color: var(--app-text-disabled);
 }
 
+// A small radio button is 22px tall; keep the 28px target without changing its look.
+.el-radio-button--small .el-radio-button__inner {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+}
+
+// The right-hand spinner of a number input splits the field in half; give each half
+// the tallest box Element allows inside a 40px field.
+.el-input-number.is-controls-right .el-input-number__increase,
+.el-input-number.is-controls-right .el-input-number__decrease {
+  height: 20px;
+  padding: 0;
+}
+
 // Element Plus draws a 14px checkbox and a 20px switch. The visual size stays, but the
 // clickable label must still meet a 28px desktop / 36px mobile hit area.
 .el-checkbox,
