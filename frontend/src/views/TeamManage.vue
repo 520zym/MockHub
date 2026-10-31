@@ -10,7 +10,7 @@
       <footer class="page-foot">归档不释放团队标识，不删除成员与资源，不自动停止 Mock 服务。团队不提供物理删除入口。</footer>
     </template>
     <el-dialog v-model="dialogVisible" :title="editingId ? '编辑团队信息' : '新建团队'" width="min(800px, 94vw)" class="system-team-dialog" :close-on-click-modal="false" :show-close="!busy" :close-on-press-escape="!busy" destroy-on-close>
-      <div class="create-layout"><form id="system-team-form" class="team-form" @submit.prevent="submit"><label>团队名称 <em>*</em><input v-model="form.name" required maxlength="50" :disabled="busy" placeholder="团队展示名称" /></label><label>团队标识 <em>*</em><input v-model="form.identifier" required pattern="[A-Z0-9]{2,8}" minlength="2" maxlength="8" :disabled="busy || !!editingId" placeholder="2~8 位大写字母或数字" @input="form.identifier = form.identifier.toUpperCase().replace(/[^A-Z0-9]/g, '')" /><small>决定 Mock 地址前缀，创建后不可修改；归档后仍保留。</small></label><label class="wide">团队描述<textarea v-model="form.description" rows="3" maxlength="1000" :disabled="busy" placeholder="一句话说明团队负责什么"></textarea></label><label>团队颜色<input v-model="form.color" type="color" :disabled="busy" /></label><div v-if="!editingId" class="wide admin-search"><label for="initial-admin">首位团队管理员 <em>*</em></label><div class="search-row"><input id="initial-admin" v-model="adminUsername" :disabled="busy" placeholder="输入完整用户名精确查找" @input="resetAdmin" @keydown.enter.prevent="findAdmin" /><button type="button" class="button" :disabled="busy || searching || !adminUsername.trim()" @click="findAdmin">{{ searching ? '查找中…' : '查找' }}</button></div><div class="admin-result" aria-live="polite"><template v-if="selectedAdmin"><b>{{ selectedAdmin.displayName }}</b><span class="mono">{{ selectedAdmin.username }}</span><span class="badge green">正常账号</span></template><span v-else>{{ adminHint }}</span></div><small>只能指派已有正常账号；创建团队与首位管理员在同一事务内完成。</small></div></form><aside class="preview"><FilledIcon name="team" :size="28" /><h3>{{ form.name || '团队名称' }}</h3><span class="identifier">{{ form.identifier || 'TEAM' }}</span><p>{{ form.description || '团队资源与权限独立，成员在各团队中的角色互不影响。' }}</p><hr /><b>{{ editingId ? '团队信息维护' : '创建后立即启用' }}</b><p>{{ editingId ? '不会修改团队标识、状态或成员角色。' : '首位管理员可以继续添加已有账号。创建者不会自动获得额外团队角色或资源所有权。' }}</p></aside></div><div v-if="dialogError" class="notice error" role="alert">{{ dialogError }}</div><template #footer><button class="button" :disabled="busy" @click="dialogVisible = false">取消</button><button class="button primary" type="submit" form="system-team-form" :disabled="busy || (!editingId && !selectedAdmin)">{{ busy ? '保存中…' : editingId ? '保存修改' : '创建并指派管理员' }}</button></template>
+      <div class="create-layout"><form id="system-team-form" class="team-form" @submit.prevent="submit"><label>团队名称 <em>*</em><input v-model="form.name" required maxlength="50" :disabled="busy" placeholder="团队展示名称" /></label><label>团队标识 <em>*</em><input v-model="form.identifier" required pattern="[A-Z0-9]{2,8}" minlength="2" maxlength="8" :disabled="busy || !!editingId" placeholder="2~8 位大写字母或数字" @input="form.identifier = form.identifier.toUpperCase().replace(/[^A-Z0-9]/g, '')" /><small>决定 Mock 地址前缀，创建后不可修改；归档后仍保留。</small></label><label class="wide">团队描述<textarea v-model="form.description" rows="3" maxlength="1000" :disabled="busy" placeholder="一句话说明团队负责什么"></textarea></label><label>团队颜色<input v-model="form.color" type="color" :disabled="busy" /></label><div v-if="!editingId" class="wide admin-search"><label for="initial-admin">首位团队管理员 <em>*</em></label><UserPicker id="initial-admin" :model-value="selectedAdmin" :users="adminCandidates" :loading="adminLoading" :disabled="busy" aria-label="选择首位团队管理员" placeholder="输入显示名或用户名筛选" @update:model-value="onAdminPicked" /><div class="admin-result" aria-live="polite"><span v-if="!selectedAdmin">{{ adminHint }}</span></div><small>从账号列表中选择一位正常账号；创建团队与首位管理员在同一事务内完成。</small></div></form><aside class="preview"><FilledIcon name="team" :size="28" /><h3>{{ form.name || '团队名称' }}</h3><span class="identifier">{{ form.identifier || 'TEAM' }}</span><p>{{ form.description || '团队资源与权限独立，成员在各团队中的角色互不影响。' }}</p><hr /><b>{{ editingId ? '团队信息维护' : '创建后立即启用' }}</b><p>{{ editingId ? '不会修改团队标识、状态或成员角色。' : '首位管理员可以继续添加已有账号。创建者不会自动获得额外团队角色或资源所有权。' }}</p></aside></div><div v-if="dialogError" class="notice error" role="alert">{{ dialogError }}</div><template #footer><button class="button" :disabled="busy" @click="dialogVisible = false">取消</button><button class="button primary" type="submit" form="system-team-form" :disabled="busy || (!editingId && !selectedAdmin)">{{ busy ? '保存中…' : editingId ? '保存修改' : '创建并指派管理员' }}</button></template>
     </el-dialog>
   </div>
 </template>
@@ -24,13 +24,28 @@ import { useUserStore } from '@/stores/user'
 import { useAppStore } from '@/stores/app'
 import { getTeams, createTeam, updateTeam, updateTeamStatus } from '@/api/teams'
 import { getUsers } from '@/api/users'
+import UserPicker from '@/components/UserPicker.vue'
 const userStore = useUserStore(), appStore = useAppStore(), router = useRouter()
 const teams = ref([]), loading = ref(false), busy = ref(false), error = ref(''), query = ref(''), statusFilter = ref('ALL'), pendingTeamId = ref(null)
 const filteredTeams = computed(() => teams.value.filter(t => (statusFilter.value === 'ALL' || t.status === statusFilter.value) && (t.name + ' ' + t.identifier).toLowerCase().includes(query.value.trim().toLowerCase())))
-const dialogVisible = ref(false), editingId = ref(null), dialogError = ref(''), selectedAdmin = ref(null), adminUsername = ref(''), adminHint = ref('仅按完整用户名查找已有正常账号。'), searching = ref(false)
+const dialogVisible = ref(false), editingId = ref(null), dialogError = ref(''), selectedAdmin = ref(null), adminCandidates = ref([]), adminLoading = ref(false), adminHint = ref('搜索并选中一位正常账号作为首位团队管理员。')
 const form = reactive({ name: '', identifier: '', description: '', color: '#3568d4' })
 const message = err => err?.msg || err?.response?.data?.msg || err?.message || '操作失败，请重试'
 let loadRevision = 0, adminRevision = 0
+// Candidates are loaded once per dialog open; the picker filters them locally.
+async function loadAdminCandidates() {
+  if (!userStore.isSuperAdmin) return
+  const revision = ++adminRevision
+  adminLoading.value = true; adminHint.value = ''
+  try {
+    const users = await getUsers()
+    if (revision === adminRevision) adminCandidates.value = users.map(u => ({ id: u.id, username: u.username, displayName: u.displayName || u.username, status: u.status, globalRole: u.globalRole }))
+  } catch (err) {
+    if (revision === adminRevision) adminHint.value = message(err)
+  } finally {
+    if (revision === adminRevision) adminLoading.value = false
+  }
+}
 async function reload() {
   if (!userStore.isSuperAdmin) return
   const revision = ++loadRevision; loading.value = true; error.value = ''
@@ -39,25 +54,20 @@ async function reload() {
   finally { if (revision === loadRevision) loading.value = false }
 }
 watch(() => userStore.isSuperAdmin, allowed => { if (allowed) reload(); else { ++loadRevision; teams.value = []; loading.value = false; dialogVisible.value = false } }, { immediate: true })
-function resetAdmin() { ++adminRevision; selectedAdmin.value = null; searching.value = false; adminHint.value = '用户名变更后请重新精确查找。'; dialogError.value = '' }
+function resetAdmin() { ++adminRevision; selectedAdmin.value = null; adminCandidates.value = []; adminLoading.value = false; adminHint.value = '搜索并选中一位正常账号作为首位团队管理员。'; dialogError.value = '' }
 function openCreate() {
   if (!userStore.isSuperAdmin || busy.value) return
-  editingId.value = null; Object.assign(form, { name: '', identifier: '', description: '', color: '#3568d4' }); adminUsername.value = ''; resetAdmin(); dialogVisible.value = true
+  editingId.value = null; Object.assign(form, { name: '', identifier: '', description: '', color: '#3568d4' }); resetAdmin(); dialogVisible.value = true
+  loadAdminCandidates()
 }
 function openEdit(team) {
   if (!userStore.isSuperAdmin || busy.value || team.status === 'ARCHIVED') return
   editingId.value = team.id; Object.assign(form, { name: team.name, identifier: team.identifier, description: team.description || '', color: team.color || '#3568d4' }); dialogError.value = ''; dialogVisible.value = true
 }
-async function findAdmin() {
-  if (!userStore.isSuperAdmin || busy.value || !adminUsername.value.trim()) return
-  const revision = ++adminRevision, username = adminUsername.value.trim(); selectedAdmin.value = null; searching.value = true; dialogError.value = ''
-  try {
-    const users = await getUsers()
-    if (revision !== adminRevision || !userStore.isSuperAdmin) return
-    selectedAdmin.value = users.find(u => u.username === username && u.status === 'ACTIVE') || null
-    adminHint.value = selectedAdmin.value ? '' : '未找到此完整用户名的正常账号，请先在账号管理中创建或恢复。'
-  } catch (err) { if (revision === adminRevision) dialogError.value = message(err) }
-  finally { if (revision === adminRevision) searching.value = false }
+function onAdminPicked(user) {
+  selectedAdmin.value = user
+  adminHint.value = ''
+  dialogError.value = ''
 }
 async function refreshAfterWrite() {
   await reload()
@@ -66,7 +76,7 @@ async function refreshAfterWrite() {
 async function submit() {
   if (!userStore.isSuperAdmin || busy.value || !form.name.trim()) return
   dialogError.value = ''
-  if (!editingId.value && (!/^[A-Z0-9]{2,8}$/.test(form.identifier) || !selectedAdmin.value || selectedAdmin.value.status !== 'ACTIVE')) { dialogError.value = '请填写有效团队标识，并精确查找首位正常管理员。'; return }
+  if (!editingId.value && (!/^[A-Z0-9]{2,8}$/.test(form.identifier) || !selectedAdmin.value || selectedAdmin.value.status !== 'ACTIVE')) { dialogError.value = '请填写有效团队标识，并从列表中选中首位正常管理员。'; return }
   if (!editingId.value && teams.value.some(t => t.identifier.toUpperCase() === form.identifier)) { dialogError.value = '此团队标识已被使用（含已归档团队）。'; return }
   busy.value = true
   try {
