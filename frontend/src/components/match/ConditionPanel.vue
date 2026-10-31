@@ -18,7 +18,7 @@
         <p class="type-note">ⓘ 类型由示例字段推断，为只读标签。数字字段才出现大小比较；Header 名称不区分大小写。</p>
       </template>
       <p class="strategy-note">{{ isRandom ? '随机模式不支持权重，也不以条件或返回体顺序决定结果。' : '按返回体顺序选择首个命中项；都未命中时，最后使用无规则兜底。不是按条件数量排序。' }}</p>
-      <section class="return-preview"><header><strong>命中后返回</strong><button type="button" class="text-button" @click="emit('edit-response')">{{ readOnly ? '查看返回体' : '编辑返回体' }} →</button></header><slot name="return-preview"><p class="preview-placeholder">响应模板由返回体编辑区提供；试配只返回选择元信息。</p></slot></section>
+      <section v-if="!hideReturnPreview" class="return-preview"><header><strong>命中后返回</strong><button type="button" class="text-button" @click="emit('edit-response')">{{ readOnly ? '查看返回体' : '编辑返回体' }} →</button></header><slot name="return-preview"><p class="preview-placeholder">响应模板由返回体编辑区提供；试配只返回选择元信息。</p></slot></section>
       <p class="local-note">● {{ readOnly ? '规则只读 · 请求样例不保存' : '未提交草稿仅供本次试配，保存接口后才生效' }}</p>
     </section>
 
@@ -66,7 +66,9 @@ const props = defineProps({
   apiContext: { type: Object, default: () => ({}) }, responseName: { type: String, default: '默认返回体' },
   apiId: { type: String, default: null }, responses: { type: Array, default: () => [] },
   selectedResponseIndex: { type: Number, default: 0 }, selectionMode: { type: String, default: 'CONDITION' },
-  operationName: { type: String, default: null }
+  operationName: { type: String, default: null },
+  // Inline usage (response tab) already shows the body right below, so the summary is noise.
+  hideReturnPreview: { type: Boolean, default: false }
 })
 const emit = defineEmits(['update:modelValue', 'edit-response'])
 const aiStore = useAiStore(), aiDrawerVisible = ref(false)

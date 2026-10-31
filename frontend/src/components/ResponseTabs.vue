@@ -1,23 +1,19 @@
 <template>
-  <div class="response-tabs" :class="{ 'response-tabs--rules': activePanel === 'conditions' }">
-    <div class="response-panel-nav" aria-label="返回体与匹配规则视图">
-      <div class="response-panel-switch">
-        <button type="button" :aria-pressed="activePanel === 'body'" :class="{ selected: activePanel === 'body' }" @click="setActivePanel('body')">返回体 <small>{{ responses.length }}</small></button>
-        <button type="button" :aria-pressed="activePanel === 'conditions'" :class="{ selected: activePanel === 'conditions' }" @click="setActivePanel('conditions')">匹配规则 <small>{{ ruleResponseCount }}</small></button>
-      </div>
-      <el-button v-if="readOnly && currentResponse && !isCurrentFileResponse" text @click="openFullEditor">全文查看</el-button>
-      <span v-if="readOnly" class="response-readonly">只读查看</span>
+  <div class="response-tabs">
+    <div v-if="readOnly" class="response-view-bar">
+      <span class="response-readonly">只读查看</span>
+      <el-button v-if="currentResponse && !isCurrentFileResponse" text @click="openFullEditor">全文查看</el-button>
     </div>
     <div class="response-mode-bar">
-      <span class="response-mode-label">选择方式</span>
+      <span class="response-mode-label">返回体选择方式</span>
       <el-radio-group :model-value="normalizedSelectionMode" :disabled="readOnly" size="small" @change="changeSelectionMode">
         <el-radio-button value="CONDITION">按条件匹配</el-radio-button>
         <el-radio-button value="RANDOM">等概率随机</el-radio-button>
       </el-radio-group>
       <span class="response-mode-help">
         {{ normalizedSelectionMode === 'RANDOM'
-          ? '每次从启用的返回体中等概率选择；已有条件会保留，但不会参与本模式的选择。'
-          : '按条件依次匹配；多个启用返回体时必须保留一个无条件兜底。' }}
+          ? '整个接口共用：每次从启用的返回体中等概率选一个；已配置的条件会保留，但不参与本模式。'
+          : '整个接口共用：按顺序匹配，首个条件全部满足的返回体被返回；多个启用返回体时必须保留一个无条件兜底。' }}
       </span>
     </div>
     <!-- Tab 栏 -->
@@ -51,8 +47,8 @@
           {{ resp.name || 'Response ' + (idx + 1) }}
         </span>
         <span class="tab-status">{{ resp.responseCode || 200 }}</span>
+        <span v-if="conditionCount(resp.conditions) > 0" class="tab-cond">{{ conditionCount(resp.conditions) }} 条件</span>
         <span v-if="editingTabIndex !== idx && !resp.isActive" class="disabled-badge">未启用</span>
-        <small v-if="activePanel === 'conditions'" class="tab-rule-summary">{{ isEmptyConditions(resp.conditions) ? '无条件 · 兜底候选' : conditionCount(resp.conditions) + ' 条条件' }}</small>
         <el-input
           v-if="editingTabIndex === idx"
           v-model="resp.name"
@@ -71,41 +67,34 @@
     <!-- 当前 Tab 内容 -->
     <div v-if="currentResponse" class="tab-content">
       <!-- 响应规则面板：REST 按接口匹配，SOAP 按当前 operation 独立匹配 -->
-      <div v-show="activePanel === 'conditions'" class="conditions-workspace">
-      <ConditionPanel
-        v-model="currentResponse.conditions"
-        :body-sample-kind="operationName ? 'xml' : 'json'"
-        :team-id="teamId"
-        :api-context="apiContext"
-        :response-name="currentResponse.name"
-        :read-only="readOnly"
-        :api-id="apiId"
-        :responses="responses"
-        :selected-response-index="activeIndex"
-        :selection-mode="normalizedSelectionMode"
-        :operation-name="operationName"
-        @edit-response="setActivePanel('body')"
-      >
-        <template #return-preview>
-          <section class="condition-return-preview">
-            <div><b>命中后返回</b><el-button text @click="setActivePanel('body')">{{ readOnly ? '查看返回体' : '编辑返回体' }} →</el-button></div>
-            <p>{{ currentResponse.responseCode || 200 }} · {{ currentResponse.contentType || 'application/json' }} · 延迟 {{ currentResponse.delayMs || 0 }} ms</p>
-            <pre v-if="!isCurrentFileResponse">{{ (currentResponse.responseBody || '').slice(0, 800) }}</pre>
-            <p v-else>文件响应：{{ currentResponse.fileName || '尚未选择文件' }} · {{ formatSize(currentResponse.fileSize || 0) }}</p>
-            <small>{{ (currentResponse.responseBody || '').length > 800 ? '模板预览已截断，全文请切回返回体查看。' : '仅展示响应模板；动态变量在真实 Mock 请求时生成。' }}</small>
-          </section>
-        </template>
-      </ConditionPanel>
+      <!-- v-show keeps the local request samples alive when the team toggles the selection mode. -->
+      <div v-show="normalizedSelectionMode === 'CONDITION'" class="conditions-workspace">
+        <ConditionPanel
+          v-model="currentResponse.conditions"
+          :body-sample-kind="operationName ? 'xml' : 'json'"
+          :team-id="teamId"
+          :api-context="apiContext"
+          :response-name="currentResponse.name"
+          :read-only="readOnly"
+          :api-id="apiId"
+          :responses="responses"
+          :selected-response-index="activeIndex"
+          :selection-mode="normalizedSelectionMode"
+          :operation-name="operationName"
+          hide-return-preview
+        />
       </div>
       <el-alert
-        v-if="normalizedSelectionMode === 'RANDOM' && activePanel === 'body'"
+        v-if="normalizedSelectionMode === 'RANDOM'"
         type="info"
         :closable="false"
         show-icon
         title="随机模式会忽略本返回体已保存的命中条件。切回按条件匹配时，原条件会继续保留。"
         class="random-mode-alert"
       />
-      <el-form v-show="activePanel === 'body'" label-position="top" :disabled="readOnly">
+      <section class="response-body-section">
+        <header class="response-body-heading"><h4>返回内容</h4><span>{{ normalizedSelectionMode === 'CONDITION' ? '上面的条件命中后，返回下面这份响应。' : '等概率随机时，每份启用的响应都可能被返回。' }}</span></header>
+      <el-form label-position="top" :disabled="readOnly">
         <el-row :gutter="16">
           <!-- 名称 -->
           <el-col :span="6">
@@ -311,6 +300,7 @@
           </el-form-item>
         </div>
       </el-form>
+      </section>
 
       <!-- 全文编辑 Dialog：使用草稿副本避免编辑过程中实时写回触发父页面重渲染 -->
       <el-dialog
@@ -382,7 +372,7 @@
       />
 
       <!-- 底部操作栏 -->
-      <div v-if="!readOnly && activePanel === 'body'" class="tab-actions">
+      <div v-if="!readOnly" class="tab-actions">
         <!-- 启用/禁用切换（取代原"设为生效"单选语义；多条可同时启用） -->
         <el-button
           v-if="!currentResponse.isActive"
@@ -481,11 +471,8 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['update:modelValue', 'update:selectionMode', 'panel-change'])
-const activePanel = ref('body')
-function setActivePanel(panel) { activePanel.value = panel === 'conditions' ? 'conditions' : 'body'; emit('panel-change', activePanel.value) }
+const emit = defineEmits(['update:modelValue', 'update:selectionMode'])
 function conditionCount(json) { try { const conditions = JSON.parse(json || '{}').conditions; return Array.isArray(conditions) ? conditions.length : 0 } catch { return 0 } }
-const ruleResponseCount = computed(() => props.modelValue.filter(response => conditionCount(response.conditions) > 0).length)
 
 const aiStore = useAiStore()
 const aiDrawerVisible = ref(false)
@@ -1089,10 +1076,7 @@ async function handleUploadFile(uploadFile) {
 
 <style scoped>
 .response-tabs { min-width: 0; display: grid; gap: 15px; }
-.response-panel-nav { display: flex; justify-content: space-between; align-items: center; gap: 10px; min-width: 0; grid-column: 1 / -1; }
-.response-panel-switch { display: flex; gap: 3px; padding: 4px; background: var(--app-bg-control); border-radius: 11px; }
-.response-panel-switch button { border: 0; background: transparent; color: var(--app-text-secondary); border-radius: 8px; padding: 8px 12px; font: inherit; font-size: 12px; cursor: pointer; }
-.response-panel-switch button.selected { background: white; color: var(--app-accent); } .response-panel-switch small { font-size: 11px; margin-left: 4px; }
+.response-view-bar { display: flex; justify-content: flex-end; align-items: center; gap: 10px; min-width: 0; }
 .response-readonly { color: var(--app-text-secondary); font-size: 12px; }
 .response-mode-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; min-width: 0; }
 .response-mode-bar label, .content-type-bar label { display: inline-flex; align-items: center; min-height: 28px; }
@@ -1102,9 +1086,14 @@ async function handleUploadFile(uploadFile) {
 .tab-item { display: flex; align-items: center; gap: 6px; padding: 9px 11px; color: var(--app-text-secondary); background: var(--app-bg-control); border-radius: 9px; font-size: 12px; cursor: pointer; flex-shrink: 0; }
 .tab-item.active { color: var(--app-accent); background: var(--app-bg-selected); }.tab-item.disabled { opacity: .72; }
 .tab-index { font: 11px var(--app-font-mono); }.tab-name { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.tab-status { font: 11px var(--app-font-mono); color: var(--app-text-success); }.disabled-badge { font-size: 11px; color: var(--app-text-secondary); }.tab-name-input { width: 125px; }
+.tab-cond { font-size: var(--app-font-micro); color: var(--app-text-secondary); background: var(--app-bg-hover); border-radius: 6px; padding: 1px 5px; }
 .active-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }.active-dot.on { background: var(--el-color-success); }.active-dot.off { background: var(--app-text-secondary); }.fallback-star { color: var(--app-accent); font-size: 12px; }
 .tab-add { display: grid; place-items: center; border: 0; background: var(--app-bg-control); color: var(--app-accent); border-radius: 9px; width: 34px; min-height: 34px; flex-shrink: 0; cursor: pointer; }
-.tab-rule-summary { display: none; }.tab-content { min-width: 0; }
+.tab-content { min-width: 0; display: grid; gap: 15px; }
+.response-body-section { min-width: 0; display: grid; gap: 12px; padding-top: 16px; border-top: 1px solid var(--app-divider); }
+.response-body-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+.response-body-heading h4 { margin: 0; font-size: 13px; font-weight: 600; }
+.response-body-heading span { font-size: var(--app-font-caption); color: var(--app-text-secondary); }
 .random-mode-alert { margin-bottom: 15px; }
 .tab-content :deep(.el-form-item) { margin-bottom: 16px; }.tab-content :deep(.el-form-item__label) { color: var(--app-text-secondary); font-size: 12px; }
 .body-toolbar,.editor-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; margin-bottom: 10px; }
@@ -1116,14 +1105,8 @@ async function handleUploadFile(uploadFile) {
 .variable-list { display: flex; flex-wrap: wrap; gap: 7px; }.variable-item,.group-pick-item { display: flex; align-items: center; gap: 9px; padding: 8px 10px; border-radius: 8px; background: var(--app-bg-control); cursor: pointer; font-size: 12px; }.variable-item code,.group-pick-item code { color: var(--app-accent); }.variable-item:hover,.group-pick-item:hover { background: var(--app-bg-selected); }
 .full-editor-toolbar { display: flex; align-items: center; gap: 12px; padding-bottom: 12px; }.full-editor-meta { font-size: 12px; color: var(--app-text-secondary); }.full-editor-monaco { flex: 1; min-height: 0; }.group-pick-list { display: grid; gap: 8px; }
 .condition-return-preview { padding: 16px; border-radius: 12px; background: var(--app-bg-control); margin-top: 18px; min-width: 0; }.condition-return-preview > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; }.condition-return-preview b { font-size: 12px; }.condition-return-preview p,.condition-return-preview small { color: var(--app-text-secondary); font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }.condition-return-preview pre { white-space: pre-wrap; word-break: break-word; font: 12px/1.8 var(--app-font-mono); max-height: 230px; overflow: auto; }
-.response-tabs--rules { grid-template-columns: 165px minmax(0, 1fr); align-items: start; }
-.response-tabs--rules .tabs-header { grid-column: 1; grid-row: 2; display: flex; flex-direction: column; align-items: stretch; overflow: visible; }
-.response-tabs--rules .tab-item { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; align-items: center; padding: 12px 10px; }
-.response-tabs--rules .tab-index { display: none; }.response-tabs--rules .tab-rule-summary { grid-column: 2 / -1; display: block; color: var(--app-text-secondary); font-size: 12px; padding-top: 4px; }.response-tabs--rules .tab-name { font-weight: 600; max-width: none; }.response-tabs--rules .disabled-badge { grid-column: 2 / -1; }.response-tabs--rules .tab-add { width: 100%; }
-.response-tabs--rules .response-mode-bar { grid-column: 1; grid-row: 3; padding: 12px; background: var(--app-bg-control); border-radius: 11px; flex-direction: column; align-items: stretch; }.response-tabs--rules .response-mode-help { min-width: 0; }.response-tabs--rules .response-mode-bar :deep(.el-radio-group) { display: flex; flex-direction: column; gap: 7px; }.response-tabs--rules .response-mode-bar :deep(.el-radio-button__inner) { border-radius: 8px; width: 100%; border: 0; box-shadow: none; font-size: 12px; }
-.response-tabs--rules .tab-content { grid-column: 2; grid-row: 2 / span 2; }
-@media(max-width: 1100px) { .response-tabs--rules { grid-template-columns: 135px minmax(0, 1fr); gap: 12px; } .tab-content :deep(.el-col) { flex: 0 0 50%; max-width: 50%; } }
-@media(max-width: 760px) { .response-tabs--rules { grid-template-columns: minmax(0, 1fr); } .response-tabs--rules .tabs-header { grid-column: 1; grid-row: auto; flex-direction: row; overflow-x: auto; }.response-tabs--rules .tab-item { min-width: 145px; }.response-tabs--rules .response-mode-bar { grid-column: 1; grid-row: auto; }.response-tabs--rules .tab-content { grid-column: 1; grid-row: auto; }.response-tabs--rules .response-mode-bar :deep(.el-radio-group) { flex-direction: row; }.response-mode-help { min-width: 0; flex-basis: 100%; }.response-panel-switch button { padding: 8px; }.response-readonly { display: none; }.editor-container { height: 360px; } }
+@media(max-width: 1100px) { .tab-content :deep(.el-col) { flex: 0 0 50%; max-width: 50%; } }
+@media(max-width: 760px) { .response-mode-help { min-width: 0; flex-basis: 100%; }.response-readonly { display: none; }.editor-container { height: 360px; } }
 @media(max-width: 500px) { .tab-content :deep(.el-col) { flex: 0 0 100%; max-width: 100%; }.condition-return-preview > div { align-items: flex-start; flex-wrap: wrap; } }
 </style>
 

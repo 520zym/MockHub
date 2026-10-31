@@ -4,7 +4,7 @@
     <header class="editor-page-header">
       <div class="editor-page-heading">
         <el-button text class="back-button" aria-label="返回接口列表" @click="goBack"><el-icon><ArrowLeft /></el-icon></el-button>
-        <div><div class="editor-eyebrow">{{ isEdit ? 'API WORKSPACE' : 'NEW API' }}</div><h1>{{ form.name || (isEdit ? '接口详情' : '新建接口') }}<span v-if="rulesWorkspace"> · 匹配规则</span></h1><p class="editor-path"><code>{{ form.method }} {{ form.path || '/path' }}</code><span v-if="loadedRevision" class="editor-version">v{{ loadedRevision }}</span><span :class="{ 'editor-unsaved': isDirty }">{{ readOnly ? (isDirty ? '只读 · 保留未提交草稿' : '只读查看') : (isDirty ? '未保存' : '可编辑') }}</span></p></div>
+        <div><div class="editor-eyebrow">{{ isEdit ? 'API WORKSPACE' : 'NEW API' }}</div><h1>{{ form.name || (isEdit ? '接口详情' : '新建接口') }}</h1><p class="editor-path"><code>{{ form.method }} {{ form.path || '/path' }}</code><span v-if="loadedRevision" class="editor-version">v{{ loadedRevision }}</span><span :class="{ 'editor-unsaved': isDirty }">{{ readOnly ? (isDirty ? '只读 · 保留未提交草稿' : '只读查看') : (isDirty ? '未保存' : '可编辑') }}</span></p></div>
       </div>
       <div class="editor-page-actions">
         <el-button v-if="isDirty" @click="downloadDraft">导出本地草稿</el-button>
@@ -22,7 +22,7 @@
     <el-alert v-if="readOnly && !pageLoading && !detailError" title="当前为只读查看，未提交草稿仍然保留，可继续查看和复制。" type="info" :closable="false" show-icon />
     <el-result v-if="detailError" icon="warning" title="接口详情暂时不可用" :sub-title="detailError"><template #extra><el-button :disabled="saving" @click="reloadCurrentVersion">重新加载</el-button><el-button @click="goBack">返回列表</el-button></template></el-result>
     <template v-else>
-    <div class="editor-layout" :class="{ 'editor-layout--rules': rulesWorkspace }">
+    <div class="editor-layout">
     <div class="editor-column editor-column--main">
     <section class="soft-card section-card basic-card">
       <h2 class="section-title"><span></span>基础信息 <small>BASIC</small></h2>
@@ -193,7 +193,6 @@
     <div class="soft-card section-card response-card" v-if="form.type === 'REST'">
       <ResponseTabs
         v-model="form.responses"
-        @panel-change="bodyPanel = $event"
         v-model:selection-mode="form.responseMode"
         :team-id="form.teamId"
         :api-context="aiApiContext"
@@ -291,8 +290,8 @@ function isEditorContextCurrent(context) {
 }
 
 const writableTeams = computed(() => appStore.teams.filter(team => userStore.canWriteTeam(team.id)))
-const bodyPanel = ref('body'), historyVisible = ref(false)
-const rulesWorkspace = computed(() => form.type === 'REST' && bodyPanel.value === 'conditions')
+const historyVisible = ref(false)
+
 const persistedMeta = reactive({ createdByName: '', updatedByName: '', updatedAt: '' })
 
 /**
@@ -1216,7 +1215,7 @@ onBeforeUnmount(() => {
 .wsdl-upload-row { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; min-width: 0; }.wsdl-filename { color: var(--app-text-secondary); font-size: 12px; max-width: 100%; overflow-wrap: anywhere; }.operations-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; }.operations-title { font-size: 12px; margin: 0; }.operations-actions { display: flex; gap: 5px; }.operation-card { background: var(--app-bg-control); border-radius: 12px; padding: 14px; margin-bottom: 12px; }.operation-header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; cursor: pointer; margin-bottom: 10px; }.operation-name { font: 600 12px var(--app-font-mono); }.soap-action,.op-desc-preview { font-size: 12px; color: var(--app-text-secondary); overflow-wrap: anywhere; }.op-desc-preview { flex: 1; }.operation-description { margin-bottom: 12px; }.operation-card .operation-card { background: var(--app-bg-surface); }.empty-operations { padding: 35px; text-align: center; color: var(--app-text-secondary); font-size: 12px; }
 .path-status-icon { font-size: 13px; color: var(--app-text-secondary); animation: path-spin 1.2s linear infinite; }.path-status-icon--error { color: var(--app-text-danger); animation: none; }.path-status-icon--ok { color: var(--app-text-success); animation: none; }@keyframes path-spin { to { transform: rotate(360deg); } }
 .bottom-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 14px; padding: 13px 6px; flex-wrap: wrap; }.bottom-actions > span { margin-right: auto; color: var(--app-text-secondary); font-size: 12px; line-height: 1.7; }.bottom-actions .el-button { margin: 0; }
-.editor-layout--rules { grid-template-columns: minmax(0, 1fr); }.editor-layout--rules .editor-column--main,.editor-layout--rules .description-card { display: none; }.editor-layout--rules .response-card { min-height: 600px; }
+.editor-layout--rules .response-card { min-height: 600px; }
 @media(max-width: 1150px) { .editor-layout { grid-template-columns: minmax(270px, 310px) minmax(0, 1fr); }.section-card { padding: 16px; }.editor-page-header { align-items: flex-start; }.editor-page-heading h1 { font-size: 22px; }.editor-page-actions { max-width: 40%; justify-content: flex-end; }.editor-layout--rules { grid-template-columns: minmax(0, 1fr); } }
 @media(max-width: 960px) { .editor-layout { display: flex; flex-direction: column; }.editor-column { display: contents; }.section-card { width: 100%; }.response-card { order: 2; min-height: 0; }.basic-card { order: 1; }.description-card { order: 3; }.tags-card { order: 4; }.advanced-card { order: 5; }.editor-layout--rules .response-card { min-height: 0; }.editor-page-actions { max-width: none; }.editor-page-header { flex-wrap: wrap; gap: 12px; }.basic-card .basic-pair { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
 @media(max-width: 560px) { .editor-page-heading h1 { font-size: 20px; }.editor-page-header { padding-left: 0; padding-right: 0; }.editor-page-actions { width: 100%; justify-content: flex-start; }.section-card { padding: 14px; }.editor-page-actions .el-button { padding: 8px 10px; }.editor-attribution { padding: 0; font-size: 12px; }.basic-pair { grid-template-columns: minmax(0, 1fr); }.header-row { grid-template-columns: minmax(0, 1fr) auto; }.header-value { grid-column: 1; grid-row: 2; }.header-row .el-button { grid-column: 2; grid-row: 1 / span 2; }.bottom-actions > span { flex-basis: 100%; }.basic-card .basic-pair { grid-template-columns: minmax(0, 1fr); } }
