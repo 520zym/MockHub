@@ -109,8 +109,8 @@ public class LogRepository {
      * @param log 请求日志对象，所有字段由调用方填充
      */
     public void insertRequestLog(RequestLog log) {
-        String sql = "INSERT INTO request_log (id, team_id, api_id, api_path, method, request_headers, request_body, request_params, response_code, duration_ms, created_at) "
-                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        String sql = "INSERT INTO request_log (id, team_id, api_id, api_path, method, request_headers, request_body, request_params, response_code, duration_ms, created_at, target_type) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         jdbcTemplate.update(sql,
                 log.getId(),
                 log.getTeamId(),
@@ -122,7 +122,8 @@ public class LogRepository {
                 log.getRequestParams(),
                 log.getResponseCode(),
                 log.getDurationMs(),
-                log.getCreatedAt());
+                log.getCreatedAt(),
+                log.getTargetType() == null ? "API" : log.getTargetType());
     }
 
     /**
@@ -221,6 +222,7 @@ public class LogRepository {
             log.setResponseCode(rs.getInt("response_code"));
             log.setDurationMs(rs.getLong("duration_ms"));
             log.setCreatedAt(rs.getString("created_at"));
+            log.setTargetType(rs.getString("target_type"));
             return log;
         }
     };

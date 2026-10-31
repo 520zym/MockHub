@@ -78,7 +78,9 @@ public class StatsRepository {
      * @return 平均耗时（毫秒，向下取整）
      */
     public long avgDurationMs(String teamId, String startInclusive) {
-        String sql = "SELECT AVG(duration_ms) FROM request_log WHERE created_at >= ?";
+        // 平均耗时衡量 Mock 响应速度；文件下载时长受文件体积与带宽影响，单独统计以免失真。
+        String sql = "SELECT AVG(duration_ms) FROM request_log WHERE created_at >= ? "
+                + "AND (target_type IS NULL OR target_type = 'API')";
         Double avg;
         if (teamId == null) {
             avg = jdbcTemplate.queryForObject(sql, Double.class, startInclusive);
