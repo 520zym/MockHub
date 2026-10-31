@@ -2,7 +2,8 @@
   <main class="login-page">
     <section class="login-intro">
       <router-link to="/login" class="login-brand"><span>M</span><b>MockHub</b></router-link>
-      <div class="login-intro__copy"><span class="login-eyebrow">团队协作 · 接口模拟</span><h1>让联调，<br />不再等待。</h1><p>在同一个团队工作区里维护 REST 和 SOAP 接口，使用匹配规则、动态变量与文件响应，复现真实业务场景。</p><div class="login-example" aria-label="Mock 工作流程示意"><div><FilledIcon name="team" /><b>团队资源</b><span>接口与规则共同维护</span></div><i>↓</i><div><FilledIcon name="api" /><b>Mock 响应</b><span>条件匹配 · JSON · XML · 文件</span></div></div></div>
+      <div class="login-intro__copy"><span class="login-eyebrow">团队协作 · 接口模拟</span><h1>接口与规则，<br />都放在团队工作区里。</h1><p>维护 REST 与 SOAP 接口，用匹配规则、动态变量和文件响应复现真实业务场景。</p></div>
+      <LoginMotion class="login-intro__art" />
       <small class="login-intro__foot">适用于内网与离线部署 · 无需外部账号</small>
     </section>
     <section class="login-main"><div class="login-card">
@@ -32,7 +33,7 @@ import { ElMessage } from 'element-plus'
 import { login, changePassword } from '@/api/auth'
 import { useUserStore } from '@/stores/user'
 import { useAppStore } from '@/stores/app'
-import FilledIcon from '@/components/FilledIcon.vue'
+import LoginMotion from '@/components/LoginMotion.vue'
 const router = useRouter(), user = useUserStore(), app = useAppStore()
 const form = reactive({ username: '', password: '' }), loginRef = ref(), loading = ref(false), error = ref('')
 const rules = { username: [{ required: true, message: '请输入用户名', trigger: 'blur' }], password: [{ required: true, message: '请输入密码', trigger: 'blur' }] }
@@ -66,13 +67,14 @@ async function cancelInitialPassword() { try { await user.logout() } catch {} fi
 .login-page { display: grid; grid-template-columns: minmax(360px, 1fr) minmax(400px, .9fr); min-height: 100vh; min-height: 100dvh; background: var(--app-bg-page); padding: 16px; gap: 16px; }
 .login-intro { border-radius: 20px; background: var(--app-bg-surface); padding: 30px 40px; display: flex; flex-direction: column; }
 .login-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; font-size: 20px; } .login-brand span { background: var(--app-primary); color: #fff; width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; font-weight: 700; }
-.login-intro__copy { margin: auto 0; padding: 56px 0; max-width: 460px; } .login-eyebrow { color: var(--app-text-accent); font-size: var(--app-font-caption); font-weight: 600; letter-spacing: .1em; }
-.login-intro h1 { font-size: clamp(36px, 4.5vw, 62px); line-height: 1.16; letter-spacing: -.04em; font-weight: 600; margin: 20px 0; } .login-intro p { font-size: 13px; line-height: 1.9; max-width: 370px; color: var(--app-text-secondary); }
-.login-example { display: flex; flex-direction: column; margin-top: 28px; gap: 8px; max-width: 355px; } .login-example div { padding: 15px 18px; display: grid; align-items: center; grid-template-columns: 22px 1fr; gap: 7px 10px; background: var(--app-bg-control); border-radius: 12px; } .login-example svg { grid-row: span 2; color: var(--app-accent); } .login-example b { font-size: 13px; font-weight: 600; } .login-example span { font-size: var(--app-font-caption); line-height: 1.6; color: var(--app-text-secondary); } .login-example i { font-size: 14px; font-style: normal; color: var(--app-text-secondary); text-align: center; }
+.login-intro__copy { margin-top: clamp(28px, 6vh, 64px); max-width: 460px; } .login-eyebrow { color: var(--app-text-accent); font-size: var(--app-font-caption); font-weight: 600; letter-spacing: .1em; }
+.login-intro h1 { font-size: clamp(24px, 2.4vw, 32px); line-height: 1.34; letter-spacing: -.01em; font-weight: 600; margin: 12px 0 10px; }
+.login-intro p { font-size: 13px; line-height: 1.85; max-width: 400px; color: var(--app-text-secondary); margin: 0; }
+.login-intro__art { flex: 1; min-height: 0; display: flex; align-items: center; margin: clamp(18px, 4vh, 40px) 0; }
 .login-intro__foot { font-size: var(--app-font-caption); line-height: 1.6; color: var(--app-text-secondary); }
 .login-main { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; gap: 24px; min-width: 0; } .login-card { width: 100%; max-width: 400px; background: var(--app-bg-surface); border-radius: 20px; padding: 32px; }
 .login-card h2 { font-size: 24px; font-weight: 600; margin: 0 0 10px; } .login-subtitle { font-size: var(--app-font-caption); color: var(--app-text-secondary); margin: 0 0 28px; } .login-submit { width: 100%; margin-top: 8px; }
 .login-help,.login-main__foot { font-size: var(--app-font-caption); color: var(--app-text-secondary); line-height: 1.7; text-align: center; } .login-help { margin: 20px 0 0; } .login-error { color: var(--app-text-danger); background: var(--el-color-danger-light-9); padding: 10px; border-radius: 8px; font-size: 13px; line-height: 1.6; margin: 0 0 14px; } .password-note { font-size: 13px; color: var(--app-text-secondary); line-height: 1.7; margin-bottom: 20px; }
-@media(max-width: 900px) { .login-page { grid-template-columns: 1fr; } .login-intro { padding: 22px 26px; } .login-intro__copy { padding: 20px 0 0; max-width: none; } .login-intro h1 { font-size: 32px; } .login-intro h1 br { display: none; } .login-example,.login-intro__foot { display: none; } .login-main { padding: 8px 0 24px; } }
-@media(max-width: 480px) { .login-page { padding: 10px; gap: 10px; } .login-intro { padding: 18px; } .login-intro h1 { font-size: 28px; margin: 12px 0; } .login-intro p { margin: 0; font-size: 13px; } .login-card { padding: 24px; } }
+@media(max-width: 900px) { .login-page { grid-template-columns: 1fr; } .login-intro { padding: 22px 26px 18px; } .login-intro__copy { margin-top: 18px; max-width: none; } .login-intro h1 { font-size: 22px; } .login-intro h1 br { display: none; } .login-intro__art { margin: 10px 0 0; } .login-intro__foot { display: none; } .login-main { padding: 8px 0 24px; } }
+@media(max-width: 480px) { .login-page { padding: 10px; gap: 10px; } .login-intro { padding: 18px; } .login-intro h1 { font-size: 20px; margin: 10px 0 8px; } .login-intro p { font-size: 13px; } .login-intro__art { margin-top: 4px; } .login-card { padding: 24px; } }
 </style>
