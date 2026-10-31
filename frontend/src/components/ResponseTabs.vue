@@ -428,6 +428,7 @@ import ConditionPanel from './match/ConditionPanel.vue'
 import AiResponseDrawer from '@/components/ai/AiResponseDrawer.vue'
 import { useAiStore } from '@/stores/ai'
 import { DYNAMIC_VARIABLES } from '@/constants/dynamicVariables'
+import { formatJsonBody } from '@/utils/json-placeholders'
 import { getTeamVariables } from '@/api/customVariable'
 import { uploadResponseFile } from '@/api/apis'
 
@@ -750,10 +751,11 @@ function formatDraftBody() {
   if (!body) return
   const type = props.operationName ? 'xml' : manualContentType.value
   if (type === 'json') {
-    try {
-      fullEditorDraft.value = JSON.stringify(JSON.parse(body), null, 2)
-    } catch (e) {
+    const formatted = formatJsonBody(body)
+    if (formatted === null) {
       ElMessage.warning('当前内容不是有效 JSON，无法格式化')
+    } else {
+      fullEditorDraft.value = formatted
     }
   } else if (type === 'xml') {
     if (!/<[^>]+>/.test(body)) {
@@ -989,11 +991,11 @@ function formatBody() {
   const type = props.operationName ? 'xml' : manualContentType.value
 
   if (type === 'json') {
-    try {
-      const parsed = JSON.parse(body)
-      currentResponse.value.responseBody = JSON.stringify(parsed, null, 2)
-    } catch (e) {
+    const formatted = formatJsonBody(body)
+    if (formatted === null) {
       ElMessage.warning('当前内容不是有效 JSON，无法格式化')
+    } else {
+      currentResponse.value.responseBody = formatted
     }
   } else if (type === 'xml') {
     if (!/<[^>]+>/.test(body)) {

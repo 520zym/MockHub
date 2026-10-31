@@ -3,6 +3,8 @@
 </template>
 
 <script>
+import { hasPlaceholder, isValidJsonWithPlaceholders } from '@/utils/json-placeholders'
+
 // Shared across component instances: script-setup declarations are instance-scoped.
 const modelVariableLists = new WeakMap()
 let markersPatched = false
@@ -24,11 +26,13 @@ import { DYNAMIC_VARIABLES } from '@/constants/dynamicVariables'
 /**
  * 全局一次性拦截 Monaco 的 setModelMarkers
  *
- * 目的：保留 JSON/XML 等内置语法校验的同时，让动态变量占位符 `{{xxx}}` 不被标红。
- * 做法：Monkey-patch monaco.editor.setModelMarkers，过滤掉落在占位符区间内的 marker。
- * - 占位符正则与后端 DynamicVariableUtil 保持一致：`{{ word }}` 或 `{{ word.word }}`
- * - 只过滤"与占位符区间相交"的 marker，不影响占位符之外的真实语法错误
- * - 幂等：模块级 flag 防止多次包裹
+ * 目的：保留 JSON 内置语法校验，但动态变量占位符常在返回体里写成裸值
+ * （`"id": {{uuid}}`），JSON 校验会报 "Expected comma"，满屏红波浪线却找不到错。
+ * 做法（只作用于 JSON 诊断，XML/纯文本不受影响）：
+ * - 占位符换成 null 后如果仍是合法 JSON，说明这些报错全部来自占位符，清空 JSON 诊断；
+ * - 换成 null 后依然不合法，说明确有真实错误，只丢掉贴着占位符的那几个 marker，
+ *   其余真实错误照常显示。
+ * - 占位符语法与后端 DynamicVariableUtil 一致；幂等：模块级 flag 防止重复包裹。
  */
 function patchSetModelMarkers() {
   if (markersPatched) return
@@ -37,12 +41,8 @@ function patchSetModelMarkers() {
   const PLACEHOLDER_RE = /\{\{\w+(?:\.\w+)?\}\}/g
   const original = monaco.editor.setModelMarkers[markerOriginalKey] || monaco.editor.setModelMarkers.bind(monaco.editor)
 
-  monaco.editor.setModelMarkers = function (model, owner, markers) {
-    if (!model || !markers || markers.length === 0) {
-      return original(model, owner, markers)
-    }
-    // 计算当前 model 中所有占位符的行列区间
-    const text = model.getValue()
+  // 占位符行列区间，左右各放宽 2 列，吸收紧贴占位符的 "Expected comma"
+  function placeholderRanges(model, text) {
     const ranges = []
     let m
     PLACEHOLDER_RE.lastIndex = 0
@@ -50,20 +50,40 @@ function patchSetModelMarkers() {
       const start = model.getPositionAt(m.index)
       const end = model.getPositionAt(m.index + m[0].length)
       ranges.push({
-        sLine: start.lineNumber, sCol: start.column,
-        eLine: end.lineNumber,   eCol: end.column
+        sLine: start.lineNumber, sCol: Math.max(1, start.column - 2),
+        eLine: end.lineNumber,   eCol: end.column + 2
       })
     }
-    if (ranges.length === 0) {
+    return ranges
+  }
+
+  monaco.editor.setModelMarkers = function (model, owner, markers) {
+    if (!model || !markers || markers.length === 0) {
       return original(model, owner, markers)
     }
-    // 过滤：与任一占位符区间相交的 marker 丢弃
+    const languageId = model.getLanguageId ? model.getLanguageId() : ''
+    if (owner !== 'json' && languageId !== 'json') {
+      return original(model, owner, markers)
+    }
+    const text = model.getValue()
+    if (!hasPlaceholder(text)) {
+      return original(model, owner, markers)
+    }
+    if (isValidJsonWithPlaceholders(text)) {
+      return original(model, owner, markers.filter((mk) => !isJsonMarker(mk, owner)))
+    }
+    const ranges = placeholderRanges(model, text)
     const filtered = markers.filter((mk) => {
       return !ranges.some((r) => rangesIntersect(mk, r))
     })
     return original(model, owner, filtered)
   }
   monaco.editor.setModelMarkers[markerOriginalKey] = original
+}
+
+/** 该 marker 是否由 JSON 校验产生（owner 或 source 为 json） */
+function isJsonMarker(marker, owner) {
+  return owner === 'json' || marker.source === 'json'
 }
 
 /**
