@@ -23,7 +23,6 @@
       <template v-if="userStore.isSuperAdmin"><div class="sidebar__label sidebar__copy">系统管理</div><nav class="sidebar__nav" aria-label="系统管理"><router-link v-for="item in systemItems" :key="item.path" :to="item.path" :title="item.label" class="sidebar__nav-item" :class="{ 'is-active': isActive(item.path) }"><FilledIcon :name="item.icon" :size="17" /><span class="sidebar__copy">{{ item.label }}</span></router-link></nav></template>
     </div>
     <div class="sidebar__foot">
-      <div class="sidebar__notice sidebar__copy"><i></i><span>团队隔离 · 服务端授权</span></div>
       <el-dropdown trigger="click" placement="top-start" @command="accountCommand" class="sidebar__account-dropdown">
         <button type="button" class="sidebar__account" :class="{ 'is-current': route.path.startsWith('/account') }" aria-label="个人账号与安全"><span class="sidebar__avatar">{{ initial }}</span><span class="sidebar__account-text sidebar__copy"><b>{{ userStore.user?.displayName || userStore.user?.username }}</b><small>{{ userStore.isSuperAdmin ? '超级管理员' : '普通账号' }}</small></span><el-icon class="sidebar__copy"><MoreFilled /></el-icon></button>
         <template #dropdown><el-dropdown-menu><el-dropdown-item command="profile">个人资料</el-dropdown-item><el-dropdown-item command="security">账号安全</el-dropdown-item><el-dropdown-item command="sessions">登录会话</el-dropdown-item><el-dropdown-item command="teams">我的团队</el-dropdown-item><el-dropdown-item command="tokens">个人访问凭证</el-dropdown-item><el-dropdown-item command="logout" divided>退出登录</el-dropdown-item></el-dropdown-menu></template>

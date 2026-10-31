@@ -61,7 +61,7 @@ test('Source + path deduplication preserves Header source and existing condition
 test('All six server reasons retain their actual meaning without a client match evaluator', async () => {
   for (const [reason, title, explanation] of [
     ['CONDITION_MATCH', '条件命中', '首个'], ['FALLBACK', '使用兜底', '均未命中'], ['SINGLE_ENABLED', '唯一启用', '不执行条件'],
-    ['NO_MATCH', '未命中', '不会伪造'], ['NO_ENABLED_RESPONSE', '无启用', '没有可参与'], ['RANDOM_EQUAL_PROBABILITY', '等概率', '不固定命中']
+    ['NO_MATCH', '未命中', '没有可用兜底'], ['NO_ENABLED_RESPONSE', '无启用', '没有可参与'], ['RANDOM_EQUAL_PROBABILITY', '等概率', '不固定命中']
   ]) {
     const c = await panel(props(), async () => ({ reason, mode: reason.startsWith('RANDOM') ? 'RANDOM' : 'CONDITION', enabledCount: 2 }))
     await c.s.runPreview(); assert.ok(c.s.resultTitle.value.includes(title), reason); assert.ok(c.s.resultExplanation.value.includes(explanation), reason); c.unit.unmount()
@@ -89,8 +89,8 @@ test('Readonly revocation and sample edits invalidate pending previews', async (
     delayed.resolve({ reason: 'CONDITION_MATCH' }); await pending; assert.equal(c.s.previewResult.value, null); c.unit.unmount()
   }
 })
-test('Invalid conditions JSON remains visibly invalid rather than silently becoming fallback', async () => {
-  const c = await panel(props({ modelValue: 'not-json' })); assert.ok(c.s.parseError.value.includes('不会将它视为兜底'))
+test('Invalid conditions JSON remains visibly invalid and is sent unchanged', async () => {
+  const c = await panel(props({ modelValue: 'not-json' })); assert.ok(c.s.parseError.value.includes('当前条件 JSON 无效')); assert.equal(c.events.length, 0)
   await c.s.runPreview(); assert.equal(c.calls[0].payload.responses[0].conditions, 'not-json'); c.unit.unmount()
 })
 test('Condition table never mutates prop objects and exposes numeric operators only for inferred NUMBER', async () => {

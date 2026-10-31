@@ -4,7 +4,7 @@
     <header class="editor-page-header">
       <div class="editor-page-heading">
         <el-button text class="back-button" aria-label="返回接口列表" @click="goBack"><el-icon><ArrowLeft /></el-icon></el-button>
-        <div><div class="editor-eyebrow">{{ isEdit ? 'API WORKSPACE' : 'NEW API' }}</div><h1>{{ form.name || (isEdit ? '接口详情' : '新建接口') }}</h1><p class="editor-path"><code>{{ form.method }} {{ form.path || '/path' }}</code><span v-if="loadedRevision" class="editor-version">v{{ loadedRevision }}</span><span :class="{ 'editor-unsaved': isDirty }">{{ readOnly ? (isDirty ? '只读 · 保留未提交草稿' : '只读查看') : (isDirty ? '未保存' : '可编辑') }}</span></p></div>
+        <div><h1>{{ form.name || (isEdit ? '接口详情' : '新建接口') }}</h1><p class="editor-path"><code>{{ form.method }} {{ form.path || '/path' }}</code><span v-if="loadedRevision" class="editor-version">v{{ loadedRevision }}</span><span :class="{ 'editor-unsaved': isDirty }">{{ readOnly ? (isDirty ? '只读 · 保留未提交草稿' : '只读查看') : (isDirty ? '未保存' : '可编辑') }}</span></p></div>
       </div>
       <div class="editor-page-actions">
         <el-button v-if="isDirty" @click="downloadDraft">导出本地草稿</el-button>
@@ -18,14 +18,13 @@
       <p>请先复制需要保留的编辑，再重新加载最新版本。不会自动用新版本号覆盖队友的修改。</p>
       <el-button size="small" @click="copyDraft">复制当前草稿</el-button><el-button size="small" :disabled="saving" @click="reloadCurrentVersion">重新加载</el-button>
     </el-alert>
-    <el-alert v-if="saving" title="保存请求已发送，配置暂时只读，仍可复制。离开页面不会撤销服务端保存。" type="info" :closable="false" show-icon />
-    <el-alert v-if="readOnly && !pageLoading && !detailError" title="当前为只读查看，未提交草稿仍然保留，可继续查看和复制。" type="info" :closable="false" show-icon />
+    <el-alert v-if="saving" title="正在保存；离开页面不会撤销本次保存。" type="info" :closable="false" show-icon />
     <el-result v-if="detailError" icon="warning" title="接口详情暂时不可用" :sub-title="detailError"><template #extra><el-button :disabled="saving" @click="reloadCurrentVersion">重新加载</el-button><el-button @click="goBack">返回列表</el-button></template></el-result>
     <template v-else>
     <div class="editor-layout">
     <div class="editor-column editor-column--main">
     <section class="soft-card section-card basic-card">
-      <h2 class="section-title"><span></span>基础信息 <small>BASIC</small></h2>
+      <h2 class="section-title"><span></span>基础信息</h2>
       <el-form :model="form" label-position="top">
         <el-form-item label="接口名称" required><el-input v-model="form.name" :readonly="editLocked" placeholder="如：订单详情" /></el-form-item>
         <div class="basic-pair">
@@ -36,9 +35,9 @@
           <el-form-item label="接口类型"><el-radio-group v-model="form.type" :disabled="editLocked || pageLoading"><el-radio-button value="REST">REST</el-radio-button><el-radio-button value="SOAP">SOAP</el-radio-button></el-radio-group></el-form-item>
           <el-form-item label="HTTP 方法"><el-select v-model="form.method" :disabled="editLocked || form.type === 'SOAP'"><el-option v-for="method in ['GET','POST','PUT','DELETE','PATCH','HEAD','OPTIONS']" :key="method" :label="method" :value="method" /></el-select></el-form-item>
         </div>
-        <el-form-item label="路径" required :error="pathConflictError"><el-input v-model="form.path" :readonly="editLocked" placeholder="/api/order 或 /service.asmx"><template #suffix><el-icon v-if="pathChecking" class="path-status-icon"><Loading /></el-icon><el-icon v-else-if="pathConflictError" class="path-status-icon path-status-icon--error"><CircleClose /></el-icon><el-icon v-else-if="pathChecked" class="path-status-icon path-status-icon--ok"><CircleCheck /></el-icon></template></el-input><p class="field-hint">路径只包含路由；按 Query / Header / Body 返回不同内容，请配置匹配规则。</p></el-form-item>
+        <el-form-item label="路径" required :error="pathConflictError"><el-input v-model="form.path" :readonly="editLocked" placeholder="/api/order 或 /service.asmx"><template #suffix><el-icon v-if="pathChecking" class="path-status-icon"><Loading /></el-icon><el-icon v-else-if="pathConflictError" class="path-status-icon path-status-icon--error"><CircleClose /></el-icon><el-icon v-else-if="pathChecked" class="path-status-icon path-status-icon--ok"><CircleCheck /></el-icon></template></el-input></el-form-item>
         <el-form-item v-if="form.path" label="Mock 地址"><div class="mock-url-display"><code class="mock-url">{{ mockUrl }}</code><CopyButton :text="mockUrl" :show-label="false" /></div></el-form-item>
-        <div class="editor-enable"><div><b>接口启用</b><small>状态变更随保存提交</small></div><el-switch v-model="form.enabled" :disabled="editLocked || pageLoading" aria-label="接口启用状态" /></div>
+        <div class="editor-enable"><div><b title="保存接口后生效">接口启用</b></div><el-switch v-model="form.enabled" :disabled="editLocked || pageLoading" aria-label="接口启用状态" /></div>
       </el-form>
     </section>
 
@@ -81,8 +80,8 @@
 <div class="editor-column editor-column--work">
     <!-- 卡片：接口描述（REST 和 SOAP 都显示） -->
     <div class="soft-card section-card description-card">
-      <h3 class="section-title"><span></span>说明与归因 <small>META</small></h3>
-      <p class="field-hint description-hint">写清接口背景、字段约定和负责人；随接口版本一起保存，队友都能看到。</p><RichTextEditor v-model="form.description" :read-only="editLocked" :height="200" placeholder="输入接口描述..." />
+      <h3 class="section-title"><span></span>接口描述</h3>
+      <RichTextEditor v-model="form.description" :read-only="editLocked" :height="200" placeholder="输入接口描述..." />
     </div>
 
     <!-- SOAP 模式：WSDL 上传及 Operation 配置 -->
@@ -207,7 +206,6 @@
     <!-- 底部操作栏 -->
     <ApiHistoryDrawer v-model="historyVisible" :api-id="loadedApiId" :team-id="form.teamId" :current-revision="loadedRevision" :read-only="editLocked || isDirty" @changed="historyChanged" />
     <div class="bottom-actions">
-      <span>{{ saving ? '保存请求已发送；离开不会撤销服务端操作。' : readOnly ? '只读查看不会写入接口；本地草稿可导出保存。' : '修改属于团队共享配置；保存后队友将看到新版本。' }}</span>
       <el-button @click="goBack">{{ saving ? '离开页面' : '取消' }}</el-button>
       <el-button type="primary" :loading="saving" :disabled="saving || wsdlUploading || pageLoading || !!detailError || readOnly || (isEdit && !loadedApiId)" @click="handleSave">
         {{ isEdit ? '保存' : '创建' }}

@@ -10,7 +10,6 @@
         <el-radio-button value="CONDITION">按条件匹配</el-radio-button>
         <el-radio-button value="RANDOM">等概率随机</el-radio-button>
       </el-radio-group>
-      <span class="response-mode-help">{{ normalizedSelectionMode === 'RANDOM' ? '每份启用的返回体机会相同' : '按序命中，未命中走兜底' }}</span>
       <button type="button" class="match-guide-entry" @click="matchGuideVisible = true">图解用法 <span aria-hidden="true">↗</span></button>
     </div>
     <!-- Tab 栏 -->
@@ -88,7 +87,7 @@
       </div>
       <div v-if="normalizedSelectionMode === 'RANDOM'" class="random-mode-summary"><span>{{ responses.filter(r => r.isActive).length }} 份已启用 · 等概率随机</span><button type="button" class="match-guide-entry" @click="conditionPanelRef?.openSamples('trial')">查看随机候选</button></div>
       <section class="response-body-section">
-        <header class="response-body-heading"><span class="body-section-step">{{ normalizedSelectionMode === 'CONDITION' ? '2' : '↳' }}</span><h4>返回什么</h4></header>
+        <header class="response-body-heading"><h4>返回内容</h4></header>
       <el-form label-position="top" :disabled="readOnly">
         <el-row :gutter="16">
           <!-- 名称 -->
@@ -1078,11 +1077,11 @@ async function handleUploadFile(uploadFile) {
 .response-body-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
 .response-body-heading h4 { margin: 0; font-size: 13px; font-weight: 600; }
 .response-body-heading span { font-size: var(--app-font-caption); color: var(--app-text-secondary); }
+.response-mode-bar > .match-guide-entry { margin-left: auto; }
 .match-guide-entry { border: 0; background: transparent; color: var(--app-text-accent); font: inherit; font-size: 12px; cursor: pointer; min-height: 34px; padding: 0 4px; }
 .response-selection-warning { margin: 0; padding: 8px 10px; border-radius: 7px; background: var(--app-bg-control); color: var(--app-text-warning); font-size: 12px; line-height: 1.6; }
 .response-enable-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--app-text-secondary); }
 .random-mode-summary { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--app-text-secondary); }
-.body-section-step { display: inline-grid; place-items: center; width: 23px; height: 23px; background: var(--app-bg-selected); color: var(--app-text-accent) !important; border-radius: 7px; font-size: 12px; }
 .response-tabs { gap: 12px; }
 .tab-content :deep(.el-form-item) { margin-bottom: 16px; }.tab-content :deep(.el-form-item__label) { color: var(--app-text-secondary); font-size: 12px; }
 .body-toolbar,.editor-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; margin-bottom: 10px; }

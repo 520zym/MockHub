@@ -90,7 +90,6 @@
       <div v-if="detailError" class="resource-error" role="alert">{{ detailError }}<el-button v-if="detailFileId" link @click="loadDetail(detailFileId)">重试</el-button></div>
       <template v-if="detail && canRead">
         <div class="detail-actions"><el-button type="primary" @click="copy(detail.downloadUrl)"><el-icon><DocumentCopy /></el-icon>复制下载链接</el-button><el-button :disabled="!canEdit(detail)" @click="saveDetail" :loading="saving">保存信息</el-button></div>
-        <el-alert title="公开下载链接最后一段为 fileId。删除后该链接将返回 404。" type="info" :closable="false" show-icon />
         <el-descriptions :column="1" class="detail-meta">
           <el-descriptions-item label="fileId"><code>{{ detail.fileId }}</code></el-descriptions-item>
           <el-descriptions-item label="大小">{{ formatSize(detail.size) }}</el-descriptions-item>
@@ -102,7 +101,7 @@
         </el-descriptions>
         <el-form label-position="top" class="detail-form">
           <el-form-item label="别名"><el-input v-model="editForm.alias" :disabled="!canEdit(detail)" maxlength="200" show-word-limit /></el-form-item>
-          <el-form-item label="标签"><TagInput v-model="editForm.tagIds" :team-id="teamId" :read-only="!canEdit(detail)" /><p class="tag-hint">与接口共用团队标签。</p></el-form-item>
+          <el-form-item label="标签"><TagInput v-model="editForm.tagIds" :team-id="teamId" :read-only="!canEdit(detail)" /></el-form-item>
         </el-form>
         <el-divider>内容预览</el-divider>
         <div v-loading="previewLoading" class="preview-area">
@@ -326,7 +325,6 @@ function excelColumnName(index) { let value = '', n = index + 1; while (n) { con
 .tag-list { gap: 4px; }.url-row { width: 100%; flex-wrap: nowrap; }.url-row code { flex: 1; min-width: 0; color: var(--app-text-regular); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; }
 .upload-example { width: 100%; margin-top: 8px; padding: 10px 12px; border-radius: 8px; background: var(--app-bg-control); color: var(--app-text-secondary); font: 12px/1.7 var(--app-font-mono); overflow-wrap: anywhere; }
 .tag-option { display: flex; align-items: center; gap: 8px; }.tag-option__dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
-.tag-hint { margin: 6px 0 0; font-size: var(--app-font-caption); color: var(--app-text-secondary); }
 .file-detail :deep(.copy-button), .file-detail :deep(.copy-button:hover) { color: var(--app-accent); }
 .detail-actions { justify-content: flex-end; margin-bottom: 14px; }.detail-meta { margin: 16px 0; }.detail-meta :deep(.el-descriptions__content) { overflow-wrap: anywhere; }.detail-form { margin-top: 18px; }
 .preview-area { min-height: 120px; min-width: 0; }.preview-notice { margin-bottom: 12px; }.text-preview { max-height: 410px; margin: 0; padding: 14px; white-space: pre-wrap; overflow: auto; background: var(--app-bg-control); border-radius: 10px; font: 12px/1.8 var(--app-font-mono); overflow-wrap: anywhere; }

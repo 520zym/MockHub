@@ -2,14 +2,14 @@
   <div class="condition-panel">
     <section class="rules-card">
       <header class="rules-heading">
-        <button type="button" class="rules-toggle" :aria-expanded="rulesOpen" @click="rulesOpen = !rulesOpen"><span class="section-step">1</span><strong>何时返回</strong><span class="rules-summary">{{ conditions.length ? conditions.length + ' 条条件' : '无条件' }}</span><span aria-hidden="true">{{ rulesOpen ? '⌃' : '⌄' }}</span></button>
+        <button type="button" class="rules-toggle" :aria-expanded="rulesOpen" @click="rulesOpen = !rulesOpen"><strong>匹配条件</strong><span class="rules-summary" :class="{ 'fallback-notice': !conditions.length && !parseError }">{{ rulesSummary }}</span><span aria-hidden="true">{{ rulesOpen ? '⌃' : '⌄' }}</span></button>
         <div class="rules-tools"><button type="button" class="text-button" @click="openSamples('trial')">试匹配</button><button v-if="!hideHelp" type="button" class="help-button" @click="helpVisible = true">图解用法</button></div>
       </header>
       <div v-show="rulesOpen" class="rules-content">
         <p v-if="parseError" class="inline-error" role="alert">{{ parseError }}</p>
         <div v-if="isRandom" class="mode-notice"><strong>等概率随机</strong><span>条件保留，本模式不参与判断。</span></div>
         <template v-else>
-          <p class="selection-hint" :class="{ 'fallback-notice': !conditions.length && !parseError }">{{ selectionHint }}</p>
+          <p v-if="conditions.length && enabledCount === 1 && (selectedResponse?.isActive ?? selectedResponse?.active)" class="selection-hint" role="status">仅一份启用，条件暂不参与判断</p>
           <ConditionTable v-if="!parseError" :model-value="conditions" :default-source="source" :read-only="readOnly" @update:model-value="onConditionsUpdate">
             <template #actions><button v-if="!readOnly" type="button" class="soft-button from-request" @click="openSamples('build')">从请求生成条件</button><button v-if="!readOnly && aiStore.capabilities.conditions" type="button" class="text-button ai-rules-button" @click="openAi">AI 生成</button></template>
           </ConditionTable>
@@ -20,12 +20,11 @@
 
     <el-dialog v-model="samplesOpen" :title="sampleIntent === 'build' ? '从请求生成条件' : '试匹配'" width="min(860px, calc(100vw - 28px))" top="6vh" append-to-body class="match-sample-dialog">
       <aside class="sample-card" aria-label="请求样例">
-        <div class="sample-step-line"><span><b>1</b> 粘贴请求</span><span aria-hidden="true">→</span><span><b>2</b> {{ sampleIntent === 'build' ? '点击字段，生成条件' : '查看匹配结果' }}</span></div>
         <div class="source-tabs" role="tablist" aria-label="请求样例来源"><button v-for="item in sources" :key="item" type="button" role="tab" :aria-selected="source === item" :class="{ active: source === item }" @click="source = item">{{ sourceLabels[item] }}</button></div>
         <div class="sample-columns">
           <section class="sample-input-column"><div class="sample-label-row"><label :for="sampleInputId">{{ sampleLabel }}</label><button type="button" class="text-button" @click="fillExample">载入示例</button></div>
             <el-input :id="sampleInputId" v-model="sampleInputs[source]" type="textarea" :rows="6" resize="vertical" :placeholder="samplePlaceholder" aria-label="请求样例文本" spellcheck="false" />
-            <div class="sample-actions"><span>样例仅本次使用，不保存</span><button type="button" class="soft-button extract-fields" @click="applyPasted">提取字段 →</button></div>
+            <div class="sample-actions"><button type="button" class="soft-button extract-fields" @click="applyPasted">提取字段 →</button></div>
             <p v-if="sampleError" class="inline-error" role="alert">{{ sampleError }}</p>
           </section>
           <section class="sample-fields-column"><div class="fields-heading"><strong>{{ readOnly || isRandom ? '请求字段' : '点一下，加入当前返回体' }}</strong><span>{{ conditions.length }} 条已选</span></div>
@@ -34,7 +33,7 @@
           </section>
         </div>
         <section class="sample-preview">
-          <div class="preview-actions"><div><strong>用这份请求试一下</strong><span>Body / Query / Header 一起参与</span></div><button type="button" class="run-preview" :disabled="previewLoading || !teamId || (readOnly && !apiId)" @click="runPreview">{{ previewLoading ? '正在试配…' : isRandom ? '查看随机候选' : '试匹配' }}</button></div>
+          <div class="preview-actions"><strong>试匹配结果</strong><button type="button" class="run-preview" :disabled="previewLoading || !teamId || (readOnly && !apiId)" @click="runPreview">{{ previewLoading ? '正在试配…' : isRandom ? '查看随机候选' : '试匹配' }}</button></div>
           <p v-if="readOnly" class="saved-notice">规则只读 · 按已保存配置试配，未提交草稿不参与</p>
           <p v-if="!teamId || (readOnly && !apiId)" class="inline-error">{{ !teamId ? '请选择团队后试配' : '只读试配需要已保存的接口' }}</p>
           <p v-if="previewError" class="inline-error" role="alert">{{ previewError }}</p>
@@ -90,10 +89,9 @@ let requestVersion = 0, controller = null, disposed = false
 const isRandom = computed(() => props.selectionMode === 'RANDOM')
 const selectedResponse = computed(() => props.responses?.[props.selectedResponseIndex])
 const enabledCount = computed(() => props.responses.filter(r => r.isActive ?? r.active).length)
-const selectionHint = computed(() => {
-  if (selectedResponse.value && !(selectedResponse.value.isActive ?? selectedResponse.value.active)) return '未启用，不参与返回体选择'
-  if (props.responses.length && enabledCount.value <= 1) return '只有这一份启用，直接返回'
-  return conditions.value.length ? '以下条件全部满足时返回' : '其他返回体都没命中时，返回这一份'
+const rulesSummary = computed(() => {
+  if (conditions.value.length) return conditions.value.length + ' 条条件'
+  return enabledCount.value > 1 && (selectedResponse.value?.isActive ?? selectedResponse.value?.active) ? '兜底' : '无条件'
 })
 function openSamples(intent) { sampleIntent.value = intent; samplesOpen.value = true }
 function fillExample() {
@@ -108,7 +106,7 @@ const reasonCopy = {
   CONDITION_MATCH: ['条件命中', '由服务端按返回体顺序选择首个命中项。'],
   FALLBACK: ['使用兜底', '带规则的返回体均未命中，使用无规则兜底。'],
   SINGLE_ENABLED: ['唯一启用返回体', '运行时唯一启用直接返回，不执行条件判断。'],
-  NO_MATCH: ['未命中', '没有条件命中，也没有可用的无规则兜底；不会伪造默认返回体。'],
+  NO_MATCH: ['未命中', '没有条件命中，也没有可用兜底。'],
   NO_ENABLED_RESPONSE: ['无启用返回体', '没有可参与选择的返回体，请检查启用状态。'],
   RANDOM_EQUAL_PROBABILITY: ['等概率随机候选', '每个启用返回体等概率参与，条件不执行；此处不固定命中任何一项。']
 }
@@ -122,7 +120,7 @@ function parseConditions(json) {
     if (!obj || Array.isArray(obj) || (obj.conditions != null && !Array.isArray(obj.conditions))) throw new Error()
     parseError.value = ''
     return (obj.conditions || []).filter(Boolean).map(c => ({ ...c }))
-  } catch { parseError.value = '当前条件 JSON 无效，请修复后再试配；不会将它视为兜底。'; return [] }
+  } catch { parseError.value = '当前条件 JSON 无效，请修复后再试配。'; return [] }
 }
 function serializeConditions(list) { return list?.length ? JSON.stringify({ conditions: list }) : '' }
 function onConditionsUpdate(next) {
@@ -193,7 +191,7 @@ onBeforeUnmount(() => { disposed = true; invalidatePreview() })
 .rules-heading, .rules-tools, .rules-toggle { display: flex; align-items: center; gap: 9px; }
 .rules-heading { justify-content: space-between; flex-wrap: wrap; gap: 8px; }
 .rules-toggle { border: 0; background: none; color: inherit; cursor: pointer; padding: 0; min-height: 34px; font: inherit; }
-.rules-toggle strong { font-size: 14px; }.section-step { display: inline-grid; place-items: center; width: 23px; height: 23px; border-radius: 7px; background: var(--app-bg-selected); color: var(--app-text-accent); font-size: 12px; }
+.rules-toggle strong { font-size: 14px; }
 .rules-summary { color: var(--app-text-secondary); font-size: 12px; }.rules-content { padding-top: 8px; }
 .selection-hint { margin: 0 0 12px; color: var(--app-text-secondary); line-height: 1.6; font-size: 12px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 button { font: inherit; }.text-button,.help-button { border: 0; background: transparent; color: var(--app-text-accent); cursor: pointer; min-height: 34px; padding: 0 5px; font-size: 12px; }

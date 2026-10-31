@@ -1,30 +1,208 @@
 <template>
   <section class="api-workspace">
-    <header class="workspace-heading"><div><div class="workspace-title"><h1>接口管理</h1><span>{{ loading ? '读取中' : error ? '读取失败' : total + ' 个' + (filtered ? '匹配' : '') + '接口' }}</span></div><p>{{ team?.name || '尚未选择团队' }} · {{ roleName }} · 仅展示当前团队数据</p></div><div class="workspace-actions"><el-button :disabled="!canRead || busy || loading" @click="exportCurrent">{{ selectedRows.length ? '导出选中 (' + selectedRows.length + ')' : '导出' }}</el-button><el-button v-if="canWrite" :disabled="busy" @click="importOpen = true">导入</el-button><el-button v-if="canWrite" type="primary" :disabled="busy" @click="router.push('/apis/new')">＋ 新建接口</el-button></div></header>
-    <div v-if="canRead" class="workspace-scope"><span class="scope-role" :class="{ 'is-readonly': !canWrite }">{{ roleName }}</span><span>{{ canWrite ? '可维护当前团队所有成员的接口、规则、分组和标签。' : '可以查看、筛选和导出当前团队接口；不能修改配置。' }}</span><small>{{ archived ? '团队已归档，写操作冻结' : '创建人用于追踪，不限制团队协作' }}</small></div>
-    <div v-if="!canRead" class="workspace-empty"><FilledIcon name="team" :size="38" /><h2>请选择有读取权限的团队</h2><p>未选团队时不会请求全团队接口。团队与账号数据由当前身份范围决定。</p></div>
+    <header class="workspace-heading">
+<div>
+<div class="workspace-title">
+<h1>接口管理</h1>
+<span>{{ loading ? '读取中' : error ? '读取失败' : total + ' 个' + (filtered ? '匹配' : '') + '接口' }}</span>
+<span v-if="canRead && !canWrite" class="readonly-badge">{{ archived ? '已归档' : '只读' }}</span>
+</div>
+</div>
+<div class="workspace-actions">
+<el-button :disabled="!canRead || busy || loading" @click="exportCurrent">{{ selectedRows.length ? '导出选中 (' + selectedRows.length + ')' : '导出' }}</el-button>
+<el-button v-if="canWrite" :disabled="busy" @click="importOpen = true">导入</el-button>
+<el-button v-if="canWrite" type="primary" :disabled="busy" @click="router.push('/apis/new')">＋ 新建接口</el-button>
+</div>
+</header>
+    <div v-if="!canRead" class="workspace-empty">
+<FilledIcon name="team" :size="38" />
+<h2>请选择有读取权限的团队</h2>
+</div>
     <template v-else>
       <section class="workspace-table">
-        <div class="api-filters"><el-input v-model="filters.keyword" clearable placeholder="搜索接口名称或路径" aria-label="搜索接口名称或路径" class="api-search" @keyup.enter="applyFilters" /><el-select v-model="filters.method" clearable placeholder="全部方法" aria-label="HTTP 方法" @change="applyFilters"><el-option v-for="method in methods" :key="method" :label="method" :value="method" /></el-select><el-select v-model="filters.groupId" clearable placeholder="全部分组" aria-label="接口分组" @change="applyFilters"><el-option label="未分组" value="__none__" /><el-option v-for="group in groups" :key="group.id" :label="group.name" :value="group.id" /></el-select><button type="button" class="mine-filter" :aria-pressed="filters.mine" :class="{ 'is-active': filters.mine }" @click="filters.mine = !filters.mine; applyFilters()">我创建的</button><el-button text @click="showMoreFilters = !showMoreFilters">{{ showMoreFilters ? '收起筛选' : '更多筛选' }}</el-button><span class="filters-spacer" /><el-dropdown trigger="click" @command="manage"><el-button text>分组 / 标签</el-button><template #dropdown><el-dropdown-menu><el-dropdown-item command="groups">{{ canWrite ? '管理' : '查看' }}分组</el-dropdown-item><el-dropdown-item command="tags">{{ canWrite ? '管理' : '查看' }}标签</el-dropdown-item></el-dropdown-menu></template></el-dropdown><el-button v-if="trashAvailable" text @click="router.push('/apis/trash')"><FilledIcon name="trash" :size="15" />回收站</el-button></div>
-        <div v-if="showMoreFilters" class="api-more-filters"><el-select v-model="filters.type" clearable placeholder="全部类型" aria-label="接口类型" @change="applyFilters"><el-option label="REST" value="REST" /><el-option label="SOAP" value="SOAP" /></el-select><el-select v-model="filters.enabled" clearable placeholder="全部状态" aria-label="启用状态" @change="applyFilters"><el-option label="已启用" :value="true" /><el-option label="已停用" :value="false" /></el-select><el-select v-model="filters.tagIds" multiple clearable collapse-tags placeholder="全部标签" aria-label="标签筛选" @change="applyFilters"><el-option v-for="tag in tags" :key="tag.id" :label="tag.name" :value="tag.id" /></el-select><el-select v-model="sort" aria-label="排序" @change="applyFilters"><el-option label="最近修改优先" value="updatedAt:desc" /><el-option label="最近创建优先" value="createdAt:desc" /><el-option label="接口名称 A–Z" value="name:asc" /><el-option label="接口路径 A–Z" value="path:asc" /></el-select><el-button text @click="resetFilters">重置</el-button></div>
-        <div v-if="error" class="workspace-feedback workspace-feedback--error" role="alert">{{ error }} <el-button text @click="loadPage">重试读取</el-button></div>
-        <div v-if="conflict" class="workspace-feedback workspace-feedback--warning" role="alert">{{ conflict }} <el-button text @click="explicitRefresh">刷新并核对版本</el-button></div>
-        <div v-if="metadataError" class="workspace-feedback">{{ metadataError }} <el-button text @click="retryMetadata">重试共享配置</el-button></div>
-        <div v-if="selectedRows.length" class="api-selection"><span>已选 <b>{{ selectedRows.length }}</b> 项</span><template v-if="canWrite"><el-button text :disabled="busy || loading" @click="runBatch('enable')">启用</el-button><el-button text :disabled="busy || loading" @click="runBatch('disable')">停用</el-button><el-dropdown :disabled="busy || loading" trigger="click" @command="moveGroup"><el-button text :disabled="busy || loading">移动分组</el-button><template #dropdown><el-dropdown-menu><el-dropdown-item command="__none__">未分组</el-dropdown-item><el-dropdown-item v-for="group in groups" :key="group.id" :command="group.id">{{ group.name }}</el-dropdown-item></el-dropdown-menu></template></el-dropdown><el-button v-if="canBatchDelete" text type="danger" :disabled="busy || loading" @click="prepareDelete(selectedRows, true)">批量删除</el-button></template><span class="filters-spacer" /><el-button text @click="selectedIds = []">取消选择</el-button></div>
+        <div class="api-filters">
+<el-input v-model="filters.keyword" clearable placeholder="搜索接口名称或路径" aria-label="搜索接口名称或路径" class="api-search" @keyup.enter="applyFilters" />
+<el-select v-model="filters.method" clearable placeholder="全部方法" aria-label="HTTP 方法" @change="applyFilters">
+<el-option v-for="method in methods" :key="method" :label="method" :value="method" />
+</el-select>
+<el-select v-model="filters.groupId" clearable placeholder="全部分组" aria-label="接口分组" @change="applyFilters">
+<el-option label="未分组" value="__none__" />
+<el-option v-for="group in groups" :key="group.id" :label="group.name" :value="group.id" />
+</el-select>
+<button type="button" class="mine-filter" :aria-pressed="filters.mine" :class="{ 'is-active': filters.mine }" @click="filters.mine = !filters.mine; applyFilters()">我创建的</button>
+<el-button text @click="showMoreFilters = !showMoreFilters">{{ showMoreFilters ? '收起筛选' : '更多筛选' }}</el-button>
+<span class="filters-spacer" />
+<el-dropdown trigger="click" @command="manage">
+<el-button text>分组 / 标签</el-button>
+<template #dropdown>
+<el-dropdown-menu>
+<el-dropdown-item command="groups">{{ canWrite ? '管理' : '查看' }}分组</el-dropdown-item>
+<el-dropdown-item command="tags">{{ canWrite ? '管理' : '查看' }}标签</el-dropdown-item>
+</el-dropdown-menu>
+</template>
+</el-dropdown>
+<el-button v-if="trashAvailable" text @click="router.push('/apis/trash')">
+<FilledIcon name="trash" :size="15" />回收站</el-button>
+</div>
+        <div v-if="showMoreFilters" class="api-more-filters">
+<el-select v-model="filters.type" clearable placeholder="全部类型" aria-label="接口类型" @change="applyFilters">
+<el-option label="REST" value="REST" />
+<el-option label="SOAP" value="SOAP" />
+</el-select>
+<el-select v-model="filters.enabled" clearable placeholder="全部状态" aria-label="启用状态" @change="applyFilters">
+<el-option label="已启用" :value="true" />
+<el-option label="已停用" :value="false" />
+</el-select>
+<el-select v-model="filters.tagIds" multiple clearable collapse-tags placeholder="全部标签" aria-label="标签筛选" @change="applyFilters">
+<el-option v-for="tag in tags" :key="tag.id" :label="tag.name" :value="tag.id" />
+</el-select>
+<el-select v-model="sort" aria-label="排序" @change="applyFilters">
+<el-option label="最近修改优先" value="updatedAt:desc" />
+<el-option label="最近创建优先" value="createdAt:desc" />
+<el-option label="接口名称 A–Z" value="name:asc" />
+<el-option label="接口路径 A–Z" value="path:asc" />
+</el-select>
+<el-button text @click="resetFilters">重置</el-button>
+</div>
+        <div v-if="error" class="workspace-feedback workspace-feedback--error" role="alert">{{ error }} <el-button text @click="loadPage">重试读取</el-button>
+</div>
+        <div v-if="conflict" class="workspace-feedback workspace-feedback--warning" role="alert">{{ conflict }} <el-button text @click="explicitRefresh">刷新并核对版本</el-button>
+</div>
+        <div v-if="metadataError" class="workspace-feedback">{{ metadataError }} <el-button text @click="retryMetadata">重试共享配置</el-button>
+</div>
+        <div v-if="selectedRows.length" class="api-selection">
+<span>已选 <b>{{ selectedRows.length }}</b> 项</span>
+<template v-if="canWrite">
+<el-button text :disabled="busy || loading" @click="runBatch('enable')">启用</el-button>
+<el-button text :disabled="busy || loading" @click="runBatch('disable')">停用</el-button>
+<el-dropdown :disabled="busy || loading" trigger="click" @command="moveGroup">
+<el-button text :disabled="busy || loading">移动分组</el-button>
+<template #dropdown>
+<el-dropdown-menu>
+<el-dropdown-item command="__none__">未分组</el-dropdown-item>
+<el-dropdown-item v-for="group in groups" :key="group.id" :command="group.id">{{ group.name }}</el-dropdown-item>
+</el-dropdown-menu>
+</template>
+</el-dropdown>
+<el-button v-if="canBatchDelete" text type="danger" :disabled="busy || loading" @click="prepareDelete(selectedRows, true)">批量删除</el-button>
+</template>
+<span class="filters-spacer" />
+<el-button text @click="selectedIds = []">取消选择</el-button>
+</div>
         <div class="api-results" v-loading="loading" :aria-busy="loading">
-          <table v-if="rows.length" class="api-grid"><thead><tr><th class="cell-select"><el-checkbox :model-value="allSelected" :indeterminate="partiallySelected" aria-label="选择当前页全部接口" :disabled="loading || busy" @change="selectAll" /></th><th>方法</th><th>接口 / 名称</th><th>状态</th><th class="cell-calls">累计调用</th><th>最后修改</th><th class="cell-creator">创建人</th><th class="cell-actions">操作</th></tr></thead><tbody><tr v-for="row in rows" :key="row.id" :class="{ 'is-selected': selectedIds.includes(row.id), 'is-disabled': !row.enabled }"><td class="cell-select"><el-checkbox :model-value="selectedIds.includes(row.id)" :aria-label="'选择 ' + row.name" :disabled="busy || loading" @change="value => selectRow(row, value)" /></td><td><HttpMethodTag :method="row.method" /></td><td class="cell-api"><button type="button" class="api-path" @click="openDetail(row)">{{ row.path }}</button><div class="api-subtitle"><span>{{ row.name }}</span><span v-if="row.type === 'SOAP'" class="type-chip">SOAP</span><span v-if="row.groupName" class="group-chip">{{ row.groupName }}</span><span v-if="row.tags?.length" class="row-tags"><span v-for="tag in row.tags" :key="tag.id"><i :style="{ backgroundColor: tag.color }" />{{ tag.name }}</span></span></div></td><td><el-switch v-if="canWrite" :model-value="row.enabled" :disabled="busy || loading" :aria-label="(row.enabled ? '停用 ' : '启用 ') + row.name" @change="toggle(row)" /><span v-else class="status-chip" :class="{ enabled: row.enabled }">{{ row.enabled ? '已启用' : '已停用' }}</span></td><td class="cell-calls"><b>{{ formatCount(row.hitCount) }}</b><small :title="formatDate(row.lastCalledAt)">{{ row.lastCalledAt ? formatDate(row.lastCalledAt) : '尚未调用' }}</small></td><td class="cell-modified"><span>{{ row.updatedByName || '—' }}</span><b class="revision-chip">v{{ row.revision || '—' }}</b><time>{{ formatDate(row.updatedAt) }}</time></td><td class="cell-creator">{{ row.createdByName || '—' }}</td><td class="cell-actions"><div class="row-actions"><el-button text @click="openDetail(row)">{{ canWrite ? '编辑' : '查看' }}</el-button><el-button text @click="openHistory(row)">历史</el-button><el-dropdown trigger="click" @command="command => rowCommand(command, row)"><el-button text :aria-label="row.name + '的更多操作'">更多</el-button><template #dropdown><el-dropdown-menu><el-dropdown-item command="url">复制 {{ row.type === 'SOAP' ? 'WSDL' : 'Mock' }} 地址</el-dropdown-item><el-dropdown-item v-if="canWrite" command="copy" :disabled="busy || loading">复制为新接口</el-dropdown-item><el-dropdown-item v-if="canWrite" command="delete" :disabled="busy || loading">移入回收站</el-dropdown-item></el-dropdown-menu></template></el-dropdown></div></td></tr></tbody></table>
-          <div v-if="rows.length" class="api-cards"><article v-for="row in rows" :key="row.id" class="api-card" :class="{ 'is-selected': selectedIds.includes(row.id) }"><header><el-checkbox :model-value="selectedIds.includes(row.id)" :aria-label="'选择 ' + row.name" :disabled="busy || loading" @change="value => selectRow(row, value)" /><HttpMethodTag :method="row.method" /><span class="type-chip">{{ row.type || 'REST' }}</span><span class="filters-spacer" /><el-switch v-if="canWrite" :model-value="row.enabled" :disabled="busy || loading" :aria-label="(row.enabled ? '停用 ' : '启用 ') + row.name" @change="toggle(row)" /><span v-else class="status-chip" :class="{ enabled: row.enabled }">{{ row.enabled ? '已启用' : '已停用' }}</span></header><button type="button" class="api-path" @click="openDetail(row)">{{ row.path }}</button><h3>{{ row.name }}</h3><div v-if="row.tags?.length || row.groupName" class="row-tags"><span v-if="row.groupName">{{ row.groupName }}</span><span v-for="tag in row.tags" :key="tag.id"><i :style="{ backgroundColor: tag.color }" />{{ tag.name }}</span></div><dl><div><dt>最后修改</dt><dd>{{ row.updatedByName || '—' }} <b class="revision-chip">v{{ row.revision || '—' }}</b></dd><dd>{{ formatDate(row.updatedAt) }}</dd></div><div><dt>创建人 / 累计调用</dt><dd>{{ row.createdByName || '—' }}</dd><dd>{{ formatCount(row.hitCount) }} 次</dd></div></dl><footer><el-button text @click="openDetail(row)">{{ canWrite ? '编辑' : '查看' }}</el-button><el-button text @click="openHistory(row)"><FilledIcon name="history" :size="14" />历史</el-button><el-dropdown trigger="click" @command="command => rowCommand(command, row)"><el-button text :aria-label="row.name + '的更多操作'">更多</el-button><template #dropdown><el-dropdown-menu><el-dropdown-item command="url">复制 {{ row.type === 'SOAP' ? 'WSDL' : 'Mock' }} 地址</el-dropdown-item><el-dropdown-item v-if="canWrite" command="copy" :disabled="busy || loading">复制为新接口</el-dropdown-item><el-dropdown-item v-if="canWrite" command="delete" :disabled="busy || loading">移入回收站</el-dropdown-item></el-dropdown-menu></template></el-dropdown></footer></article></div>
-          <div v-if="!loading && !rows.length && !error" class="workspace-empty workspace-empty--rows"><FilledIcon name="api" :size="34" /><h2>{{ filtered ? '没有匹配的接口' : '当前团队暂无接口' }}</h2><p>{{ filtered ? '可重置筛选条件，也可以查看回收站中的历史资源。' : canWrite ? '新建接口或导入团队已有定义，所有成员按当前角色协作。' : '团队成员发布接口后会显示在这里；只读成员也可以使用创建人筛选。' }}</p><el-button v-if="filtered" @click="resetFilters">重置筛选</el-button></div>
+          <div v-if="rows.length" class="api-grid-scroll" role="region" aria-label="接口列表" tabindex="0">
+            <table class="api-grid">
+              <colgroup><col class="column-select" /><col class="column-type" /><col class="column-method" /><col class="column-path" /><col class="column-name" /><col class="column-group" /><col class="column-tags" /><col class="column-calls" /><col class="column-called" /><col class="column-modified" /><col class="column-creator" /><col class="column-state" /><col class="column-actions" /></colgroup>
+              <thead><tr>
+                <th class="cell-select"><el-checkbox :model-value="allSelected" :indeterminate="partiallySelected" aria-label="选择当前页全部接口" :disabled="loading || busy" @change="selectAll" /></th>
+                <th>类型</th><th>方法</th><th>路径</th><th>名称</th><th>分组</th><th>标签</th><th class="cell-calls">命中次数</th><th>最近调用</th><th>修改时间</th><th class="cell-creator">创建人</th><th class="cell-state">启用</th><th class="cell-actions">操作</th>
+              </tr></thead>
+              <tbody><tr v-for="row in rows" :key="row.id" :class="{ 'is-selected': selectedIds.includes(row.id), 'is-disabled': !row.enabled }">
+                <td class="cell-select"><el-checkbox :model-value="selectedIds.includes(row.id)" :aria-label="'选择 ' + row.name" :disabled="busy || loading" @change="value => selectRow(row, value)" /></td>
+                <td><span class="type-chip">{{ row.type || 'REST' }}</span></td>
+                <td><HttpMethodTag :method="row.method" /></td>
+                <td class="cell-path"><button type="button" class="api-path" :title="row.path" @click="openDetail(row)">{{ row.path }}</button></td>
+                <td class="cell-name" :title="row.name">{{ row.name }}</td>
+                <td :title="row.groupName || ''">{{ row.groupName || '—' }}</td>
+                <td class="cell-tags" :title="row.tags?.map(tag => tag.name).join('、')"><div v-if="row.tags?.length" class="row-tags"><span v-for="tag in row.tags.slice(0, 2)" :key="tag.id"><i :style="{ backgroundColor: tag.color }" />{{ tag.name }}</span><span v-if="row.tags.length > 2">+{{ row.tags.length - 2 }}</span></div><span v-else>—</span></td>
+                <td class="cell-calls">{{ formatCount(row.hitCount) }}</td>
+                <td :title="formatDate(row.lastCalledAt)">{{ row.lastCalledAt ? formatDate(row.lastCalledAt) : '—' }}</td>
+                <td class="cell-modified">{{ formatDate(row.updatedAt) }}</td>
+                <td class="cell-creator" :title="row.createdByName">{{ row.createdByName || '—' }}</td>
+                <td class="cell-state"><el-switch v-if="canWrite" :model-value="row.enabled" :disabled="busy || loading" :aria-label="(row.enabled ? '停用 ' : '启用 ') + row.name" @change="toggle(row)" /><span v-else class="status-chip" :class="{ enabled: row.enabled }">{{ row.enabled ? '已启用' : '已停用' }}</span></td>
+                <td class="cell-actions"><div class="row-actions">
+                  <el-button text @click="openDetail(row)">{{ canWrite ? '编辑' : '查看' }}</el-button>
+                  <el-button text @click="openHistory(row)">历史</el-button>
+                  <el-dropdown trigger="click" @command="command => rowCommand(command, row)"><el-button text :aria-label="row.name + '的更多操作'">更多</el-button><template #dropdown><el-dropdown-menu>
+                    <el-dropdown-item command="url">复制 {{ row.type === 'SOAP' ? 'WSDL' : 'Mock' }} 地址</el-dropdown-item>
+                    <el-dropdown-item v-if="canWrite" command="copy" :disabled="busy || loading">复制为新接口</el-dropdown-item>
+                    <el-dropdown-item v-if="canWrite" command="delete" :disabled="busy || loading">移入回收站</el-dropdown-item>
+                  </el-dropdown-menu></template></el-dropdown>
+                </div></td>
+              </tr></tbody>
+            </table>
+          </div>
+          <div v-if="rows.length" class="api-cards">
+<article v-for="row in rows" :key="row.id" class="api-card" :class="{ 'is-selected': selectedIds.includes(row.id) }">
+<header>
+<el-checkbox :model-value="selectedIds.includes(row.id)" :aria-label="'选择 ' + row.name" :disabled="busy || loading" @change="value => selectRow(row, value)" />
+<HttpMethodTag :method="row.method" />
+<span class="type-chip">{{ row.type || 'REST' }}</span>
+<span class="filters-spacer" />
+<el-switch v-if="canWrite" :model-value="row.enabled" :disabled="busy || loading" :aria-label="(row.enabled ? '停用 ' : '启用 ') + row.name" @change="toggle(row)" />
+<span v-else class="status-chip" :class="{ enabled: row.enabled }">{{ row.enabled ? '已启用' : '已停用' }}</span>
+</header>
+<button type="button" class="api-path" @click="openDetail(row)">{{ row.path }}</button>
+<h3>{{ row.name }}</h3>
+<div v-if="row.tags?.length || row.groupName" class="row-tags">
+<span v-if="row.groupName">{{ row.groupName }}</span>
+<span v-for="tag in row.tags" :key="tag.id">
+<i :style="{ backgroundColor: tag.color }" />{{ tag.name }}</span>
+</div>
+<dl>
+<div>
+<dt>修改时间</dt>
+<dd>{{ formatDate(row.updatedAt) }}</dd>
+</div>
+<div>
+<dt>创建人 / 累计调用</dt>
+<dd>{{ row.createdByName || '—' }}</dd>
+<dd>{{ formatCount(row.hitCount) }} 次</dd>
+</div>
+</dl>
+<footer>
+<el-button text @click="openDetail(row)">{{ canWrite ? '编辑' : '查看' }}</el-button>
+<el-button text @click="openHistory(row)">
+<FilledIcon name="history" :size="14" />历史</el-button>
+<el-dropdown trigger="click" @command="command => rowCommand(command, row)">
+<el-button text :aria-label="row.name + '的更多操作'">更多</el-button>
+<template #dropdown>
+<el-dropdown-menu>
+<el-dropdown-item command="url">复制 {{ row.type === 'SOAP' ? 'WSDL' : 'Mock' }} 地址</el-dropdown-item>
+<el-dropdown-item v-if="canWrite" command="copy" :disabled="busy || loading">复制为新接口</el-dropdown-item>
+<el-dropdown-item v-if="canWrite" command="delete" :disabled="busy || loading">移入回收站</el-dropdown-item>
+</el-dropdown-menu>
+</template>
+</el-dropdown>
+</footer>
+</article>
+</div>
+          <div v-if="!loading && !rows.length && !error" class="workspace-empty workspace-empty--rows">
+<FilledIcon name="api" :size="34" />
+<h2>{{ filtered ? '没有匹配的接口' : '当前团队暂无接口' }}</h2>
+<el-button v-if="filtered" @click="resetFilters">重置筛选</el-button>
+</div>
         </div>
-        <footer class="workspace-footer"><p>创建人用于审计和筛选。删除进入回收站，发布版本不能原位修改。</p><el-pagination v-model:current-page="page" v-model:page-size="size" :total="total" :page-sizes="[10,20,50,100]" layout="prev, pager, next" :pager-count="5" small :disabled="loading || busy" @current-change="loadPage" /><el-select v-model="size" aria-label="每页数量" class="page-size" :disabled="loading || busy" @change="page = 1; loadPage()"><el-option v-for="count in [10,20,50,100]" :key="count" :value="count" :label="count + ' / 页'" /></el-select></footer>
+        <footer class="workspace-footer">
+<el-pagination v-model:current-page="page" v-model:page-size="size" :total="total" :page-sizes="[10,20,50,100]" layout="prev, pager, next" :pager-count="5" small :disabled="loading || busy" @current-change="loadPage" />
+<el-select v-model="size" aria-label="每页数量" class="page-size" :disabled="loading || busy" @change="page = 1; loadPage()">
+<el-option v-for="count in [10,20,50,100]" :key="count" :value="count" :label="count + ' / 页'" />
+</el-select>
+</footer>
       </section>
     </template>
     <ApiHistoryDrawer v-model="historyOpen" :api-id="historyRow?.id || ''" :team-id="teamId || ''" :current-revision="historyRow?.revision || 0" :capabilities="membership?.capabilities" :read-only="!canWrite" @changed="historyChanged" />
     <ApiImportDialog v-model="importOpen" :team-id="teamId || ''" @imported="imported" />
     <GroupManageDialog v-model="groupOpen" :team-id="teamId || ''" @changed="metadataChanged" />
     <TagManageDialog v-model="tagOpen" :team-id="teamId || ''" @changed="metadataChanged" />
-    <el-dialog v-model="deleteOpen" :title="deleteRequest?.batch ? '批量移入回收站' : '移入回收站'" width="min(470px, 94vw)" :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy"><p class="delete-copy">{{ deleteRequest?.teamName }} · 确认将 {{ deleteRequest?.rows.length || 0 }} 个接口移入回收站？默认保留 30 天，以服务端返回的截止时间为准。可编辑成员可在保留期内恢复；恢复后默认停用。</p><ul class="delete-targets"><li v-for="row in deleteRequest?.rows.slice(0, 8) || []" :key="row.id"><code>{{ row.method }} {{ row.path }}</code><span>v{{ row.revision }}</span></li></ul><p v-if="(deleteRequest?.rows.length || 0) > 8" class="delete-copy">以及其余 {{ deleteRequest.rows.length - 8 }} 项；每项均使用确认前冻结的版本。</p><template #footer><el-button :disabled="busy" @click="deleteOpen = false">取消</el-button><el-button type="danger" :loading="busy" :disabled="loading || !deleteRequest || !canWrite || (deleteRequest.batch && !canBatchDelete)" @click="confirmDelete">确认移入回收站</el-button></template></el-dialog>
-    <el-dialog v-model="urlOpen" title="手动复制地址" width="min(620px, 94vw)"><p class="delete-copy">浏览器未允许自动复制，请选择并复制以下当前团队地址。</p><el-input :model-value="urlText" readonly aria-label="当前接口 Mock 或 WSDL 地址" @focus="$event.target.select()" /></el-dialog>
+    <el-dialog v-model="deleteOpen" :title="deleteRequest?.batch ? '批量移入回收站' : '移入回收站'" width="min(470px, 94vw)" :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy">
+<p class="delete-copy">确认将 {{ deleteRequest?.rows.length || 0 }} 个接口移入「{{ deleteRequest?.teamName }}」回收站？保留 30 天，恢复后默认停用。</p>
+<ul class="delete-targets">
+<li v-for="row in deleteRequest?.rows.slice(0, 8) || []" :key="row.id">
+<code>{{ row.method }} {{ row.path }}</code>
+<span>v{{ row.revision }}</span>
+</li>
+</ul>
+<p v-if="(deleteRequest?.rows.length || 0) > 8" class="delete-copy">以及其余 {{ deleteRequest.rows.length - 8 }} 项。</p>
+<template #footer>
+<el-button :disabled="busy" @click="deleteOpen = false">取消</el-button>
+<el-button type="danger" :loading="busy" :disabled="loading || !deleteRequest || !canWrite || (deleteRequest.batch && !canBatchDelete)" @click="confirmDelete">确认移入回收站</el-button>
+</template>
+</el-dialog>
+    <el-dialog v-model="urlOpen" title="手动复制地址" width="min(620px, 94vw)">
+<p class="delete-copy">浏览器未允许自动复制，请选择并复制以下当前团队地址。</p>
+<el-input :model-value="urlText" readonly aria-label="当前接口 Mock 或 WSDL 地址" @focus="$event.target.select()" />
+</el-dialog>
   </section>
 </template>
 <script setup>
@@ -34,7 +212,6 @@ import { ElMessage } from 'element-plus'
 import { useAppStore } from '@/stores/app'
 import { useUserStore } from '@/stores/user'
 import { useApiStore } from '@/stores/api'
-import { roleLabel } from '@/utils/permissions'
 import { selectedRevisions } from '@/utils/revisions'
 import { formatDate, freezeRows, isVersionConflict, readableError } from '@/utils/api-lifecycle'
 import { getApis, deleteApi, toggleApi, copyApi, batchApis, exportApis } from '@/api/apis'
@@ -60,7 +237,6 @@ const canRead = computed(() => !!teamId.value && user.hasCapability(teamId.value
 const canWrite = computed(() => canRead.value && !archived.value && user.hasCapability(teamId.value, 'write'))
 const canBatchDelete = computed(() => canWrite.value && user.hasCapability(teamId.value, 'batchDelete'))
 const canOverride = computed(() => canWrite.value && user.hasCapability(teamId.value, 'overwriteImport'))
-const roleName = computed(() => archived.value ? '归档只读' : roleLabel(membership.value))
 const key = computed(() => [teamId.value, user.token, user.user?.id, user.identityReady, canRead.value, canWrite.value, canBatchDelete.value, canOverride.value, archived.value].join('|'))
 const contextStamp = computed(() => [teamId.value, canRead.value, canWrite.value, canBatchDelete.value, canOverride.value, archived.value].join('|'))
 const selectedRows = computed(() => rows.value.filter(row => selectedIds.value.includes(row.id)))
@@ -149,7 +325,7 @@ function historyChanged(result) { if (result.teamId === teamId.value) refreshAft
 async function exportCurrent() {
   if (!canRead.value || busy.value) return
   const captured = scope(), ids = selectedRows.value.map(row => row.id); busy.value = true
-  try { const blob = await exportApis(captured.teamId, ids); if (!live(captured)) return; const url = URL.createObjectURL(blob), link = document.createElement('a'); link.href = url; link.download = 'mockhub-' + (team.value?.identifier || 'team') + '-' + new Date().toISOString().slice(0,10) + (blob.type?.includes('zip') ? '.zip' : '.json'); link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); ElMessage.success('导出文件已生成，请核对包内内容') }
+  try { const blob = await exportApis(captured.teamId, ids); if (!live(captured)) return; const url = URL.createObjectURL(blob), link = document.createElement('a'); link.href = url; link.download = 'mockhub-' + (team.value?.identifier || 'team') + '-' + new Date().toISOString().slice(0,10) + (blob.type?.includes('zip') ? '.zip' : '.json'); link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); ElMessage.success('导出成功') }
   catch (failure) { if (live(captured)) error.value = readableError(failure, '导出未完成') }
   finally { if (live(captured)) busy.value = false }
 }
@@ -163,8 +339,122 @@ async function copyUrl(row) {
 }
 </script>
 <style scoped>
-.api-workspace{display:flex;flex-direction:column;gap:16px;min-width:0;padding:6px 4px 0}.workspace-heading{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:4px 4px 2px}.workspace-title{display:flex;align-items:center;gap:12px}.workspace-title h1{font-size:28px;line-height:1.3;letter-spacing:-.6px;margin:0;color:var(--app-text-primary)}.workspace-title>span{font-size:12px;color:var(--app-text-secondary);background:var(--app-bg-control);padding:7px 10px;border-radius:9px}.workspace-heading>div{min-width:0;max-width:100%}.workspace-heading p{overflow-wrap:anywhere;font-size:12px;color:var(--app-text-secondary);margin:8px 0 0;line-height:1.7}.workspace-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}.workspace-actions :deep(.el-button+.el-button){margin:0}.workspace-scope{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 16px;background:var(--app-bg-surface);border-radius:12px;font-size:12px;color:var(--app-text-regular)}.workspace-scope small{margin-left:auto;color:var(--app-text-secondary);font-size:12px}.scope-role{background:var(--app-bg-selected);color:var(--app-text-accent);border-radius:6px;font-size:12px;padding:5px 8px;flex:none}.scope-role.is-readonly{background:var(--app-bg-control);color:var(--app-text-secondary)}.workspace-table{background:var(--app-bg-surface);border-radius:var(--app-radius-panel);padding:16px;min-width:0;overflow:hidden}.api-filters,.api-more-filters{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:0 0 14px}.api-filters :deep(.el-input__wrapper),.api-filters :deep(.el-select__wrapper),.api-more-filters :deep(.el-select__wrapper){height:32px;min-height:32px}.api-filters :deep(.el-button),.api-more-filters :deep(.el-button){height:32px;min-height:32px;padding-top:0;padding-bottom:0}.api-filters .mine-filter{height:32px}.api-filters :deep(.el-select){width:116px}.api-filters .api-search{width:min(310px,100%);flex:1;min-width:180px}.api-more-filters{padding-top:2px}.api-more-filters :deep(.el-select){width:145px}.api-filters :deep(.el-button){padding-left:6px;padding-right:6px;font-size:12px}.api-filters :deep(.el-button .filled-icon){margin-right:4px}.filters-spacer{flex:1}.mine-filter{display:inline-flex;align-items:center;border:0;background:var(--app-bg-control);color:var(--app-text-regular);border-radius:16px;padding:0 13px;cursor:pointer;font:12px var(--app-font-sans);white-space:nowrap}.mine-filter.is-active{background:var(--app-bg-selected);color:var(--app-accent)}.workspace-feedback{background:var(--app-bg-control);color:var(--app-text-regular);font-size:12px;line-height:1.9;padding:10px 12px;border-radius:9px;margin:0 0 12px;overflow-wrap:anywhere}.workspace-feedback--error{background:var(--el-color-danger-light-9);color:var(--el-color-danger-dark-2)}.workspace-feedback--warning{background:var(--el-color-warning-light-9);color:var(--el-color-warning-dark-2)}.workspace-feedback :deep(.el-button){font-size:12px}.api-selection{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--app-bg-selected);border-radius:10px;padding:8px 12px;margin-bottom:12px;font-size:12px}.api-selection :deep(.el-button){font-size:12px;margin:0;padding:7px}.api-results{min-height:200px;min-width:0}.api-grid{width:100%;border-spacing:0;border-collapse:separate;table-layout:fixed;text-align:left}.api-grid th{font-size:12px;font-weight:500;color:var(--app-text-secondary);padding:11px 8px}.api-grid td{overflow-wrap:anywhere;font-size:12px;color:var(--app-text-regular);padding:12px 8px;vertical-align:middle}.api-grid tbody tr:hover{background:var(--app-bg-control)}.api-grid tbody tr.is-selected{background:var(--app-bg-selected)}.api-grid .cell-select{width:32px;text-align:center;padding-left:3px;padding-right:3px}.api-grid th:nth-child(2){width:68px}.api-grid th:nth-child(4){width:68px}.api-grid .cell-calls{width:96px}.api-grid th:nth-child(6){width:139px}.api-grid .cell-creator{width:75px}.api-grid .cell-actions{width:144px;text-align:right}.api-path{display:flex;align-items:center;min-height:28px;background:transparent;border:0;padding:0;text-align:left;color:var(--app-text-primary);font:13px/1.7 var(--app-font-mono);text-align:left;cursor:pointer;overflow-wrap:anywhere;max-width:100%}.api-path:hover{color:var(--app-accent)}.api-subtitle{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-top:5px;font-size:12px;color:var(--app-text-secondary);line-height:1.7}.type-chip,.group-chip{padding:3px 6px;background:var(--app-bg-control);border-radius:5px;font-size:12px;color:var(--app-text-secondary)}.cell-api .row-tags{margin-top:0}.row-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}.row-tags>span{max-width:100%;overflow-wrap:anywhere;min-width:0;font-size:12px;color:var(--app-text-secondary);background:var(--app-bg-control);padding:3px 6px;border-radius:5px;display:inline-flex;align-items:center;gap:4px}.row-tags i{width:6px;height:6px;border-radius:50%;flex:none}.cell-calls b{font:500 12px var(--app-font-mono);display:block}.cell-calls small{display:block;font-size:12px;color:var(--app-text-secondary);line-height:1.7;margin-top:5px}.cell-modified>span{font-size:12px}.revision-chip{font:500 11px var(--app-font-mono);background:var(--app-bg-control);color:var(--app-text-secondary);padding:3px 5px;border-radius:5px;display:inline-block;margin-left:6px}.cell-modified time{display:block;font-size:12px;color:var(--app-text-secondary);margin-top:6px;line-height:1.7}.row-actions{display:flex;justify-content:flex-end;align-items:center;gap:3px}.row-actions :deep(.el-button){padding:7px 5px;font-size:12px;margin:0}.status-chip{font-size:12px;color:var(--app-text-secondary);background:var(--app-bg-control);padding:4px 7px;border-radius:7px;white-space:nowrap}.status-chip.enabled{color:var(--el-color-success-dark-2);background:var(--el-color-success-light-9)}.workspace-footer{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:20px;padding:8px 0 0}.workspace-footer>p{font-size:12px;color:var(--app-text-secondary);flex:1;line-height:1.9;margin:0;min-width:150px}.workspace-footer .page-size{width:92px}.workspace-empty{min-height:300px;background:var(--app-bg-surface);border-radius:var(--app-radius-panel);padding:40px 24px;display:flex;align-items:center;justify-content:center;flex-direction:column;text-align:center;gap:14px;color:var(--app-text-secondary)}.workspace-empty h2{font-size:18px;color:var(--app-text-primary);margin:0}.workspace-empty p{font-size:13px;max-width:440px;line-height:1.9;margin:0}.workspace-empty--rows{min-height:340px}.delete-copy{font-size:13px;line-height:1.9;color:var(--app-text-regular);overflow-wrap:anywhere}.delete-targets{list-style:none;padding:0;max-height:240px;overflow:auto}.delete-targets li{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 12px;background:var(--app-bg-control);border-radius:8px;margin-bottom:6px}.delete-targets code{font:12px/1.8 var(--app-font-mono);overflow-wrap:anywhere}.delete-targets span{font:12px var(--app-font-mono);color:var(--app-text-secondary);flex:none}.api-cards{display:none}
-@media(max-width:1250px){.api-grid .cell-calls,.api-grid .cell-creator{display:none}.api-grid th:nth-child(6){width:130px}.api-grid .cell-actions{width:135px}.workspace-heading{align-items:flex-start}.workspace-scope small{width:100%;margin-left:0}}
-@media(max-width:1050px){.api-grid{display:none}.api-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr));gap:12px}.api-card{background:var(--app-bg-control);border-radius:12px;padding:16px;min-width:0}.api-card.is-selected{background:var(--app-bg-selected)}.api-card>header{display:flex;align-items:center;gap:9px;margin-bottom:14px}.api-card .api-path{font-size:13px}.api-card h3{overflow-wrap:anywhere;font-size:12px;font-weight:500;color:var(--app-text-secondary);margin:6px 0;line-height:1.8}.api-card dl{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;margin:18px 0 10px}.api-card dt{font-size:12px;color:var(--app-text-secondary);margin-bottom:7px}.api-card dd{overflow-wrap:anywhere;min-width:0;font-size:12px;margin:0;color:var(--app-text-regular);line-height:1.9}.api-card dd:last-child{font-size:12px;color:var(--app-text-secondary)}.api-card>footer{display:flex;align-items:center;gap:14px}.api-card footer :deep(.el-button){font-size:12px;margin:0;padding:8px 0}.api-card footer :deep(.filled-icon){margin-right:4px}.workspace-table{padding:16px}.workspace-actions{max-width:100%}.api-filters .filters-spacer{display:none}}
-@media(max-width:650px){.api-workspace{gap:12px;padding:2px}.workspace-heading{flex-direction:column;gap:14px;padding:4px 0}.workspace-title h1{font-size:24px}.workspace-title>span{font-size:12px;padding:6px 8px}.workspace-heading p{font-size:12px}.workspace-actions{justify-content:flex-start;gap:6px;width:100%}.workspace-actions :deep(.el-button){font-size:12px;padding:9px 11px}.workspace-scope{padding:12px;font-size:11px;line-height:1.8;gap:7px}.workspace-scope small{font-size:12px}.workspace-table{padding:12px;border-radius:13px}.api-filters{gap:8px}.api-filters .api-search{flex:1 1 100%;width:100%;min-width:0}.api-filters :deep(.el-select){flex:1;min-width:95px;width:auto}.mine-filter{font-size:12px;padding:9px 10px}.api-more-filters{gap:8px}.api-more-filters :deep(.el-select){width:calc(50% - 5px);min-width:0}.workspace-footer{gap:8px}.workspace-footer>p{flex:1 1 100%;order:3}.workspace-footer .page-size{width:80px}.workspace-footer :deep(.el-pagination){padding:0}.api-selection{gap:5px;padding:9px}.api-selection :deep(.el-button){font-size:12px;padding:6px}.api-card{padding:13px}.api-card dl{gap:8px}.api-card .revision-chip{margin-left:3px}.workspace-empty{padding:28px 16px}.workspace-empty h2{font-size:16px}.workspace-empty p{font-size:12px}.workspace-footer :deep(.el-pager li){min-width:26px}.api-cards{grid-template-columns:minmax(0,1fr)}}
+.api-workspace{display:flex;flex-direction:column;gap:16px;min-width:0;padding:6px 4px 0}
+.workspace-heading{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:4px 4px 2px}
+.workspace-title{display:flex;align-items:center;gap:12px}
+.workspace-title h1{font-size:28px;line-height:1.3;letter-spacing:-.6px;margin:0;color:var(--app-text-primary)}
+.workspace-title>span{font-size:12px;color:var(--app-text-secondary);background:var(--app-bg-control);padding:7px 10px;border-radius:9px}
+.workspace-heading>div{min-width:0;max-width:100%}
+.workspace-heading p{overflow-wrap:anywhere;font-size:12px;color:var(--app-text-secondary);margin:8px 0 0;line-height:1.7}
+.workspace-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+.workspace-actions :deep(.el-button+.el-button){margin:0}
+.workspace-table{background:var(--app-bg-surface);border-radius:var(--app-radius-panel);padding:16px;min-width:0;overflow:hidden}
+.api-filters,.api-more-filters{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:0 0 14px}
+.api-filters :deep(.el-input__wrapper),.api-filters :deep(.el-select__wrapper),.api-more-filters :deep(.el-select__wrapper){height:32px;min-height:32px}
+.api-filters :deep(.el-button),.api-more-filters :deep(.el-button){height:32px;min-height:32px;padding-top:0;padding-bottom:0}
+.api-filters .mine-filter{height:32px}
+.api-filters :deep(.el-select){width:116px}
+.api-filters .api-search{width:min(310px,100%);flex:1;min-width:180px}
+.api-more-filters{padding-top:2px}
+.api-more-filters :deep(.el-select){width:145px}
+.api-filters :deep(.el-button){padding-left:6px;padding-right:6px;font-size:12px}
+.api-filters :deep(.el-button .filled-icon){margin-right:4px}
+.filters-spacer{flex:1}
+.mine-filter{display:inline-flex;align-items:center;border:0;background:var(--app-bg-control);color:var(--app-text-regular);border-radius:16px;padding:0 13px;cursor:pointer;font:12px var(--app-font-sans);white-space:nowrap}
+.mine-filter.is-active{background:var(--app-bg-selected);color:var(--app-accent)}
+.workspace-feedback{background:var(--app-bg-control);color:var(--app-text-regular);font-size:12px;line-height:1.9;padding:10px 12px;border-radius:9px;margin:0 0 12px;overflow-wrap:anywhere}
+.workspace-feedback--error{background:var(--el-color-danger-light-9);color:var(--el-color-danger-dark-2)}
+.workspace-feedback--warning{background:var(--el-color-warning-light-9);color:var(--el-color-warning-dark-2)}
+.workspace-feedback :deep(.el-button){font-size:12px}
+.api-selection{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--app-bg-selected);border-radius:10px;padding:8px 12px;margin-bottom:12px;font-size:12px}
+.api-selection :deep(.el-button){font-size:12px;margin:0;padding:7px}
+.api-results{min-height:200px;min-width:0}
+.api-grid-scroll{max-width:100%;overflow:auto;scrollbar-width:thin}
+.api-grid-scroll::-webkit-scrollbar{height:6px}
+.api-grid-scroll::-webkit-scrollbar-thumb{background:var(--app-divider);border-radius:4px}
+.api-grid-scroll::-webkit-scrollbar-track{background:var(--app-bg-control)}
+.api-grid-scroll:focus-visible{outline:2px solid var(--app-focus-color);outline-offset:-2px}
+.api-grid{width:100%;min-width:1484px;border-spacing:0;border-collapse:separate;table-layout:fixed;text-align:left}
+.column-select{width:36px}.column-type{width:60px}.column-method{width:76px}.column-path{width:200px}.column-name{width:170px}.column-group{width:100px}.column-tags{width:100px}.column-calls{width:80px}.column-called{width:130px}.column-modified{width:144px}.column-creator{width:88px}.column-state{width:64px}.column-actions{width:136px}
+.api-grid th{font-size:12px;font-weight:500;color:var(--app-text-secondary);padding:11px 8px}
+.api-grid td{font-size:12px;color:var(--app-text-regular);padding:8px;vertical-align:middle;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;height:46px;border-top:1px solid var(--app-divider)}
+.api-grid tbody tr:hover{background:var(--app-bg-control)}
+.api-grid tbody tr.is-selected{background:var(--app-bg-selected)}
+.api-grid .cell-select{width:32px;text-align:center;padding-left:3px;padding-right:3px}
+.api-path{display:flex;align-items:center;min-height:28px;background:transparent;border:0;padding:0;text-align:left;color:var(--app-text-primary);font:13px/1.7 var(--app-font-mono);text-align:left;cursor:pointer;overflow-wrap:anywhere;max-width:100%}
+.api-path:hover{color:var(--app-accent)}
+.type-chip,.group-chip{padding:3px 6px;background:var(--app-bg-control);border-radius:5px;font-size:12px;color:var(--app-text-secondary)}
+.row-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
+.row-tags>span{max-width:100%;overflow-wrap:anywhere;min-width:0;font-size:12px;color:var(--app-text-secondary);background:var(--app-bg-control);padding:3px 6px;border-radius:5px;display:inline-flex;align-items:center;gap:4px}
+.row-tags i{width:6px;height:6px;border-radius:50%;flex:none}
+.row-actions{display:flex;justify-content:flex-end;align-items:center;gap:3px}
+.row-actions :deep(.el-button){padding:7px 5px;font-size:12px;margin:0}
+.status-chip{font-size:12px;color:var(--app-text-secondary);background:var(--app-bg-control);padding:4px 7px;border-radius:7px;white-space:nowrap}
+.status-chip.enabled{color:var(--el-color-success-dark-2);background:var(--el-color-success-light-9)}
+.workspace-footer{display:flex;justify-content:flex-end;align-items:center;gap:12px;flex-wrap:wrap;margin-top:16px}
+.workspace-footer .page-size{width:92px}
+.workspace-empty{min-height:300px;background:var(--app-bg-surface);border-radius:var(--app-radius-panel);padding:40px 24px;display:flex;align-items:center;justify-content:center;flex-direction:column;text-align:center;gap:14px;color:var(--app-text-secondary)}
+.workspace-empty h2{font-size:18px;color:var(--app-text-primary);margin:0}
+.workspace-empty p{font-size:13px;max-width:440px;line-height:1.9;margin:0}
+.workspace-empty--rows{min-height:340px}
+.delete-copy{font-size:13px;line-height:1.9;color:var(--app-text-regular);overflow-wrap:anywhere}
+.delete-targets{list-style:none;padding:0;max-height:240px;overflow:auto}
+.delete-targets li{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 12px;background:var(--app-bg-control);border-radius:8px;margin-bottom:6px}
+.delete-targets code{font:12px/1.8 var(--app-font-mono);overflow-wrap:anywhere}
+.delete-targets span{font:12px var(--app-font-mono);color:var(--app-text-secondary);flex:none}
+.api-cards{display:none}
+@media(max-width:900px){.api-grid-scroll{display:none}
+.api-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr));gap:12px}
+.api-card{background:var(--app-bg-control);border-radius:12px;padding:16px;min-width:0}
+.api-card.is-selected{background:var(--app-bg-selected)}
+.api-card>header{display:flex;align-items:center;gap:9px;margin-bottom:14px}
+.api-card .api-path{font-size:13px}
+.api-card h3{overflow-wrap:anywhere;font-size:12px;font-weight:500;color:var(--app-text-secondary);margin:6px 0;line-height:1.8}
+.api-card dl{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;margin:18px 0 10px}
+.api-card dt{font-size:12px;color:var(--app-text-secondary);margin-bottom:7px}
+.api-card dd{overflow-wrap:anywhere;min-width:0;font-size:12px;margin:0;color:var(--app-text-regular);line-height:1.9}
+.api-card dd:last-child{font-size:12px;color:var(--app-text-secondary)}
+.api-card>footer{display:flex;align-items:center;gap:14px}
+.api-card footer :deep(.el-button){font-size:12px;margin:0;padding:8px 0}
+.api-card footer :deep(.filled-icon){margin-right:4px}
+.workspace-table{padding:16px}
+.workspace-actions{max-width:100%}
+.api-filters .filters-spacer{display:none}}
+@media(max-width:650px){.api-workspace{gap:12px;padding:2px}
+.workspace-heading{flex-direction:column;gap:14px;padding:4px 0}
+.workspace-title h1{font-size:24px}
+.workspace-title>span{font-size:12px;padding:6px 8px}
+.workspace-heading p{font-size:12px}
+.workspace-actions{justify-content:flex-start;gap:6px;width:100%}
+.workspace-actions :deep(.el-button){font-size:12px;padding:9px 11px}
+.workspace-table{padding:12px;border-radius:13px}
+.api-filters{gap:8px}
+.api-filters .api-search{flex:1 1 100%;width:100%;min-width:0}
+.api-filters :deep(.el-select){flex:1;min-width:95px;width:auto}
+.mine-filter{font-size:12px;padding:9px 10px}
+.api-more-filters{gap:8px}
+.api-more-filters :deep(.el-select){width:calc(50% - 5px);min-width:0}
+.workspace-footer{gap:8px}
+.workspace-footer .page-size{width:80px}
+.workspace-footer :deep(.el-pagination){padding:0}
+.api-selection{gap:5px;padding:9px}
+.api-selection :deep(.el-button){font-size:12px;padding:6px}
+.api-card{padding:13px}
+.api-card dl{gap:8px}
+.workspace-empty{padding:28px 16px}
+.workspace-empty h2{font-size:16px}
+.workspace-empty p{font-size:12px}
+.workspace-footer :deep(.el-pager li){min-width:26px}
+.api-cards{grid-template-columns:minmax(0,1fr)}}
+
+.readonly-badge{font-size:12px;color:var(--app-text-secondary);padding:5px 8px;background:var(--app-bg-control);border-radius:6px}
+.api-grid .api-path{display:block;width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px}
+.api-grid .row-tags{margin:0;flex-wrap:nowrap;overflow:hidden;max-height:28px}
+.api-grid .row-tags>span{max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0;display:inline-block;vertical-align:middle}
+.api-grid .row-tags i{display:inline-block;margin-right:4px;vertical-align:middle}
+.api-grid .cell-state,.api-grid .cell-actions{position:sticky;background:var(--app-bg-surface);z-index:1;overflow:visible}
+.api-grid .cell-state{right:136px;text-align:center}.api-grid .cell-actions{right:0;text-align:right}
+.api-grid thead .cell-state,.api-grid thead .cell-actions{z-index:2}
+.api-grid tr:hover .cell-state,.api-grid tr:hover .cell-actions{background:var(--app-bg-control)}
+.api-grid tr.is-selected .cell-state,.api-grid tr.is-selected .cell-actions{background:var(--app-bg-selected)}
 </style>

@@ -65,7 +65,7 @@ try {
   check('response selection preserves the local Query sample', await evaluate('document.querySelector(".sample-card textarea").value.includes("channel=alipay")'))
   await trial('FALLBACK', '使用兜底'); await screenshot('fallback-1440')
   await trial('SINGLE_ENABLED', '唯一启用'); check('single enabled explains runtime short circuit', await evaluate('document.querySelector(".preview-result").textContent.includes("不执行条件判断")'))
-  await trial('NO_MATCH', '未命中'); check('no match never fabricates fallback', await evaluate('document.querySelector(".preview-result").textContent.includes("不会伪造默认返回体")'))
+  await trial('NO_MATCH', '未命中'); check('no match never fabricates fallback', await evaluate('document.querySelector(".preview-result.neutral")?.textContent.includes("没有可用兜底") && !document.querySelector(".preview-result .result-meta")'))
   await trial('NO_ENABLED_RESPONSE', '无启用')
   await evaluate('window.fixture.setMode("RANDOM")'); await waitFor('document.querySelector(".mode-notice")?.textContent.includes("等概率随机")'); await trial('RANDOM_EQUAL_PROBABILITY', '等概率随机候选', true)
   check('random shows candidates and no invented selected response', await evaluate('document.querySelectorAll(".random-candidates li").length===3 && document.querySelector(".preview-result").textContent.includes("不固定命中")'))

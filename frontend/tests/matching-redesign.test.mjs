@@ -27,9 +27,9 @@ test('sample examples only populate the sample; adding a field is an explicit mu
   c.state.onTreePick('status', 'paid', 'STRING'); assert.equal(c.events.length, 1)
   c.unit.unmount()
 })
-test('empty-state copy distinguishes disabled, only enabled, and true fallback', async () => {
-  for (const [rows, selected, text] of [[[row(false), row(true)], 0, '未启用'], [[row(true), row(false)], 0, '直接返回'], [[row(true), row(true, rule)], 0, '其他返回体都没命中']]) {
-    const c = await panel(rows, selected); assert.ok(c.state.selectionHint.value.includes(text)); c.unit.unmount()
+test('only a genuinely enabled multi-response default is labeled fallback', async () => {
+  for (const [rows, selected, text] of [[[row(false), row(true)], 0, '无条件'], [[row(true), row(false)], 0, '无条件'], [[row(true), row(true, rule)], 0, '兜底']]) {
+    const c = await panel(rows, selected); assert.ok(c.state.rulesSummary.value.includes(text)); c.unit.unmount()
   }
 })
 test('manual type change unlocks numeric comparisons without mutating props or coercing value', async () => {
