@@ -32,7 +32,7 @@ async function screenshot(name) { await evaluate('document.fonts.ready.then(()=>
 async function inputSample(text) { await evaluate('(()=>{const input=document.querySelector(".sample-card textarea");Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,"value").set.call(input,' + JSON.stringify(text) + ');input.dispatchEvent(new Event("input",{bubbles:true}));return true})()') }
 async function pickField(path) { const selector = 'button[aria-label="添加条件 ' + path + '"]'; await evaluate('document.querySelector(' + JSON.stringify(selector) + ').click()') }
 async function source(name) { await evaluate('[...document.querySelectorAll(".source-tabs button")].find(e=>e.textContent.trim()===' + JSON.stringify(name) + ').click()') }
-async function trial(reason, title, random = false) { await evaluate('window.fixture.setReason(' + JSON.stringify(reason) + ')'); await click(random ? '查看随机候选' : '▷ 试匹配'); await waitFor('document.querySelector(".preview-result")?.textContent.includes(' + JSON.stringify(title) + ')'); check(reason + ' displays truthful server reason', await evaluate('document.querySelector(".preview-result").textContent.includes(' + JSON.stringify(title) + ')')) }
+async function trial(reason, title, random = false) { await evaluate('window.fixture.setReason(' + JSON.stringify(reason) + ')'); await evaluate('document.querySelector(".run-preview").click()'); await waitFor('document.querySelector(".preview-result")?.textContent.includes(' + JSON.stringify(title) + ')'); check(reason + ' displays truthful server reason', await evaluate('document.querySelector(".preview-result").textContent.includes(' + JSON.stringify(title) + ')')) }
 try {
   const target = await cdp('Target.createTarget', { url: 'about:blank' }, null); session = (await cdp('Target.attachToTarget', { targetId: target.targetId, flatten: true }, null)).sessionId
   await cdp('Page.enable'); await cdp('Runtime.enable'); await cdp('Network.enable')
@@ -42,21 +42,25 @@ try {
   await cdp('Page.navigate', { url: expectedUrl }); await loaded
   await waitFor('window.fixture && document.querySelectorAll(".condition-row").length === 2')
   check('real component fixture explicitly declares API stub', await evaluate('window.fixture.apiStub === true && document.body.innerText.includes("非后端联调")'))
-  await source('Query'); await inputSample('?channel=alipay&orderId=202610280001&orderId=second'); await click('解析示例'); await waitFor('document.querySelectorAll(".tree-body .leaf").length === 2')
+  check('sample dialog starts closed; generation and trial have distinct entries', await evaluate('!document.querySelector(".sample-card") && !!document.querySelector(".from-request") && document.querySelector(".rules-tools").textContent.includes("试匹配")'))
+  await click('从请求生成条件'); await waitFor('document.querySelector(".sample-card textarea")');
+  await source('Query'); await inputSample('?channel=alipay&orderId=202610280001&orderId=second'); await click('提取字段 →'); await waitFor('document.querySelectorAll(".tree-body .leaf").length === 2')
   check('duplicate Query field marked added rather than fake satisfied', await evaluate('document.querySelector(".leaf.used")?.textContent.includes("channel") && !document.body.innerText.includes("示例实际值")'))
-  await source('Header'); await inputSample('X-Mock-Sandbox: 0\nx-mock-sandbox: 1\nReferer: https://test:8080'); await click('解析示例')
-  await source('Body'); await inputSample('{"items":[{"amount":100}]}'); await click('解析示例')
+  await source('Header'); await inputSample('X-Mock-Sandbox: 0\nx-mock-sandbox: 1\nReferer: https://test:8080'); await click('提取字段 →')
+  await source('Body'); await inputSample('{"items":[{"amount":100}]}'); await click('提取字段 →')
   await pickField('items[0].amount'); await waitFor('document.querySelectorAll(".condition-row").length === 3')
-  check('array field generates NUMBER readonly type label', await evaluate('JSON.parse(window.fixture.state.responses[0].conditions).conditions.some(c=>c.path==="items[0].amount"&&c.valueType==="NUMBER") && document.querySelectorAll(".col-type-tag").length === 3'))
+  check('array field generates an editable NUMBER comparison type', await evaluate('JSON.parse(window.fixture.state.responses[0].conditions).conditions.some(c=>c.path==="items[0].amount"&&c.valueType==="NUMBER") && document.querySelectorAll(".value-type").length === 3'))
   await source('Query'); await trial('CONDITION_MATCH', '条件命中')
   check('all three sources coexist in real preview transport payload', await evaluate('(()=>{const body=window.fixture.calls.filter(c=>c.url==="/apis/preview-match").at(-1).body;return body.sample.body.includes("items")&&body.sample.query.orderId==="202610280001"&&body.sample.headers["X-Mock-Sandbox"]==="0"&&body.sample.headers.Referer==="https://test:8080"&&body.responses[0].active===true})()'))
+  await click('完成，返回编辑'); await waitFor('!document.querySelector(".match-sample-dialog") || document.querySelector(".match-sample-dialog").getBoundingClientRect().width===0')
   for (const width of [1440,768,375]) {
     await cdp('Emulation.setDeviceMetricsOverride', { width, height: 1050, deviceScaleFactor: 1, mobile: false }); await screenshot('conditions-' + width)
     check('no document horizontal overflow at ' + width, await evaluate('document.documentElement.scrollWidth <= innerWidth + 1'))
-    check('condition text stays readable in internal scroll at ' + width, await evaluate('document.querySelector(".table-scroll").scrollWidth >= 640 && document.querySelector(".table-scroll").getBoundingClientRect().right <= innerWidth'))
+    check('condition inputs reflow without internal horizontal scroll at ' + width, await evaluate('document.querySelector(".table-scroll").scrollWidth <= document.querySelector(".table-scroll").clientWidth + 1 && document.querySelector(".table-scroll").getBoundingClientRect().right <= innerWidth'))
     check('no shadow gradient or blur on editor cards at ' + width, await evaluate('[...document.querySelectorAll(".rules-card,.sample-card,.el-input__wrapper,.el-select__wrapper,.el-textarea__inner")].every(e=>{const s=getComputedStyle(e);return s.boxShadow==="none"&&s.backgroundImage==="none"&&s.backdropFilter==="none"})'))
   }
   await cdp('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1050, deviceScaleFactor: 1, mobile: false })
+  await click('从请求生成条件'); await waitFor('document.querySelector(".match-sample-dialog")?.getBoundingClientRect().width > 0')
   await evaluate('window.fixture.select(2)'); await waitFor('document.querySelector(".fallback-notice")');
   check('response selection preserves the local Query sample', await evaluate('document.querySelector(".sample-card textarea").value.includes("channel=alipay")'))
   await trial('FALLBACK', '使用兜底'); await screenshot('fallback-1440')
@@ -71,15 +75,20 @@ try {
   check('readonly hides AI and all condition mutation buttons', await evaluate('!document.querySelector(".add-row,.delete-row") && ![...document.querySelectorAll("button")].some(e=>e.textContent.includes("AI 生成规则"))'))
   check('readonly sends no draft responses', await evaluate('window.fixture.calls.filter(c=>c.url==="/apis/preview-match").at(-1).body.responses.length===0'))
   await screenshot('readonly-1440')
-  await evaluate('window.fixture.setReadonly(false);window.fixture.setSaved(false);window.fixture.hold(true)'); await click('▷ 试匹配'); await evaluate('window.fixture.setTeam("team-b");window.fixture.release()'); await waitFor('document.querySelector(".sample-card textarea").value===""')
+  await evaluate('window.fixture.setReadonly(false);window.fixture.setSaved(false);window.fixture.hold(true)'); await evaluate('document.querySelector(".run-preview").click()'); await evaluate('window.fixture.setTeam("team-b");window.fixture.release()'); await waitFor('document.querySelector(".sample-card textarea").value===""')
   check('team switch fences late result and clears old local samples', await evaluate('!document.querySelector(".preview-result")'))
-  await evaluate('window.fixture.setKind("xml")'); await source('Body'); await inputSample('<s:Envelope xmlns:s="urn:s"><s:Body><u:GetUser xmlns:u="urn:user"><u:id>42</u:id></u:GetUser></s:Body></s:Envelope>'); await click('解析示例')
+  await evaluate('window.fixture.setKind("xml")'); await click('从请求生成条件'); await waitFor('document.querySelector(".match-sample-dialog")?.getBoundingClientRect().width > 0'); await source('Body'); await inputSample('<s:Envelope xmlns:s="urn:s"><s:Body><u:GetUser xmlns:u="urn:user"><u:id>42</u:id></u:GetUser></s:Body></s:Envelope>'); await click('提取字段 →')
   await waitFor('[...document.querySelectorAll(".tree-body .leaf")].some(e=>e.getAttribute("aria-label")==="添加条件 Envelope.Body.GetUser.id")'); await pickField('Envelope.Body.GetUser.id'); await waitFor('document.querySelectorAll(".condition-row").length === 1')
-  check('namespace XML paths use safe existing parser and inferred numeric type', await evaluate('JSON.parse(window.fixture.state.responses[2].conditions).conditions[0].path==="Envelope.Body.GetUser.id" && document.querySelector(".col-type-tag").textContent.trim()==="number"'))
-  await inputSample('<!DOCTYPE root [<!ENTITY x SYSTEM "file:///never-open">]><root>&x;</root>'); await click('解析示例'); await waitFor('document.body.innerText.includes("不支持 DOCTYPE")')
+  check('namespace XML paths use safe existing parser and inferred numeric type', await evaluate('JSON.parse(window.fixture.state.responses[2].conditions).conditions[0].path==="Envelope.Body.GetUser.id" && document.querySelector(".value-type").textContent.includes("数字")'))
+  await inputSample('<!DOCTYPE root [<!ENTITY x SYSTEM "file:///never-open">]><root>&x;</root>'); await click('提取字段 →'); await waitFor('document.body.innerText.includes("不支持 DOCTYPE")')
   check('DTD sample rejected locally without field import', await evaluate('document.querySelectorAll(".tree-body .leaf").length===0'))
+  await click('完成，返回编辑');
+  await click('图解用法'); await waitFor('document.querySelector(".match-guide-dialog")?.getBoundingClientRect().width > 0');
+  check('guide illustrates requests, conditions and response rather than long paragraphs', await evaluate('!!document.querySelector(".condition-flow svg") && document.querySelector(".condition-tokens").textContent.includes("status") && document.querySelector(".result-card").textContent.includes("ok")'));
+  for (const width of [1440,375]) { await cdp('Emulation.setDeviceMetricsOverride',{width,height:850,deviceScaleFactor:1,mobile:false}); await screenshot('visual-guide-' + width); check('visual guide fits ' + width, await evaluate('document.documentElement.scrollWidth<=innerWidth && document.querySelector(".match-guide-dialog").getBoundingClientRect().right<=innerWidth')) }
+  await click('我明白了'); await cdp('Emulation.setDeviceMetricsOverride',{width:1440,height:1050,deviceScaleFactor:1,mobile:false});
   await click('编辑返回体 →'); await waitFor('document.querySelector("#edit-count").textContent==="1"')
-  await click('⌘ AI 生成规则'); await waitFor('document.querySelector(".ai-rules-drawer")?.getBoundingClientRect().width > 0')
+  await click('AI 生成'); await waitFor('document.querySelector(".ai-rules-drawer")?.getBoundingClientRect().width > 0')
   for (const width of [1440,375]) { await cdp('Emulation.setDeviceMetricsOverride',{width,height:1050,deviceScaleFactor:1,mobile:false}); await screenshot('ai-drawer-' + width); check('AI drawer fits flat viewport at ' + width,await evaluate('(()=>{const e=document.querySelector(".ai-rules-drawer");return e.getBoundingClientRect().width<=innerWidth+1&&getComputedStyle(e).boxShadow==="none"&&document.documentElement.scrollWidth<=innerWidth+1})()')) }
   await evaluate('window.fixture.setReadonly(true)'); await waitFor('!document.querySelector(".ai-rules-drawer")')
   check('revoking write unmounts the owned AI drawer', await evaluate('!document.querySelector(".ai-rules-drawer")'))

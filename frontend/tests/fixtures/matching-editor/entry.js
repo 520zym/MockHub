@@ -5,6 +5,8 @@ import zhCn from 'element-plus/dist/locale/zh-cn.mjs'
 import ConditionPanel from '../../../src/components/match/ConditionPanel.vue'
 import { fixtureState } from './request-stub.js'
 import 'element-plus/dist/index.css'
+import '../../../src/styles/variables.scss'
+import '../../../src/styles/element-overrides.scss'
 import './fixture.css'
 const rule = (source, path, value, valueType = 'STRING') => ({ source, path, operator: 'EQ', value, valueType })
 const state = reactive({ teamId: 'team-a', apiId: 'api-a', readOnly: false, mode: 'CONDITION', selected: 0, kind: 'json', operation: null,

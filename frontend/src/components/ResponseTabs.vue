@@ -10,11 +10,8 @@
         <el-radio-button value="CONDITION">按条件匹配</el-radio-button>
         <el-radio-button value="RANDOM">等概率随机</el-radio-button>
       </el-radio-group>
-      <span class="response-mode-help">
-        {{ normalizedSelectionMode === 'RANDOM'
-          ? '整个接口共用：每次从启用的返回体中等概率选一个；已配置的条件会保留，但不参与本模式。'
-          : '整个接口共用：按顺序匹配，首个条件全部满足的返回体被返回；多个启用返回体时必须保留一个无条件兜底。' }}
-      </span>
+      <span class="response-mode-help">{{ normalizedSelectionMode === 'RANDOM' ? '每份启用的返回体机会相同' : '按序命中，未命中走兜底' }}</span>
+      <button type="button" class="match-guide-entry" @click="matchGuideVisible = true">图解用法 <span aria-hidden="true">↗</span></button>
     </div>
     <!-- Tab 栏 -->
     <div class="tabs-header">
@@ -59,17 +56,21 @@
           autofocus
         />
       </div>
-      <button v-if="!readOnly" type="button" class="tab-add" @click="addResponse" aria-label="添加返回体">
-        <el-icon><Plus /></el-icon>
+      <button v-if="!readOnly" type="button" class="tab-add" @click="addResponse" aria-label="添加返回体" title="添加返回体">
+        <el-icon><Plus /></el-icon><span>新增返回体</span>
       </button>
     </div>
 
     <!-- 当前 Tab 内容 -->
     <div v-if="currentResponse" class="tab-content">
+      <div class="response-enable-row"><el-switch :model-value="currentResponse.isActive" :disabled="readOnly" aria-label="启用此返回体" @change="toggleEnabled(activeIndex)" /><span>{{ currentResponse.isActive ? '已启用' : '未启用 · 不参与返回' }}</span></div>
+      <p v-if="selectionIssue" class="response-selection-warning" role="status">{{ selectionIssue }}</p>
       <!-- 响应规则面板：REST 按接口匹配，SOAP 按当前 operation 独立匹配 -->
       <!-- v-show keeps the local request samples alive when the team toggles the selection mode. -->
       <div v-show="normalizedSelectionMode === 'CONDITION'" class="conditions-workspace">
         <ConditionPanel
+          ref="conditionPanelRef"
+          hide-help
           v-model="currentResponse.conditions"
           :body-sample-kind="operationName ? 'xml' : 'json'"
           :team-id="teamId"
@@ -84,16 +85,9 @@
           hide-return-preview
         />
       </div>
-      <el-alert
-        v-if="normalizedSelectionMode === 'RANDOM'"
-        type="info"
-        :closable="false"
-        show-icon
-        title="随机模式会忽略本返回体已保存的命中条件。切回按条件匹配时，原条件会继续保留。"
-        class="random-mode-alert"
-      />
+      <div v-if="normalizedSelectionMode === 'RANDOM'" class="random-mode-summary"><span>{{ responses.filter(r => r.isActive).length }} 份已启用 · 等概率随机</span><button type="button" class="match-guide-entry" @click="conditionPanelRef?.openSamples('trial')">查看随机候选</button></div>
       <section class="response-body-section">
-        <header class="response-body-heading"><h4>返回内容</h4><span>{{ normalizedSelectionMode === 'CONDITION' ? '上面的条件命中后，返回下面这份响应。' : '等概率随机时，每份启用的响应都可能被返回。' }}</span></header>
+        <header class="response-body-heading"><span class="body-section-step">{{ normalizedSelectionMode === 'CONDITION' ? '2' : '↳' }}</span><h4>返回什么</h4></header>
       <el-form label-position="top" :disabled="readOnly">
         <el-row :gutter="16">
           <!-- 名称 -->
@@ -373,27 +367,6 @@
 
       <!-- 底部操作栏 -->
       <div v-if="!readOnly" class="tab-actions">
-        <!-- 启用/禁用切换（取代原"设为生效"单选语义；多条可同时启用） -->
-        <el-button
-          v-if="!currentResponse.isActive"
-          type="success"
-          size="small"
-          plain
-          @click="toggleEnabled(activeIndex)"
-        >
-          <el-icon><Select /></el-icon>
-          启用此返回体
-        </el-button>
-        <el-button
-          v-else
-          type="warning"
-          size="small"
-          plain
-          @click="toggleEnabled(activeIndex)"
-        >
-          <el-icon><CircleClose /></el-icon>
-          禁用此返回体
-        </el-button>
         <el-button
           type="danger"
           size="small"
@@ -406,6 +379,7 @@
         </el-button>
       </div>
     </div>
+    <MatchGuide v-model="matchGuideVisible" :mode="normalizedSelectionMode" :body-sample-kind="operationName ? 'xml' : 'json'" />
   </div>
 </template>
 
@@ -419,18 +393,21 @@
  */
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import {
-  Plus, Check, MagicStick, Upload, Select, Delete, ArrowDown, Search,
-  StarFilled, CircleClose, WarningFilled, EditPen
+  Plus, Check, MagicStick, Upload, Delete, ArrowDown, Search,
+  StarFilled, WarningFilled, EditPen
 } from '@element-plus/icons-vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import MonacoEditor from './MonacoEditor.vue'
 import ConditionPanel from './match/ConditionPanel.vue'
+import MatchGuide from './match/MatchGuide.vue'
 import AiResponseDrawer from '@/components/ai/AiResponseDrawer.vue'
 import { useAiStore } from '@/stores/ai'
 import { DYNAMIC_VARIABLES } from '@/constants/dynamicVariables'
 import { formatJsonBody } from '@/utils/json-placeholders'
 import { getTeamVariables } from '@/api/customVariable'
 import { uploadResponseFile } from '@/api/apis'
+
+const matchGuideVisible = ref(false), conditionPanelRef = ref(null)
 
 const props = defineProps({
   apiId: { type: String, default: null },
@@ -481,6 +458,16 @@ const aiDrawerVisible = ref(false)
 const normalizedSelectionMode = computed(() =>
   props.selectionMode === 'RANDOM' ? 'RANDOM' : 'CONDITION'
 )
+
+// Only show guidance when the draft needs attention; no modal or permanent instructions.
+const selectionIssue = computed(() => {
+  const enabled = groupMates(activeIndex.value).filter(r => r.isActive)
+  if (!enabled.length) return '请至少启用一份返回体。'
+  if (normalizedSelectionMode.value === 'RANDOM' || enabled.length === 1) return ''
+  const defaults = enabled.filter(r => isEmptyConditions(r.conditions)).length
+  if (!defaults) return '还缺一份兜底：为一份启用的返回体留空条件。'
+  return defaults > 1 ? '有 ' + defaults + ' 份无条件返回体：只留一份兜底，其余添加条件。' : ''
+})
 
 function changeSelectionMode(mode) {
   if (props.readOnly) return
@@ -884,47 +871,13 @@ async function toggleEnabled(idx) {
   if (props.readOnly) return
   const r = responses.value[idx]
   if (!r) return
-
-  // REST 按全部 Tab 聚合；SOAP 按 operation 聚合
-  const group = groupMates(idx)
-  const enabledCount = group.filter((x) => x.isActive).length
-
-  if (!r.isActive) {
-    // 启用
-    if (enabledCount === 1) {
-      // 即将成为第 2 个启用 → 弹解释对话框
-      try {
-        await ElMessageBox.confirm(
-          '再启用一个返回体将进入"条件匹配模式"：至少保留一个启用返回体无规则作为兜底，其他都需配置响应规则。系统会按 Tab 顺序匹配第一条命中的规则。',
-          '进入条件匹配模式',
-          {
-            confirmButtonText: '继续启用',
-            cancelButtonText: '取消',
-            type: 'info'
-          }
-        )
-      } catch {
-        return
-      }
-    }
-    r.isActive = true
-    emit('update:modelValue', [...responses.value])
-    return
+  const group = groupMates(idx), enabledCount = group.filter(x => x.isActive).length
+  if (r.isActive && enabledCount <= 1) { ElMessage.warning('至少保留一个启用的返回体'); return }
+  if (r.isActive && normalizedSelectionMode.value === 'CONDITION' && enabledCount > 2 && isEmptyConditions(r.conditions)) {
+    const otherFallback = group.some(x => x !== r && x.isActive && isEmptyConditions(x.conditions))
+    if (!otherFallback) { ElMessage.warning('请先为另一份启用的返回体留空条件，作为兜底'); return }
   }
-
-  // 禁用：检查是否是当前唯一的"启用+无规则"兜底 Tab
-  if (enabledCount >= 2 && isEmptyConditions(r.conditions)) {
-    // 看是否还有其他启用+无规则 Tab
-    const otherFallback = group.some((x, i) => {
-      const gIdx = responses.value.indexOf(x)
-      return gIdx !== idx && x.isActive && isEmptyConditions(x.conditions)
-    })
-    if (!otherFallback) {
-      ElMessage.warning('这是当前的兜底返回体，请先给它配规则或先禁用其他带规则的 Tab')
-      return
-    }
-  }
-  r.isActive = false
+  r.isActive = !r.isActive
   emit('update:modelValue', [...responses.value])
 }
 
@@ -1090,13 +1043,18 @@ async function handleUploadFile(uploadFile) {
 .tab-index { font: 11px var(--app-font-mono); }.tab-name { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.tab-status { font: 11px var(--app-font-mono); color: var(--app-text-success); }.disabled-badge { font-size: 11px; color: var(--app-text-secondary); }.tab-name-input { width: 125px; }
 .tab-cond { font-size: var(--app-font-micro); color: var(--app-text-secondary); background: var(--app-bg-hover); border-radius: 6px; padding: 1px 5px; }
 .active-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }.active-dot.on { background: var(--el-color-success); }.active-dot.off { background: var(--app-text-secondary); }.fallback-star { color: var(--app-accent); font-size: 12px; }
-.tab-add { display: grid; place-items: center; border: 0; background: var(--app-bg-control); color: var(--app-accent); border-radius: 9px; width: 34px; min-height: 34px; flex-shrink: 0; cursor: pointer; }
+.tab-add { display: flex; align-items: center; gap: 5px; padding: 0 10px; font: inherit; font-size: 12px; border: 0; background: var(--app-bg-control); color: var(--app-accent); border-radius: 9px; min-height: 34px; flex-shrink: 0; cursor: pointer; }
 .tab-content { min-width: 0; display: grid; gap: 15px; }
 .response-body-section { min-width: 0; display: grid; gap: 12px; padding-top: 16px; border-top: 1px solid var(--app-divider); }
 .response-body-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
 .response-body-heading h4 { margin: 0; font-size: 13px; font-weight: 600; }
 .response-body-heading span { font-size: var(--app-font-caption); color: var(--app-text-secondary); }
-.random-mode-alert { margin-bottom: 15px; }
+.match-guide-entry { border: 0; background: transparent; color: var(--app-text-accent); font: inherit; font-size: 12px; cursor: pointer; min-height: 34px; padding: 0 4px; }
+.response-selection-warning { margin: 0; padding: 8px 10px; border-radius: 7px; background: var(--app-bg-control); color: var(--app-text-warning); font-size: 12px; line-height: 1.6; }
+.response-enable-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--app-text-secondary); }
+.random-mode-summary { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--app-text-secondary); }
+.body-section-step { display: inline-grid; place-items: center; width: 23px; height: 23px; background: var(--app-bg-selected); color: var(--app-text-accent) !important; border-radius: 7px; font-size: 12px; }
+.response-tabs { gap: 12px; }
 .tab-content :deep(.el-form-item) { margin-bottom: 16px; }.tab-content :deep(.el-form-item__label) { color: var(--app-text-secondary); font-size: 12px; }
 .body-toolbar,.editor-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; margin-bottom: 10px; }
 .editor-container { width: 100%; height: 420px; min-width: 0; background: var(--app-bg-control); border-radius: 12px; overflow: hidden; }
