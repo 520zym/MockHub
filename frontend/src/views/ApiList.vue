@@ -101,7 +101,7 @@
                 <td class="cell-select"><el-checkbox :model-value="selectedIds.includes(row.id)" :aria-label="'选择 ' + row.name" :disabled="busy || loading" @change="value => selectRow(row, value)" /></td>
                 <td><span class="type-chip">{{ row.type || 'REST' }}</span></td>
                 <td><HttpMethodTag :method="row.method" /></td>
-                <td class="cell-path"><button type="button" class="api-path" :title="row.path" @click="openDetail(row)">{{ row.path }}</button></td>
+                <td class="cell-path"><button type="button" class="api-path" :title="row.path" @click="openDetailDialog(row)">{{ row.path }}</button></td>
                 <td class="cell-name" :title="row.name">{{ row.name }}</td>
                 <td :title="row.groupName || ''">{{ row.groupName || '—' }}</td>
                 <td class="cell-tags" :title="row.tags?.map(tag => tag.name).join('、')"><div v-if="row.tags?.length" class="row-tags"><span v-for="tag in row.tags.slice(0, 2)" :key="tag.id"><i :style="{ backgroundColor: tag.color }" />{{ tag.name }}</span><span v-if="row.tags.length > 2">+{{ row.tags.length - 2 }}</span></div><span v-else>—</span></td>
@@ -111,7 +111,8 @@
                 <td class="cell-creator" :title="row.createdByName">{{ row.createdByName || '—' }}</td>
                 <td class="cell-state"><el-switch v-if="canWrite" :model-value="row.enabled" :disabled="busy || loading" :aria-label="(row.enabled ? '停用 ' : '启用 ') + row.name" @change="toggle(row)" /><span v-else class="status-chip" :class="{ enabled: row.enabled }">{{ row.enabled ? '已启用' : '已停用' }}</span></td>
                 <td class="cell-actions"><div class="row-actions">
-                  <el-button text @click="openDetail(row)">{{ canWrite ? '编辑' : '查看' }}</el-button>
+                  <el-button text @click="openDetailDialog(row)">详情</el-button>
+                  <el-button v-if="canWrite" text @click="openEditor(row)">编辑</el-button>
                   <el-button text @click="openHistory(row)">历史</el-button>
                   <el-dropdown trigger="click" @command="command => rowCommand(command, row)"><el-button text :aria-label="row.name + '的更多操作'">更多</el-button><template #dropdown><el-dropdown-menu>
                     <el-dropdown-item command="url">复制 {{ row.type === 'SOAP' ? 'WSDL' : 'Mock' }} 地址</el-dropdown-item>
@@ -132,7 +133,7 @@
 <el-switch v-if="canWrite" :model-value="row.enabled" :disabled="busy || loading" :aria-label="(row.enabled ? '停用 ' : '启用 ') + row.name" @change="toggle(row)" />
 <span v-else class="status-chip" :class="{ enabled: row.enabled }">{{ row.enabled ? '已启用' : '已停用' }}</span>
 </header>
-<button type="button" class="api-path" @click="openDetail(row)">{{ row.path }}</button>
+<button type="button" class="api-path" @click="openDetailDialog(row)">{{ row.path }}</button>
 <h3>{{ row.name }}</h3>
 <div v-if="row.tags?.length || row.groupName" class="row-tags">
 <span v-if="row.groupName">{{ row.groupName }}</span>
@@ -151,7 +152,8 @@
 </div>
 </dl>
 <footer>
-<el-button text @click="openDetail(row)">{{ canWrite ? '编辑' : '查看' }}</el-button>
+<el-button text @click="openDetailDialog(row)">详情</el-button>
+<el-button v-if="canWrite" text @click="openEditor(row)">编辑</el-button>
 <el-button text @click="openHistory(row)">
 <FilledIcon name="history" :size="14" />历史</el-button>
 <el-dropdown trigger="click" @command="command => rowCommand(command, row)">
@@ -182,6 +184,7 @@
       </section>
     </template>
     <ApiHistoryDrawer v-model="historyOpen" :api-id="historyRow?.id || ''" :team-id="teamId || ''" :current-revision="historyRow?.revision || 0" :capabilities="membership?.capabilities" :read-only="!canWrite" @changed="historyChanged" />
+    <ApiDetailDialog v-model="detailOpen" :summary="detailRow" :server-address="serverAddress" :can-write="canWrite" @history="historyFromDetail" @edit="editFromDetail" />
     <ApiImportDialog v-model="importOpen" :team-id="teamId || ''" @imported="imported" />
     <GroupManageDialog v-model="groupOpen" :team-id="teamId || ''" @changed="metadataChanged" />
     <TagManageDialog v-model="tagOpen" :team-id="teamId || ''" @changed="metadataChanged" />
@@ -221,13 +224,14 @@ import { getServerAddress } from '@/api/settings'
 import FilledIcon from '@/components/FilledIcon.vue'
 import HttpMethodTag from '@/components/HttpMethodTag.vue'
 import ApiHistoryDrawer from '@/components/ApiHistoryDrawer.vue'
+import ApiDetailDialog from '@/components/ApiDetailDialog.vue'
 import ApiImportDialog from '@/components/ApiImportDialog.vue'
 import GroupManageDialog from '@/components/GroupManageDialog.vue'
 import TagManageDialog from '@/components/TagManageDialog.vue'
 const app = useAppStore(), user = useUserStore(), apiStore = useApiStore(), router = useRouter(), route = useRoute()
 const rows = ref([]), total = ref(0), groups = ref([]), tags = ref([]), loading = ref(false), busy = ref(false), error = ref(''), conflict = ref(''), metadataError = ref(''), selectedIds = ref([]), page = ref(1), size = ref(20), sort = ref('updatedAt:desc'), showMoreFilters = ref(false)
 const filters = reactive({ keyword: '', method: '', groupId: '', type: '', enabled: '', tagIds: [], mine: false })
-const importOpen = ref(false), groupOpen = ref(false), tagOpen = ref(false), historyOpen = ref(false), historyRow = ref(null), deleteOpen = ref(false), deleteRequest = ref(null), urlOpen = ref(false), urlText = ref(''), serverAddress = ref('')
+const importOpen = ref(false), groupOpen = ref(false), tagOpen = ref(false), historyOpen = ref(false), historyRow = ref(null), detailOpen = ref(false), detailRow = ref(null), deleteOpen = ref(false), deleteRequest = ref(null), urlOpen = ref(false), urlText = ref(''), serverAddress = ref('')
 const methods = ['GET','POST','PUT','DELETE','PATCH','HEAD','OPTIONS']
 const trashAvailable = computed(() => router.getRoutes().some(record => record.path === '/apis/trash'))
 let generation = 0, listRequest = 0, metadataRequest = 0, keywordTimer = null, firstContext = true, noticeRevision = -1
@@ -248,7 +252,7 @@ function live(captured, capability = 'read') { return captured.generation === ge
 function scopeStorageKey() { return user.user?.id ? 'mockhub:' + user.user.id + ':api-list-context' : '' }
 function storeFilters() { const [sortBy, sortDir] = sort.value.split(':'); Object.entries({ keyword: filters.keyword, method: filters.method || null, groupId: filters.groupId || null, type: filters.type || null, enabled: filters.enabled === '' ? null : filters.enabled, tagIds: [...filters.tagIds], createdBy: filters.mine ? 'me' : null, sortBy, sortDir, page: page.value, size: size.value }).forEach(([name, value]) => apiStore.setParam(name, value)); apiStore.setParam('page', page.value) }
 function setDefaultFilters() { Object.assign(filters, { keyword: '', method: '', groupId: '', type: '', enabled: '', tagIds: [], mine: false }); page.value = 1; size.value = 20; sort.value = 'updatedAt:desc' }
-function clearContext() { generation++; listRequest++; metadataRequest++; clearTimeout(keywordTimer); rows.value = []; total.value = 0; groups.value = []; tags.value = []; selectedIds.value = []; loading.value = false; busy.value = false; error.value = ''; conflict.value = ''; metadataError.value = ''; importOpen.value = false; groupOpen.value = false; tagOpen.value = false; historyOpen.value = false; historyRow.value = null; deleteOpen.value = false; deleteRequest.value = null; urlOpen.value = false; urlText.value = '' }
+function clearContext() { generation++; listRequest++; metadataRequest++; clearTimeout(keywordTimer); rows.value = []; total.value = 0; groups.value = []; tags.value = []; selectedIds.value = []; loading.value = false; busy.value = false; error.value = ''; conflict.value = ''; metadataError.value = ''; importOpen.value = false; groupOpen.value = false; tagOpen.value = false; historyOpen.value = false; historyRow.value = null; detailOpen.value = false; detailRow.value = null; deleteOpen.value = false; deleteRequest.value = null; urlOpen.value = false; urlText.value = '' }
 watch(key, () => {
   const storageKey = scopeStorageKey(), restore = firstContext && storageKey && sessionStorage.getItem(storageKey) === contextStamp.value
   clearContext()
@@ -288,7 +292,14 @@ function resetFilters() { setDefaultFilters(); apiStore.resetParams(); loadPage(
 function selectAll(value) { if (!busy.value) selectedIds.value = value ? rows.value.map(row => row.id) : [] }
 function selectRow(row, selected) { if (busy.value || row.teamId !== teamId.value) return; selectedIds.value = selected ? [...new Set([...selectedIds.value, row.id])] : selectedIds.value.filter(id => id !== row.id) }
 function formatCount(value) { return Number(value || 0).toLocaleString('zh-CN') }
-function openDetail(row) { if (canRead.value && row.teamId === teamId.value) router.push('/apis/' + encodeURIComponent(row.id) + '/edit') }
+function openDetailDialog(row) {
+  if (!canRead.value || row.teamId !== teamId.value) return
+  detailRow.value = { ...row }
+  detailOpen.value = true
+}
+function openEditor(row) { if (canRead.value && row.teamId === teamId.value) router.push('/apis/' + encodeURIComponent(row.id) + '/edit') }
+function editFromDetail() { const row = detailRow.value; if (!row) return; detailOpen.value = false; openEditor(row) }
+function historyFromDetail() { const row = detailRow.value; if (row) openHistory(row) }
 function openHistory(row) { if (!canRead.value || row.teamId !== teamId.value) return; historyRow.value = { ...row }; historyOpen.value = true }
 function manage(kind) { if (!canRead.value) return; if (kind === 'groups') groupOpen.value = true; else tagOpen.value = true }
 async function retryMetadata() { const captured = scope(); if (!live(captured)) return; await Promise.all([loadMetadata(), app.loadTeams().catch(failure => { if (live(captured)) metadataError.value = '团队目录未同步，计数可能是旧值：' + readableError(failure) })]) }
@@ -387,8 +398,8 @@ async function copyUrl(row) {
 .row-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
 .row-tags>span{max-width:100%;overflow-wrap:anywhere;min-width:0;font-size:12px;color:var(--app-text-secondary);background:var(--app-bg-control);padding:3px 6px;border-radius:5px;display:inline-flex;align-items:center;gap:4px}
 .row-tags i{width:6px;height:6px;border-radius:50%;flex:none}
-.row-actions{display:flex;justify-content:flex-end;align-items:center;gap:3px}
-.row-actions :deep(.el-button){padding:7px 5px;font-size:12px;margin:0}
+.row-actions{display:flex;justify-content:flex-end;align-items:center;gap:2px}
+.row-actions :deep(.el-button){padding:7px 3px;font-size:12px;margin:0}
 .status-chip{font-size:12px;color:var(--app-text-secondary);background:var(--app-bg-control);padding:4px 7px;border-radius:7px;white-space:nowrap}
 .status-chip.enabled{color:var(--el-color-success-dark-2);background:var(--el-color-success-light-9)}
 .workspace-footer{display:flex;justify-content:flex-end;align-items:center;gap:12px;flex-wrap:wrap;margin-top:16px}

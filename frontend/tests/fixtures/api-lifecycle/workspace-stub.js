@@ -62,6 +62,12 @@ export async function workspaceInvoke(state,method,url,body,config) {
     if(action[2]==='copy'){const copy={...structuredClone(row),id:'copy-'+state.rows.length,path:row.path+'-copy',name:row.name+'（副本）',revision:1,createdBy:'user-1',createdByName:'王琳'};state.rows.push(copy);return answer(copy)}
     if(method==='DELETE'){state.rows=state.rows.filter(item=>item.id!==row.id);return answer(null)}
   }
+  const detail=url.match(/^\/apis\/([^/]+)$/)
+  if(detail&&method==='GET') {
+    const row=state.rows.find(item=>item.id===detail[1])
+    if(!row)throw {code:40400,msg:'接口不存在'}
+    return answer({...structuredClone(row),description:'<p>按订单号查询用户详情，覆盖正常与无效参数两种返回。</p>',responseMode:'CONDITION',responses:[{id:'response-1',name:'正常返回',responseCode:200,contentType:'application/json',responseBody:'{\n  "code": 0,\n  "data": { "id": "u-1001" }\n}',bodyType:'TEXT',delayMs:0,sortOrder:0,active:true,conditions:'{"conditions":[{"source":"QUERY","path":"status","operator":"EQ","value":"active","valueType":"STRING"}]}'},{id:'response-2',name:'默认返回',responseCode:404,contentType:'application/json',responseBody:'{"code":404,"message":"user not found"}',bodyType:'TEXT',delayMs:0,sortOrder:1,active:true,conditions:''}]})
+  }
   if(url.startsWith('/ai/'))return answer(url.includes('conversations')?[]:{enabled:false})
   return {handled:false}
 }

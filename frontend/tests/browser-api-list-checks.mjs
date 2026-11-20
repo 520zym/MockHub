@@ -18,11 +18,18 @@ export async function runListChecks({ cdp, evaluate, waitFor, click, check, scre
   check('API table separates path, name, group and audit fields into single-purpose columns',await evaluate('(()=>{const heads=[...document.querySelectorAll(".api-grid th")].map(e=>e.textContent.trim());return ["路径","名称","分组","标签","修改时间","创建人"].every(t=>heads.includes(t))&&!document.querySelector(".api-grid .api-subtitle,.api-grid .revision-chip")})()'))
   check('normal table rows stay compact without stacked metadata',await evaluate('[...document.querySelectorAll(".api-grid tbody tr")].every(e=>e.getBoundingClientRect().height<=52)'))
   check('wide data scrolls inside the table with fixed operations',await evaluate('(()=>{const region=document.querySelector(".api-grid-scroll");return region.scrollWidth>region.clientWidth&&getComputedStyle(document.querySelector(".api-grid td.cell-actions")).position==="sticky"})()'))
+  await evaluate('(()=>{const button=[...document.querySelectorAll(".api-grid tbody tr:first-child button")].find(e=>e.textContent.trim()==="详情");if(!button)throw new Error("missing detail action");button.click()})()')
+  await waitFor('document.querySelector(".api-detail-dialog")?.getBoundingClientRect().width>0 && document.querySelectorAll(".api-detail-dialog .variant").length===2')
+  check('detail opens as a read-only dialog without leaving the list',await evaluate('!document.querySelector(".editor-page-header") && document.querySelectorAll(".api-detail-dialog input,.api-detail-dialog textarea").length===0'))
+  check('detail shows identity response rules and the fallback',await evaluate('(()=>{const text=document.querySelector(".api-detail-dialog").textContent;return text.includes("/api/user/{id}")&&text.includes("Query.status 等于")&&text.includes("兜底")})()'))
+  await evaluate('(()=>{const button=[...document.querySelectorAll(".api-detail-dialog button")].find(e=>e.textContent.trim()==="关闭");button.click()})()')
+  await waitFor('!document.querySelector(".api-detail-dialog")?.getBoundingClientRect().width')
   for(const role of ['EDITOR','VIEWER']) {
     await evaluate('window.fixture.setRole('+JSON.stringify(role)+')');await waitFor('document.querySelectorAll(".api-grid tbody tr").length===6 && !document.querySelector(".api-results .el-loading-mask")')
     for(const width of [1810,1440,768,375]){await cdp('Emulation.setDeviceMetricsOverride',{width,height:960,deviceScaleFactor:1,mobile:false});await screenshot('list-'+role.toLowerCase()+'-'+width);check('list '+role+' has no horizontal document overflow at '+width,await evaluate('document.documentElement.scrollWidth<=innerWidth+1'));check('list '+role+' stays inside the real shell at '+width,await evaluate('document.querySelector(".workspace-table").getBoundingClientRect().right<=innerWidth+1'))}
   }
   await cdp('Emulation.setDeviceMetricsOverride',{width:1440,height:960,deviceScaleFactor:1,mobile:false})
+  check('viewer sees a detail entry without an edit shortcut',await evaluate('[...document.querySelectorAll(".api-grid tbody tr:first-child button")].some(e=>e.textContent.trim()==="详情")&&![...document.querySelectorAll(".api-grid tbody tr:first-child button")].some(e=>e.textContent.trim()==="编辑")'))
   check('viewer has no create or import control',await evaluate('![...document.querySelectorAll("button")].some(e=>e.getBoundingClientRect().width>0&&["导入","＋ 新建接口"].includes(e.textContent.trim()))'))
   check('viewer has no enabled toggle controls',await evaluate('[...document.querySelectorAll(".api-grid .el-switch")].filter('+visible+').length===0'))
   await click('我创建的');await waitFor('document.querySelectorAll(".api-grid tbody tr").length===3')
