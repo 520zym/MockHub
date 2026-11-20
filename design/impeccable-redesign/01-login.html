@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440, initial-scale=1">
+<title>MockHub · 登录</title>
+<link rel="stylesheet" href="assets/desk.css">
+<style>
+  /* 版式专用；颜色、材质、圆角全部取自 desk.css token */
+  .login {
+    display: flex; align-items: center; justify-content: center; gap: 56px;
+    height: 100vh; padding: 48px 56px; overflow: hidden;
+  }
+
+  /* 左：悬浮在网格上的产品信息，不铺底色 */
+  .login__intro {
+    flex: 1 1 auto; min-width: 0; max-width: 720px; align-self: stretch;
+    display: flex; flex-direction: column;
+  }
+  .wordmark { display: flex; align-items: center; gap: 11px; }
+  .wordmark__mark { width: 22px; height: 22px; color: var(--ink); }
+  .wordmark__text { font-size: var(--fs-body); font-weight: 600; letter-spacing: .2em; }
+  .login__mid { margin: auto 0; width: 100%; }
+  .fact { font-size: var(--fs-title); font-weight: 500; letter-spacing: -.01em; color: var(--ink); }
+  .sample {
+    margin-top: 24px; overflow: hidden;
+    border-radius: var(--radius-panel); box-shadow: var(--shadow-float), var(--rim);
+  }
+  .sample__bar {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 14px; border-bottom: 1px solid var(--line-inv);
+    font-size: var(--fs-micro); color: var(--ink-inv);
+  }
+  .sample__bar .lamp { color: inherit; }
+  .sample__bar .spacer { flex: 1; }
+  .sample pre { padding: 16px 18px; }
+  .sample__k { display: inline-block; width: 3.6em; color: inherit; opacity: .62; }
+  .login__foot { font-size: var(--fs-micro); color: var(--ink-2); letter-spacing: .02em; }
+
+  /* 右：浮起的玻璃登录卡 */
+  .login__card {
+    flex: 0 0 452px; width: 452px;
+    padding: 34px 38px 30px;
+    background: var(--glass);
+    -webkit-backdrop-filter: var(--blur);
+    backdrop-filter: var(--blur);
+    border-radius: 24px;
+    box-shadow: var(--shadow-float), var(--rim);
+  }
+  .form { width: 100%; }
+  .login__card .input { background: var(--surface-strong); }
+  .form h1 { font-size: var(--fs-display); font-weight: 650; letter-spacing: -.022em; line-height: 1.2; }
+  .form__body { display: flex; flex-direction: column; gap: 16px; margin-top: 26px; }
+  .form__pw { position: relative; }
+  .form__pw .input { padding-right: 40px; }
+  .form__pw .icon-btn { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); }
+  .form__remember { display: flex; align-items: center; gap: 8px; font-size: var(--fs-small); color: var(--ink-2); cursor: pointer; }
+  .form__submit { width: 100%; }
+  .form__banner { margin-top: 14px; }
+  .form__banner svg { width: 14px; height: 14px; flex: 0 0 auto; margin-top: 2px; stroke: currentColor; fill: none; }
+  .form__foot { margin-top: 22px; font-size: var(--fs-caption); color: var(--ink-3); }
+  .form__foot a { color: var(--ink-2); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line-strong); }
+  .form__foot a:hover { color: var(--ink); text-decoration-color: var(--ink-2); }
+</style>
+</head>
+<body class="app">
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <g id="i-base" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </defs>
+  <symbol id="i-api" viewBox="0 0 16 16"><path d="M5.5 3 2.5 8l3 5M10.5 3l3 5-3 5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-files" viewBox="0 0 16 16"><path d="M2.5 4.2V3.2h4l1.4 1.4h5.6v8.2h-11z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+  <symbol id="i-variables" viewBox="0 0 16 16"><path d="M3 4.5h3.2M9.8 4.5H13M3 11.5h3.2M9.8 11.5H13M6.6 3 9.4 13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-stats" viewBox="0 0 16 16"><path d="M3 13V8M8 13V3M13 13V6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-logs" viewBox="0 0 16 16"><path d="M3 3.5h10M3 8h10M3 12.5h6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-users" viewBox="0 0 16 16"><circle cx="6" cy="5.5" r="2.3" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M2 13c0-2.2 1.8-3.5 4-3.5s4 1.3 4 3.5M11 4.2a2.2 2.2 0 0 1 0 4.2M11.5 13c0-1.6-.6-2.6-1.5-3.2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-teams" viewBox="0 0 16 16"><rect x="2.5" y="3" width="11" height="10" rx="0.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M2.5 6.5h11M6 6.5V13" fill="none" stroke="currentColor" stroke-width="1.5"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.8v1.6M8 12.6v1.6M1.8 8h1.6M12.6 8h1.6M3.7 3.7l1.1 1.1M11.2 11.2l1.1 1.1M12.3 3.7l-1.1 1.1M4.8 11.2l-1.1 1.1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="m10.2 10.2 3.3 3.3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="8" height="8" rx="0.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 5.5v-3h-8v8h3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+  <symbol id="i-chevron-down" viewBox="0 0 16 16"><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-chevron-right" viewBox="0 0 16 16"><path d="m6 4 4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-external" viewBox="0 0 16 16"><path d="M9.5 2.5h4v4M13.5 2.5 7.5 8.5M12 9.5v3.5H3V4h3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-more" viewBox="0 0 16 16"><path d="M3.5 8h.01M8 8h.01M12.5 8h.01" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 16 16"><path d="M2.5 4h11M6 4V2.5h4V4M4 4l.8 9.5h6.4L12 4M6.5 6.5v5M9.5 6.5v5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 16 16"><path d="m10.5 2.5 3 3-8 8-3.5 1 1-3.5z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+  <symbol id="i-play" viewBox="0 0 16 16"><path d="M5 3.2 12.5 8 5 12.8z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 16 16"><path d="M13 8a5 5 0 1 1-1.6-3.7M13 2.2v3.2H9.8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-check" viewBox="0 0 16 16"><path d="m3 8.5 3.2 3.2L13 5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-close" viewBox="0 0 16 16"><path d="m4 4 8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 16 16"><path d="M8 10.5V2.5M5 5l3-3 3 3M2.5 12.5v1.5h11v-1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-download" viewBox="0 0 16 16"><path d="M8 2.5v8M5 7.5 8 10.5l3-3M2.5 12.5v1.5h11v-1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-code" viewBox="0 0 16 16"><path d="m5 5-3 3 3 3M11 5l3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 4.8V8l2 1.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-filter" viewBox="0 0 16 16"><path d="M2.5 3.5h11L9.5 8.5v4L6.5 14V8.5z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+  <symbol id="i-arrow-right" viewBox="0 0 16 16"><path d="M3 8h10M9.5 4.5 13 8l-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 16 16"><rect x="3.5" y="7" width="9" height="6.5" rx="0.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M5.8 7V5.2a2.2 2.2 0 0 1 4.4 0V7" fill="none" stroke="currentColor" stroke-width="1.5"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 16 16"><path d="M8 2.8 14 13H2z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M8 6.2v3.2M8 11.2h.01" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 16 16"><path d="M8.8 1.8 3.5 9h3.6l-.9 5.2L13 6.5H9.2z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 16 16"><path d="M1.5 8S4 3.8 8 3.8 14.5 8 14.5 8 12 12.2 8 12.2 1.5 8 1.5 8Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="8" cy="8" r="1.9" fill="none" stroke="currentColor" stroke-width="1.5"/></symbol>
+  <symbol id="i-eye-off" viewBox="0 0 16 16"><path d="M1.5 8S4 3.8 8 3.8c1.1 0 2 .3 2.9.8M14.5 8s-2.5 4.2-6.5 4.2c-1.1 0-2-.3-2.9-.8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M2.5 2.5 13.5 13.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-panel" viewBox="0 0 16 16"><rect x="2.5" y="3" width="11" height="10" rx="0.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10 3v10" fill="none" stroke="currentColor" stroke-width="1.5"/></symbol>
+</svg>
+
+<main class="login settle">
+  <section class="login__intro" aria-label="产品信息">
+    <div class="wordmark">
+      <svg class="wordmark__mark" viewBox="0 0 18 18" aria-hidden="true">
+        <rect x="1" y="1" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.2"/>
+        <path d="M4 12.5 6.5 5l3 7 2.5-7 2 7.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+      </svg>
+      <span class="wordmark__text">MOCKHUB</span>
+    </div>
+
+    <div class="login__mid">
+      <p class="fact">内网接口模拟 · 单个 jar · 无需外网</p>
+      <div class="code code--inv sample">
+        <div class="sample__bar">
+          <span class="lamp lamp--live">实时</span>
+          <span class="spacer"></span>
+          <span class="mono">mockhub.local:8080/t/acme</span>
+        </div>
+        <pre><span class="sample__k">GET</span>/api/order/42
+<span class="sample__k">命中</span>返回体 <span class="num">2</span> · <span class="str">微信渠道</span>
+<span class="sample__k">状态</span><span class="str">200</span> OK
+<span class="sample__k">延迟</span><span class="num">12</span> ms</pre>
+      </div>
+    </div>
+
+    <p class="login__foot">版本 1.4.6 · 内网部署</p>
+  </section>
+
+  <section class="login__card" aria-label="登录">
+    <div class="form">
+      <h1>登录</h1>
+
+      <form class="form__body">
+        <div class="field">
+          <label class="field__label" for="account">账号</label>
+          <input class="input" id="account" name="account" type="text" value="zhangyiming"
+                 autocomplete="username" spellcheck="false" autofocus>
+        </div>
+
+        <div class="field">
+          <label class="field__label" for="password">密码</label>
+          <div class="form__pw">
+            <input class="input" id="password" name="password" type="password" value="demo-password"
+                   autocomplete="current-password">
+            <button class="icon-btn" type="button" id="toggle-pw"
+                    aria-label="显示密码" aria-controls="password">
+              <svg aria-hidden="true"><use href="#i-eye"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <label class="form__remember">
+          <input class="checkbox" type="checkbox" name="remember" checked>
+          记住此设备
+        </label>
+
+        <button class="btn btn--primary btn--lg form__submit" type="submit">登录</button>
+      </form>
+
+      <div class="banner banner--warn form__banner" role="status">
+        <svg aria-hidden="true"><use href="#i-warn"/></svg>
+        <div>首次登录需要先修改初始密码；改密后会用新密码重新登录。</div>
+      </div>
+
+      <p class="form__foot">忘记密码？<a href="07-teams.html">联系超级管理员</a></p>
+    </div>
+  </section>
+</main>
+
+<script src="assets/desk.js"></script>
+<script>
+  // 密码显示切换：静态画板只演示状态，不发请求
+  const pw = document.getElementById('password');
+  const toggle = document.getElementById('toggle-pw');
+  toggle.addEventListener('click', () => {
+    const shown = pw.type === 'text';
+    pw.type = shown ? 'password' : 'text';
+    toggle.setAttribute('aria-label', shown ? '显示密码' : '隐藏密码');
+    toggle.querySelector('use').setAttribute('href', shown ? '#i-eye' : '#i-eye-off');
+  });
+</script>
+</body>
+</html>

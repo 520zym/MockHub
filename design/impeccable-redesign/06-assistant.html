@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440, initial-scale=1">
+<title>MockHub · 对话助手</title>
+<link rel="stylesheet" href="assets/desk.css">
+<style>
+  /* 版式专用；颜色、材质、圆角全部取自 desk.css token */
+  .chat-main {
+    display: flex; flex-direction: column; min-height: 0;
+    height: calc(100vh - var(--chrome-h));
+    padding: 18px var(--content-pad) 16px;
+  }
+  .chat-main .page-head { flex: 0 0 auto; padding: 4px 2px 16px; }
+  .page-head__actions .btn.is-on { background: var(--surface-strong); color: var(--ink); box-shadow: var(--rim); }
+
+  /* 对话与历史都浮在网格上：桌面透明，不铺底色 */
+  .desk { flex: 1 1 auto; display: flex; gap: 14px; min-height: 0; padding-top: 14px; }
+
+  /* ---- 对话主区 ---- */
+  .chat { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+  .chat__scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 0 12px 0 2px; }
+  .chat__thread { max-width: 760px; padding: 2px 0 8px; }
+
+  /* 记录式消息：左侧发丝线 + 说话人标签，不用气泡 */
+  .msg { border-left: 1px solid var(--line); padding-left: 16px; }
+  .msg--bot { border-left-color: var(--line-strong); }
+  .msg + .msg { margin-top: 16px; }
+  .msg__meta { display: flex; align-items: center; gap: 7px; height: 16px; }
+  .msg__who { font-size: var(--fs-caption); font-weight: 600; color: var(--ink); }
+  .msg__mark { width: 14px; height: 14px; color: var(--signal); }
+  .msg__time { font-family: var(--font-mono); font-size: var(--fs-micro); color: var(--ink-2); }
+  .msg__body { margin-top: 4px; }
+  .msg__body p { font-size: var(--fs-body); line-height: 1.62; color: var(--ink-2); }
+  .msg--you .msg__body p { color: var(--ink); }
+  .msg__body p + p { margin-top: 7px; }
+  .conclusion b { font-weight: 600; color: var(--ink); }
+  .msg__closing { display: flex; align-items: center; gap: 14px; margin-top: 8px; }
+  .msg__closing .conclusion { flex: 1 1 auto; min-width: 0; }
+  .msg__closing .btn { flex: 0 0 auto; }
+
+  /* 数据表：嵌在对话里的矮玻璃卡（仅本页收紧行高） */
+  .chat .panel { margin-top: 10px; border-radius: var(--radius-panel); box-shadow: var(--shadow-soft), var(--rim); }
+  .chat .table th { height: 28px; color: var(--ink-2); }
+  .chat .table td { height: 32px; }
+  .chat .table td.col-num, .chat .table th.col-num { text-align: right; }
+
+  /* ---- 待确认草稿：玻璃 + 轻投影，不用实心白底 ---- */
+  .draft {
+    margin-top: 10px; overflow: hidden;
+    background: var(--glass);
+    -webkit-backdrop-filter: var(--blur);
+    backdrop-filter: var(--blur);
+    border-radius: var(--radius-panel);
+    box-shadow: var(--shadow-soft), var(--rim);
+  }
+  .draft__head { display: flex; align-items: center; gap: 9px; height: 38px; padding: 0 12px; border-bottom: 1px solid var(--line); }
+  .draft__head h2 { font-size: var(--fs-small); font-weight: 600; }
+  .draft__id { font-family: var(--font-mono); font-size: var(--fs-micro); color: var(--ink-3); }
+  .draft__spacer { flex: 1; }
+  .draft__diff {
+    padding: 8px 12px; background: var(--surface-sunken); border-bottom: 1px solid var(--line);
+    font-family: var(--font-mono); font-size: 12px; line-height: 1.5; color: var(--ink-2);
+  }
+  .draft__line { display: flex; gap: 10px; }
+  .draft__sign { width: 8px; color: var(--ink); }
+  .draft__key { color: var(--ink-3); }
+  .draft__foot { display: flex; align-items: center; gap: 8px; padding: 8px 12px; }
+  .draft__note { font-size: var(--fs-micro); color: var(--ink-3); }
+
+  /* ---- 输入区：与对话只用一条发丝线分隔 ---- */
+  .composer { flex: 0 0 auto; padding: 10px 2px 0; border-top: 1px solid var(--line); }
+  .composer__inner { max-width: 760px; }
+  .composer .input {
+    display: block; width: 100%; height: 76px; min-height: 76px;
+    -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur);
+  }
+  .composer__row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .composer__row .grow { flex: 1; }
+  .composer__row .chip { cursor: pointer; }
+  .composer__row .chip:hover { background: var(--surface-strong); color: var(--ink); }
+  .composer__row .btn { flex: 0 0 auto; }
+  .composer__hint { font-size: var(--fs-micro); color: var(--ink-2); white-space: nowrap; }
+
+  /* ---- 历史会话：浮起的玻璃面板 ---- */
+  .history {
+    flex: 0 0 300px; width: 300px; min-height: 0;
+    display: flex; flex-direction: column; overflow: hidden;
+    background: var(--glass);
+    -webkit-backdrop-filter: var(--blur);
+    backdrop-filter: var(--blur);
+    border-radius: var(--radius-panel);
+    box-shadow: var(--shadow-panel), var(--rim);
+  }
+  .history__head { flex: 0 0 46px; display: flex; align-items: center; gap: 8px; padding: 0 12px 0 16px; border-bottom: 1px solid var(--line); }
+  .history__head h2 { font-size: var(--fs-small); font-weight: 600; }
+  .history__count { margin-left: auto; font-size: var(--fs-micro); color: var(--ink-3); }
+  .history__list { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 6px 8px 10px; }
+  .hist__label { padding: 12px 8px 5px; font-size: var(--fs-micro); font-weight: 600; letter-spacing: .1em; color: var(--ink-3); }
+  .hist__item {
+    display: flex; flex-direction: column; gap: 2px; width: 100%;
+    padding: 7px 10px; border: 0; border-radius: var(--radius);
+    background: transparent; color: var(--ink); text-align: left; cursor: pointer;
+  }
+  .hist__item:hover { background: var(--glass-flat); }
+  .hist__item.is-current { background: var(--signal-wash); box-shadow: inset 2px 0 0 var(--signal); }
+  .hist__item.is-current:hover { background: var(--signal-wash); }
+  .hist__title { font-size: var(--fs-small); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hist__meta { font-family: var(--font-mono); font-size: var(--fs-micro); color: var(--ink-3); }
+  .hist__item.is-current .hist__meta { color: var(--ink-2); }
+</style>
+</head>
+<body class="app">
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <g id="i-base" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </defs>
+  <symbol id="i-api" viewBox="0 0 16 16"><path d="M5.5 3 2.5 8l3 5M10.5 3l3 5-3 5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-files" viewBox="0 0 16 16"><path d="M2.5 4.2V3.2h4l1.4 1.4h5.6v8.2h-11z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+  <symbol id="i-variables" viewBox="0 0 16 16"><path d="M3 4.5h3.2M9.8 4.5H13M3 11.5h3.2M9.8 11.5H13M6.6 3 9.4 13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-stats" viewBox="0 0 16 16"><path d="M3 13V8M8 13V3M13 13V6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-logs" viewBox="0 0 16 16"><path d="M3 3.5h10M3 8h10M3 12.5h6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-users" viewBox="0 0 16 16"><circle cx="6" cy="5.5" r="2.3" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M2 13c0-2.2 1.8-3.5 4-3.5s4 1.3 4 3.5M11 4.2a2.2 2.2 0 0 1 0 4.2M11.5 13c0-1.6-.6-2.6-1.5-3.2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-teams" viewBox="0 0 16 16"><rect x="2.5" y="3" width="11" height="10" rx="0.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M2.5 6.5h11M6 6.5V13" fill="none" stroke="currentColor" stroke-width="1.5"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.8v1.6M8 12.6v1.6M1.8 8h1.6M12.6 8h1.6M3.7 3.7l1.1 1.1M11.2 11.2l1.1 1.1M12.3 3.7l-1.1 1.1M4.8 11.2l-1.1 1.1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="m10.2 10.2 3.3 3.3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="8" height="8" rx="0.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 5.5v-3h-8v8h3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+  <symbol id="i-chevron-down" viewBox="0 0 16 16"><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-chevron-right" viewBox="0 0 16 16"><path d="m6 4 4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-external" viewBox="0 0 16 16"><path d="M9.5 2.5h4v4M13.5 2.5 7.5 8.5M12 9.5v3.5H3V4h3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-more" viewBox="0 0 16 16"><path d="M3.5 8h.01M8 8h.01M12.5 8h.01" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 16 16"><path d="M2.5 4h11M6 4V2.5h4V4M4 4l.8 9.5h6.4L12 4M6.5 6.5v5M9.5 6.5v5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 16 16"><path d="m10.5 2.5 3 3-8 8-3.5 1 1-3.5z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+  <symbol id="i-play" viewBox="0 0 16 16"><path d="M5 3.2 12.5 8 5 12.8z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 16 16"><path d="M13 8a5 5 0 1 1-1.6-3.7M13 2.2v3.2H9.8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-check" viewBox="0 0 16 16"><path d="m3 8.5 3.2 3.2L13 5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-close" viewBox="0 0 16 16"><path d="m4 4 8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 16 16"><path d="M8 10.5V2.5M5 5l3-3 3 3M2.5 12.5v1.5h11v-1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-download" viewBox="0 0 16 16"><path d="M8 2.5v8M5 7.5 8 10.5l3-3M2.5 12.5v1.5h11v-1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-code" viewBox="0 0 16 16"><path d="m5 5-3 3 3 3M11 5l3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 4.8V8l2 1.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-filter" viewBox="0 0 16 16"><path d="M2.5 3.5h11L9.5 8.5v4L6.5 14V8.5z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+  <symbol id="i-arrow-right" viewBox="0 0 16 16"><path d="M3 8h10M9.5 4.5 13 8l-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 16 16"><rect x="3.5" y="7" width="9" height="6.5" rx="0.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M5.8 7V5.2a2.2 2.2 0 0 1 4.4 0V7" fill="none" stroke="currentColor" stroke-width="1.5"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 16 16"><path d="M8 2.8 14 13H2z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M8 6.2v3.2M8 11.2h.01" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 16 16"><path d="M8.8 1.8 3.5 9h3.6l-.9 5.2L13 6.5H9.2z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 16 16"><path d="M1.5 8S4 3.8 8 3.8 14.5 8 14.5 8 12 12.2 8 12.2 1.5 8 1.5 8Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="8" cy="8" r="1.9" fill="none" stroke="currentColor" stroke-width="1.5"/></symbol>
+  <symbol id="i-eye-off" viewBox="0 0 16 16"><path d="M1.5 8S4 3.8 8 3.8c1.1 0 2 .3 2.9.8M14.5 8s-2.5 4.2-6.5 4.2c-1.1 0-2-.3-2.9-.8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M2.5 2.5 13.5 13.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-panel" viewBox="0 0 16 16"><rect x="2.5" y="3" width="11" height="10" rx="0.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10 3v10" fill="none" stroke="currentColor" stroke-width="1.5"/></symbol>
+</svg>
+
+<header class="chrome">
+  <div class="brand">
+    <svg class="brand__mark" viewBox="0 0 18 18" aria-hidden="true">
+      <rect x="1" y="1" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <path d="M4 12.5 6.5 5l3 7 2.5-7 2 7.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+    </svg>
+    MockHub
+  </div>
+  <button class="chrome__team" type="button" aria-label="切换团队，当前团队 交易中台">
+    <svg width="14" height="14" aria-hidden="true"><use href="#i-teams"/></svg>
+    <b>交易中台</b>
+    <svg width="12" height="12" aria-hidden="true"><use href="#i-chevron-down"/></svg>
+  </button>
+  <div class="chrome__url">
+    <svg width="13" height="13" aria-hidden="true"><use href="#i-lock"/></svg>
+    <span class="mono">mockhub.local:8080/t/acme</span>
+    <button class="icon-btn" type="button" aria-label="复制 Mock 基地址" data-copy="http://mockhub.local:8080/t/acme">
+      <svg aria-hidden="true"><use href="#i-copy"/></svg>
+    </button>
+  </div>
+  <div class="chrome__spacer"></div>
+  <span class="lamp lamp--live">运行中 · 今日 1,284 次</span>
+  <span class="chrome__sep" aria-hidden="true"></span>
+  <button class="chrome__assist is-on" type="button" aria-label="对话助手（当前页）" aria-current="page">
+    <svg width="14" height="14" aria-hidden="true"><use href="#i-bolt"/></svg>
+    助手
+  </button>
+  <button class="chrome__user" type="button" aria-label="账号菜单，张一鸣 超级管理员">
+    <span class="avatar">张</span>
+    张一鸣
+  </button>
+</header>
+
+<div class="shell">
+<nav class="rail" aria-label="主导航">
+    <div class="rail__group">
+      <div class="rail__label">工作区</div>
+      <a class="rail__item" href="02-api-list.html"><svg aria-hidden="true"><use href="#i-api"/></svg>接口<span class="count">128</span></a>
+      <a class="rail__item" href="#"><svg aria-hidden="true"><use href="#i-files"/></svg>文件服务器</a>
+      <a class="rail__item" href="#"><svg aria-hidden="true"><use href="#i-variables"/></svg>动态变量</a>
+      <a class="rail__item" href="05-stats.html"><svg aria-hidden="true"><use href="#i-stats"/></svg>使用统计</a>
+      <a class="rail__item" href="04-logs.html"><svg aria-hidden="true"><use href="#i-logs"/></svg>日志记录</a>
+    </div>
+    <div class="rail__group">
+      <div class="rail__label">管理</div>
+      <a class="rail__item" href="#"><svg aria-hidden="true"><use href="#i-users"/></svg>账号管理</a>
+      <a class="rail__item" href="07-teams.html"><svg aria-hidden="true"><use href="#i-teams"/></svg>团队管理</a>
+      <a class="rail__item" href="#"><svg aria-hidden="true"><use href="#i-settings"/></svg>全局设置</a>
+    </div>
+    <div class="rail__foot">
+      <b>v1.4.6 · 内网</b>
+      <span>SQLite · 单文件数据</span>
+    </div>
+  </nav>
+
+  <main class="main main--flush settle chat-main">
+    <header class="page-head">
+      <div class="page-head__title">
+        <h1>对话助手</h1>
+        <div class="page-head__meta">
+          <span>交易中台</span>
+          <span class="sep"></span>
+          <span>本会话 <span class="num">4</span> 条</span>
+          <span class="sep"></span>
+          <span class="lamp-ink lamp-ink--warn">1 条草稿未写入</span>
+        </div>
+      </div>
+      <div class="page-head__actions">
+        <button class="btn btn--quiet is-on" type="button" aria-pressed="true">
+          <svg aria-hidden="true"><use href="#i-panel"/></svg>历史
+        </button>
+        <button class="btn btn--primary" type="button">
+          <svg aria-hidden="true"><use href="#i-plus"/></svg>新建会话
+        </button>
+      </div>
+    </header>
+
+    <div class="desk">
+
+      <section class="chat" aria-label="对话">
+        <div class="chat__scroll">
+          <div class="chat__thread">
+
+            <article class="msg msg--you">
+              <div class="msg__meta">
+                <span class="msg__who">你</span>
+                <span class="msg__time">14:12</span>
+              </div>
+              <div class="msg__body">
+                <p>近 7 天调用最多的接口是哪些？</p>
+              </div>
+            </article>
+
+            <article class="msg msg--bot">
+              <div class="msg__meta">
+                <svg class="msg__mark" viewBox="0 0 18 18" aria-hidden="true">
+                  <rect x="1" y="1" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.2"/>
+                  <path d="M4 12.5 6.5 5l3 7 2.5-7 2 7.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+                </svg>
+                <span class="msg__who">MockHub</span>
+                <span class="msg__time">14:12</span>
+              </div>
+              <div class="msg__body">
+                <p>近 7 天共 8,486 次调用，调用最多的 3 个接口合计占 71%。</p>
+
+                <div class="panel">
+                  <table class="table">
+                    <caption class="sr-only">近 7 天调用最多的 3 个接口</caption>
+                    <thead>
+                      <tr>
+                        <th>方法</th>
+                        <th>接口路径</th>
+                        <th>名称</th>
+                        <th class="col-num">7 天调用</th>
+                        <th class="col-num">占比</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><span class="method"><span class="method__lamp"></span>GET</span></td>
+                        <td><span class="path">/api/order/<span class="param">{orderId}</span></span></td>
+                        <td>订单详情</td>
+                        <td class="num">2,884</td>
+                        <td class="num">34%</td>
+                      </tr>
+                      <tr>
+                        <td><span class="method method--write"><span class="method__lamp"></span>POST</span></td>
+                        <td><span class="path">/api/order/create</span></td>
+                        <td>创建订单</td>
+                        <td class="num">1,876</td>
+                        <td class="num">22%</td>
+                      </tr>
+                      <tr>
+                        <td><span class="method"><span class="method__lamp"></span>GET</span></td>
+                        <td><span class="path">/api/payment/callback</span></td>
+                        <td>支付回调</td>
+                        <td class="num">1,309</td>
+                        <td class="num">15%</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <div class="msg__closing">
+                  <p class="conclusion"><b>结论：</b>订单详情缺微信渠道条件，wechat 请求仍落到兜底；草稿尚未生效。</p>
+                  <a class="btn btn--quiet btn--sm" href="02-api-list.html">查看这些接口
+                    <svg aria-hidden="true"><use href="#i-arrow-right"/></svg>
+                  </a>
+                </div>
+              </div>
+            </article>
+
+            <article class="msg msg--you">
+              <div class="msg__meta">
+                <span class="msg__who">你</span>
+                <span class="msg__time">14:31</span>
+              </div>
+              <div class="msg__body">
+                <p>给订单详情补一个微信渠道返回体，条件 <span class="mono">body.channel = wechat</span>。</p>
+              </div>
+            </article>
+
+            <article class="msg msg--bot">
+              <div class="msg__meta">
+                <svg class="msg__mark" viewBox="0 0 18 18" aria-hidden="true">
+                  <rect x="1" y="1" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.2"/>
+                  <path d="M4 12.5 6.5 5l3 7 2.5-7 2 7.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+                </svg>
+                <span class="msg__who">MockHub</span>
+                <span class="msg__time">14:31</span>
+              </div>
+              <div class="msg__body">
+                <p>已生成草稿：新增「微信渠道」返回体，排在兜底之前；确认前 wechat 请求仍走兜底。</p>
+
+                <section class="draft" aria-label="待确认的修改草稿">
+                  <header class="draft__head">
+                    <span class="chip chip--signal">待确认</span>
+                    <h2>将修改 1 个接口</h2>
+                    <span class="draft__id">GET /api/order/{orderId}</span>
+                  </header>
+                  <div class="draft__diff">
+                    <div class="draft__line"><span class="draft__sign">+</span><span>第 4 个返回体 · 微信渠道，置于兜底之前</span></div>
+                    <div class="draft__line"><span class="draft__sign"></span><span class="draft__key">条件</span><span>body.channel = wechat</span></div>
+                  </div>
+                  <footer class="draft__foot">
+                    <span class="draft__note">草稿不会自动写入</span>
+                    <span class="draft__spacer"></span>
+                    <button class="btn btn--sm" type="button">取消</button>
+                    <button class="btn btn--sm btn--primary" type="button">确认修改</button>
+                  </footer>
+                </section>
+              </div>
+            </article>
+
+          </div>
+        </div>
+
+        <footer class="composer">
+          <div class="composer__inner">
+            <label class="sr-only" for="ask">向助手提问或描述要修改的接口</label>
+            <textarea class="input" id="ask" rows="2" placeholder="描述要改的接口，或问一个数据问题"></textarea>
+            <div class="composer__row">
+              <button class="chip" type="button">近 7 天调用最多的接口</button>
+              <button class="chip" type="button">给订单详情加一个微信渠道返回</button>
+              <span class="grow"></span>
+              <span class="composer__hint">AI 结果需人工确认 · 当前团队：交易中台</span>
+              <button class="btn btn--primary" type="button">发送</button>
+            </div>
+          </div>
+        </footer>
+      </section>
+
+      <aside class="history" aria-label="历史会话">
+        <header class="history__head">
+          <h2>历史会话</h2>
+          <span class="history__count">10 个会话</span>
+        </header>
+        <div class="history__list">
+          <div class="hist__label">今天</div>
+          <button class="hist__item is-current" type="button" aria-current="true">
+            <span class="hist__title">补微信渠道返回体</span>
+            <span class="hist__meta">14:31 · 4 条</span>
+          </button>
+          <button class="hist__item" type="button">
+            <span class="hist__title">今日兜底比例</span>
+            <span class="hist__meta">09:40 · 2 条</span>
+          </button>
+          <button class="hist__item" type="button">
+            <span class="hist__title">SOAP 试配失败原因</span>
+            <span class="hist__meta">08:52 · 6 条</span>
+          </button>
+
+          <div class="hist__label">昨天</div>
+          <button class="hist__item" type="button">
+            <span class="hist__title">支付回调 4 个返回体梳理</span>
+            <span class="hist__meta">17:52 · 6 条</span>
+          </button>
+          <button class="hist__item" type="button">
+            <span class="hist__title">DELETE 接口 404 排查</span>
+            <span class="hist__meta">10:06 · 8 条</span>
+          </button>
+          <button class="hist__item" type="button">
+            <span class="hist__title">会员中心接口迁移</span>
+            <span class="hist__meta">08:35 · 3 条</span>
+          </button>
+
+          <div class="hist__label">更早</div>
+          <button class="hist__item" type="button">
+            <span class="hist__title">订单 WSDL 三操作试配</span>
+            <span class="hist__meta">11-01 · 5 条</span>
+          </button>
+          <button class="hist__item" type="button">
+            <span class="hist__title">动态变量命名约定</span>
+            <span class="hist__meta">10-30 · 4 条</span>
+          </button>
+          <button class="hist__item" type="button">
+            <span class="hist__title">批量停用接口</span>
+            <span class="hist__meta">10-28 · 2 条</span>
+          </button>
+          <button class="hist__item" type="button">
+            <span class="hist__title">x-mock-sandbox 条件写法</span>
+            <span class="hist__meta">10-26 · 3 条</span>
+          </button>
+        </div>
+      </aside>
+
+    </div>
+  </main>
+</div>
+
+<script src="assets/desk.js"></script>
+</body>
+</html>

@@ -1,0 +1,36 @@
+[
+  {
+    "id": "pilot-dock",
+    "title": "接口 · 工作台 · MockHub",
+    "width": 1440,
+    "height": 900,
+    "docOverflow": false,
+    "overflowPx": 0,
+    "docVertical": false,
+    "verticalPx": 0,
+    "clipped": [],
+    "external": [],
+    "smallText": [],
+    "lowContrast": [],
+    "unnamed": [],
+    "deadLinks": [
+      "dock__item is-active",
+      "dock__item",
+      "dock__item",
+      "dock__item",
+      "dock__item"
+    ],
+    "tall": [],
+    "material": {
+      "shadows": 23,
+      "gradients": 8,
+      "blurs": 9
+    },
+    "counts": {
+      "nodes": 296,
+      "text": 137
+    },
+    "exceptions": [],
+    "resourceErrors": []
+  }
+]

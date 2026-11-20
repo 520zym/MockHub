@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440, initial-scale=1">
+<title>画板总览 · MockHub 液态玻璃</title>
+<link rel="stylesheet" href="assets/desk.css">
+<style>
+  /* 本页只负责排布：沿用 token，不新增颜色/圆角/阴影/渐变。 */
+  .ov-main { padding: 26px var(--content-pad) 40px; }
+  .ov-lead { margin: 18px 0 4px; max-width: 78ch; font-size: var(--fs-body); line-height: 1.72; color: var(--ink-2); }
+  .ov-lead b { font-weight: 600; color: var(--ink); }
+  .ov-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; font-size: var(--fs-micro); color: var(--ink-3); }
+  .ov-meta .sep { width: 1px; height: 11px; background: var(--line-strong); }
+  .grp { padding: 22px 0 6px; border-top: 1px solid var(--line); margin-top: 22px; }
+  .grp:first-of-type { border-top: 0; }
+  .boards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 30px 26px; margin-top: 14px; }
+  .board { min-width: 0; }
+  .board__shot { display: block; border-radius: 16px; overflow: hidden; background: rgba(255,255,255,.6); box-shadow: 0 24px 60px -40px rgba(17,30,54,.5), 0 0 0 1px rgba(255,255,255,.6); transition: transform .2s ease, box-shadow .2s ease; }
+  .board__shot:hover { transform: translateY(-2px); box-shadow: 0 30px 70px -40px rgba(17,30,54,.6), 0 0 0 1px rgba(255,255,255,.85); }
+  .board__shot img { display: block; width: 100%; height: auto; }
+  .board__head { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+  .board__head h2 { font-size: var(--fs-lead); font-weight: 600; letter-spacing: -.01em; }
+  .board__head .spacer { flex: 1; }
+  .board__desc { margin-top: 5px; font-size: var(--fs-caption); line-height: 1.65; color: var(--ink-2); }
+  .board__note { margin-top: 3px; font-size: var(--fs-micro); color: var(--ink-3); }
+  .ov-foot { margin-top: 34px; padding-top: 18px; border-top: 1px solid var(--line); display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 28px; }
+  .ov-foot h2 { font-size: var(--fs-small); font-weight: 600; margin-bottom: 8px; }
+  .ov-foot p { font-size: var(--fs-caption); line-height: 1.7; color: var(--ink-2); }
+  .ov-foot p + p { margin-top: 6px; }
+  .ov-foot .code { margin-top: 8px; }
+  .ov-foot .code pre { padding: 10px 12px; font-size: 11.5px; }
+  @media (max-width: 1100px) { .boards { grid-template-columns: minmax(0, 1fr); } .ov-foot { grid-template-columns: minmax(0, 1fr); } }
+</style>
+</head>
+<body class="app">
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-api" viewBox="0 0 16 16"><path d="M5.5 3 2.5 8l3 5M10.5 3l3 5-3 5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-chevron-right" viewBox="0 0 16 16"><path d="m6 4 4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 16 16"><rect x="3.5" y="7" width="9" height="6.5" rx="0.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M5.8 7V5.2a2.2 2.2 0 0 1 4.4 0V7" fill="none" stroke="currentColor" stroke-width="1.5"/></symbol>
+</svg>
+
+<header class="chrome">
+  <div class="brand">
+    <svg class="brand__mark" viewBox="0 0 18 18" aria-hidden="true">
+      <rect x="1" y="1" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <path d="M4 12.5 6.5 5l3 7 2.5-7 2 7.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+    </svg>
+    MockHub
+  </div>
+  <span class="chip chip--code">重设计提案</span>
+  <div class="chrome__spacer"></div>
+  <span class="lamp lamp--idle">7 张画板 · 1440×900 · 2×</span>
+  <span class="chrome__sep" aria-hidden="true"></span>
+  <a class="chrome__user" href="../../README.md" aria-label="返回仓库说明">液态玻璃提案</a>
+</header>
+
+<main class="main settle ov-main">
+  <header class="page-head">
+    <div class="page-head__title">
+      <h1>画板总览</h1>
+      <div class="page-head__meta">
+        <span>7 张画板</span><span class="sep"></span><span>静态离线设计稿</span><span class="sep"></span><span>未修改业务前端</span>
+      </div>
+    </div>
+    <div class="page-head__actions">
+      <a class="btn" href="BRIEFS.md">页面简报</a>
+      <a class="btn" href="AUDIT.md">现状审查</a>
+      <a class="btn btn--primary" href="02-api-list.html">从接口管理开始</a>
+    </div>
+  </header>
+
+  <p class="ov-lead"><b>把 MockHub 从「一叠边框卡片的平铺后台」改成一层浮起来的玻璃工作台</b>：冷调渐变网格做底，状态条、侧栏、表格都取同一套玻璃配方——半透明、30px 背景模糊、1px 顶部高光、22px 圆角、大而软的投影；蓝色只表示「当前 / 进行中」，红色只表示破坏性。</p>
+  <div class="ov-meta">
+    <span>结构依据 pbakaus/impeccable 的判据，材质按你的偏好改为液态玻璃</span><span class="sep"></span>
+    <span>唯一样式系统 assets/desk.css</span><span class="sep"></span>
+    <span>截图由本机 Chromium 渲染，非生成图</span><span class="sep"></span><span>助手是全局入口（页头右侧），06 为它的完整状态</span>
+  </div>
+
+    <section class="grp">
+      <div class="section__label">入口<span class="spacer"></span><span class="mono" style="font-size:11px;letter-spacing:0;color:var(--ink-3)">1 张</span></div>
+      <div class="boards">
+        <article class="board">
+          <a class="board__shot" href="01-login.html" aria-label="打开 登录 画板">
+            <img src="screens/01-login.png" alt="登录画板截图" width="2880" height="1800">
+          </a>
+          <div class="board__head">
+            <h2>登录</h2>
+            <span class="chip chip--code">/login</span>
+            <span class="spacer"></span>
+            <a class="btn btn--sm" href="01-login.html">HTML</a>
+            <a class="btn btn--sm" href="screens/01-login.png">PNG</a>
+          </div>
+          <p class="board__desc">内网账号登录 · 产品事实与表单同屏，首次改密状态可见</p>
+          <p class="board__note"><span class="mono">网格底 + 浮起玻璃登录卡 + 深色样例</span></p>
+        </article>
+      </div>
+    </section>
+
+    <section class="grp">
+      <div class="section__label">工作区<span class="spacer"></span><span class="mono" style="font-size:11px;letter-spacing:0;color:var(--ink-3)">5 张</span></div>
+      <div class="boards">
+        <article class="board">
+          <a class="board__shot" href="02-api-list.html" aria-label="打开 接口管理 画板">
+            <img src="screens/02-api-list.png" alt="接口管理画板截图" width="2880" height="1800">
+          </a>
+          <div class="board__head">
+            <h2>接口管理</h2>
+            <span class="chip chip--code">/apis</span>
+            <span class="spacer"></span>
+            <a class="btn btn--sm" href="02-api-list.html">HTML</a>
+            <a class="btn btn--sm" href="screens/02-api-list.png">PNG</a>
+          </div>
+          <p class="board__desc">主屏：7 列接口表 + 400px 玻璃检视器</p>
+          <p class="board__note"><span class="mono">方法灯、路径参数高亮、选中行常驻检视</span></p>
+        </article>
+        <article class="board">
+          <a class="board__shot" href="03-api-edit.html" aria-label="打开 接口编辑 画板">
+            <img src="screens/03-api-edit.png" alt="接口编辑画板截图" width="2880" height="1800">
+          </a>
+          <div class="board__head">
+            <h2>接口编辑</h2>
+            <span class="chip chip--code">/apis/:id/edit</span>
+            <span class="spacer"></span>
+            <a class="btn btn--sm" href="03-api-edit.html">HTML</a>
+            <a class="btn btn--sm" href="screens/03-api-edit.png">PNG</a>
+          </div>
+          <p class="board__desc">返回体工作区：变体与条件摘要、JSON 编辑器、试配同屏</p>
+          <p class="board__note"><span class="mono">基础信息 236 / 返回体 / 试配 320 三栏</span></p>
+        </article>
+        <article class="board">
+          <a class="board__shot" href="04-logs.html" aria-label="打开 请求日志 画板">
+            <img src="screens/04-logs.png" alt="请求日志画板截图" width="2880" height="1800">
+          </a>
+          <div class="board__head">
+            <h2>请求日志</h2>
+            <span class="chip chip--code">/logs/request</span>
+            <span class="spacer"></span>
+            <a class="btn btn--sm" href="04-logs.html">HTML</a>
+            <a class="btn btn--sm" href="screens/04-logs.png">PNG</a>
+          </div>
+          <p class="board__desc">主从对照：请求、响应、命中链路三态检视</p>
+          <p class="board__note"><span class="mono">列表 520 常驻，不离开列表就能排障</span></p>
+        </article>
+        <article class="board">
+          <a class="board__shot" href="05-stats.html" aria-label="打开 使用统计 画板">
+            <img src="screens/05-stats.png" alt="使用统计画板截图" width="2880" height="1800">
+          </a>
+          <div class="board__head">
+            <h2>使用统计</h2>
+            <span class="chip chip--code">/stats</span>
+            <span class="spacer"></span>
+            <a class="btn btn--sm" href="05-stats.html">HTML</a>
+            <a class="btn btn--sm" href="screens/05-stats.png">PNG</a>
+          </div>
+          <p class="board__desc">读数行替代指标卡：14 天曲线 + 调用最多 / 闲置接口</p>
+          <p class="board__note"><span class="mono">单条蓝色折线，红色小柱表示失败</span></p>
+        </article>
+        <article class="board">
+          <a class="board__shot" href="06-assistant.html" aria-label="打开 对话助手 画板">
+            <img src="screens/06-assistant.png" alt="对话助手画板截图" width="2880" height="1800">
+          </a>
+          <div class="board__head">
+            <h2>对话助手</h2>
+            <span class="chip chip--code">全局助手</span>
+            <span class="spacer"></span>
+            <a class="btn btn--sm" href="06-assistant.html">HTML</a>
+            <a class="btn btn--sm" href="screens/06-assistant.png">PNG</a>
+          </div>
+          <p class="board__desc">问答与数据回答，写操作固定为待确认草稿 · 助手为全局入口，任何页面可从页头唤起</p>
+          <p class="board__note"><span class="mono">无气泡：左侧竖线 + 标签区分说话人</span></p>
+        </article>
+      </div>
+    </section>
+
+    <section class="grp">
+      <div class="section__label">管理<span class="spacer"></span><span class="mono" style="font-size:11px;letter-spacing:0;color:var(--ink-3)">1 张</span></div>
+      <div class="boards">
+        <article class="board">
+          <a class="board__shot" href="07-teams.html" aria-label="打开 团队与成员 画板">
+            <img src="screens/07-teams.png" alt="团队与成员画板截图" width="2880" height="1800">
+          </a>
+          <div class="board__head">
+            <h2>团队与成员</h2>
+            <span class="chip chip--code">/teams</span>
+            <span class="spacer"></span>
+            <a class="btn btn--sm" href="07-teams.html">HTML</a>
+            <a class="btn btn--sm" href="screens/07-teams.png">PNG</a>
+          </div>
+          <p class="board__desc">团队列表、成员角色与团队设置，权限一眼可辨</p>
+          <p class="board__note"><span class="mono">超管 / 团队管理员 / 成员用 chip 区分</span></p>
+        </article>
+      </div>
+    </section>
+
+  <footer class="ov-foot">
+    <div>
+      <h2>重新生成</h2>
+      <p>在 <span class="mono">design/impeccable-redesign</span> 下执行；需要本机 Chromium（默认读 playwright 的 chrome-headless-shell，可用 <span class="mono">CHROME=</span> 覆盖）。</p>
+      <div class="code"><pre><span class="punct">#</span> 全部画板：截图 + 客观审查
+<span class="key">node</span> build/render.mjs
+
+<span class="punct">#</span> 单页只审查，不出图
+<span class="key">node</span> build/render.mjs 02-api-list --check</pre></div>
+      <p style="margin-top:8px">审查覆盖：横向/纵向溢出、裁切、正文对比度 &lt; 4.5:1（玻璃按合成背景计算）、&lt; 11px 字号、未命名控件、外部资源、脚本异常；阴影 / 渐变 / 模糊作为材质统计，仅记录不判失败。结果写入 <span class="mono">build/audit.json</span>。</p>
+    </div>
+    <div>
+      <h2>边界</h2>
+      <p>静态设计稿 + 本地状态演示：不连接后端、不保存配置、不写真实数据；账号、计数、Token、日志均为演示数据。</p>
+      <p>只承诺 1440×900 桌面与 1280 以上窄化，未开发移动端；字体沿用系统字体栈（离线单 jar，不能引 CDN 字体）。</p>
+      <p>产品事实仍以 <span class="mono">BRIEFS.md</span> 为准：权限模型、团队隔离、多返回体与条件语义、Monaco 与 5–6MB 大文本、日志保留策略都不因重设计而改变。</p>
+    </div>
+  </footer>
+</main>
+
+<script src="assets/desk.js"></script>
+</body>
+</html>
