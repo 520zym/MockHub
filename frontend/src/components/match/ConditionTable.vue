@@ -104,8 +104,8 @@ function onOperatorChange(c) { if (!props.readOnly) changeOperator(conditions.va
 .delete-row { border: 0; border-radius: 6px; background: transparent; color: var(--app-text-secondary); cursor: pointer; font-size: 21px; padding: 0; width: 28px; height: 36px; }
 .delete-row:hover { color: var(--app-text-danger); background: var(--app-bg-control); }
 .condition-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-.add-row { min-height: 34px; border: 0; border-radius: 7px; background: var(--app-bg-selected); color: var(--app-text-accent); padding: 0 12px; font: inherit; font-size: 13px; cursor: pointer; }
-.add-row:hover { background: var(--app-bg-hover); }
+.add-row { min-height: 34px; border: 0; border-radius: 7px; background: transparent; color: var(--app-text-accent); padding: 0 10px; font: inherit; font-size: 13px; cursor: pointer; }
+.add-row:hover { background: var(--app-bg-control); }
 .add-row:disabled { cursor: not-allowed; color: var(--app-text-disabled); }
 .value-na { display: flex; align-items: center; min-height: 36px; color: var(--app-text-secondary); font-size: 12px; }
 @container (max-width: 610px) {

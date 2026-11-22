@@ -62,7 +62,7 @@ try {
     return { ratio: (Math.max(a,b)+.05)/(Math.min(a,b)+.05), opacity: style.opacity, background: style.backgroundColor, otherBackground: getComputedStyle(document.querySelector('.tab-item:not(.active)')).backgroundColor }
   })()`)
   check('inactive selected response uses a strong distinct fill with AA text contrast', selectedStyle.ratio >= 4.5 && selectedStyle.opacity === '1' && selectedStyle.background !== selectedStyle.otherBackground)
-  check('only the selected response says currently editing', await browser.evaluate('document.querySelectorAll(".tab-current").length===1 && document.querySelector(".tab-item.active .tab-current").textContent.includes("正在编辑") && document.querySelector(".tab-item.active").getAttribute("aria-pressed")==="true"'))
+  check('only the selected response is exposed as pressed', await browser.evaluate('document.querySelectorAll(".tab-item.active").length===1 && document.querySelector(".tab-item.active").getAttribute("aria-pressed")==="true" && [...document.querySelectorAll(".tab-item")].filter(e=>e.getAttribute("aria-pressed")==="true").length===1'))
   check('selection never enables a disabled response', await browser.evaluate('document.querySelector(".response-enable-row").textContent.includes("未启用") && !document.querySelector(".response-enable-row input").checked'))
   await snap('selected-inactive', 1440)
   const selectionClip = await browser.evaluate('(()=>{const top=document.querySelector(".response-mode-bar").getBoundingClientRect(),bottom=document.querySelector(".response-enable-row").getBoundingClientRect();return{x:Math.max(0,top.x-8),y:Math.max(0,top.y-8),width:top.width+16,height:bottom.bottom-top.top+16,scale:1}})()')
@@ -73,7 +73,7 @@ try {
   await browser.screenshot(path.join(output, 'selected-inactive-375.png'), 375, 812)
   check('selected editing target remains fully visible on mobile', await browser.evaluate('(()=>{const r=document.querySelector(".tab-item.active").getBoundingClientRect(),s=document.querySelector(".tabs-header").getBoundingClientRect();return r.left>=s.left-1&&r.right<=s.right+1})()'))
   await browser.cdp('Emulation.setDeviceMetricsOverride', { width: 1440, height: 950, deviceScaleFactor: 1, mobile: false }); await pointer('.tabs-header .tab-item:first-of-type')
-  check('switching tabs moves the editing marker to the new response', await browser.evaluate('document.querySelector(".tab-item.active .tab-name").textContent.trim()==="支付成功" && document.querySelectorAll(".tab-current").length===1'))
+  check('switching tabs moves the pressed state to the new response', await browser.evaluate('document.querySelector(".tab-item.active .tab-name").textContent.trim()==="支付成功" && [...document.querySelectorAll(".tab-item")].filter(e=>e.getAttribute("aria-pressed")==="true").length===1'))
   check('default has no sample editor, duplicated heading or long instructions', await browser.evaluate('!document.querySelector(".sample-card,.eyebrow,.local-note,.match-help") && !!document.querySelector(".from-request")'))
   const initialHeight = await browser.evaluate('Math.round(document.querySelector(".conditions-workspace").getBoundingClientRect().height)')
   check('one-condition editor stays compact', initialHeight < 240)

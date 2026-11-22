@@ -376,6 +376,21 @@
   }
 }
 
+// The API detail dialog opts into `align-center`, whose `margin: auto` is beaten by the
+// viewport-fit rule above (it pins every non-fullscreen dialog toward the top). Restore
+// centring for this dialog only; long content keeps scrolling inside the body.
+.el-dialog.api-detail-dialog {
+  margin: auto;
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
+
+  .el-dialog__body {
+    max-height: calc(100vh - 240px);
+    max-height: calc(100dvh - 240px);
+    overflow: auto;
+  }
+}
+
 .el-drawer {
   max-width: 100vw;
   max-height: 100vh;

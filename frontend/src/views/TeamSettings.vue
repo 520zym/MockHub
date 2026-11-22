@@ -2,7 +2,7 @@
   <div class="team-settings">
     <header class="page-heading"><div><div class="title-row"><h1>团队设置</h1><span v-if="team" class="identifier">{{ team.identifier }}</span></div></div><span v-if="team" class="badge blue">{{ identityLabel }}</span></header>
     <div v-if="error" class="notice error" role="alert">{{ error }}<button class="text-button" @click="reload">重新加载</button></div>
-    <div v-if="!team" class="empty panel"><FilledIcon name="team" :size="32" /><h2>尚未选择团队</h2><p>从侧栏选择团队后查看团队信息和成员。</p><button class="button" @click="reload">刷新团队</button></div>
+    <div v-if="!team" class="empty panel"><FilledIcon name="team" :size="32" /><h2>尚未选择团队</h2><p>请在侧栏选择团队。</p><button class="button" @click="reload">刷新团队</button></div>
     <template v-else>
       <div v-if="archived || maintenance" class="notice"><FilledIcon name="shield" :size="18" /><span v-if="archived"><b>团队已归档</b> · 管理写入已冻结，请联系超级管理员恢复。</span><span v-else-if="maintenance"><b>系统维护身份</b> · 以超级管理员权限维护，非团队成员。</span></div>
       <div class="content-grid">

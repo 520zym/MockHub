@@ -8,8 +8,8 @@ const routes = [
     { path: '', redirect: '/apis' },
     { path: 'apis', name: 'ApiList', component: () => import('@/views/ApiList.vue'), meta: { title: '接口管理', teamRequired: true } },
     { path: 'apis/trash', name: 'ApiTrash', component: () => import('@/views/ApiTrash.vue'), meta: { title: '接口回收站', teamRequired: true } },
-    { path: 'apis/new', name: 'ApiNew', component: () => import('@/views/ApiEdit.vue'), meta: { title: '新建接口', teamRequired: true, requiresTeamWrite: true } },
-    { path: 'apis/:id/edit', name: 'ApiEdit', component: () => import('@/views/ApiEdit.vue'), meta: { title: '接口详情', teamRequired: true } },
+    { path: 'apis/new', name: 'ApiNew', component: () => import('@/views/ApiEdit.vue'), meta: { title: '新建接口', teamRequired: true, requiresTeamWrite: true, immersive: true } },
+    { path: 'apis/:id/edit', name: 'ApiEdit', component: () => import('@/views/ApiEdit.vue'), meta: { title: '接口详情', teamRequired: true, immersive: true } },
     { path: 'team', name: 'TeamSettings', component: () => import('@/views/TeamSettings.vue'), meta: { title: '团队设置', teamRequired: true } },
     { path: 'teams', name: 'TeamManage', component: () => import('@/views/TeamManage.vue'), meta: { title: '团队管理', requiresSuperAdmin: true } },
     { path: 'users', name: 'UserManage', component: () => import('@/views/UserManage.vue'), meta: { title: '账号管理', requiresSuperAdmin: true } },
@@ -27,6 +27,18 @@ const routes = [
   ] }
 ]
 const router = createRouter({ history: createWebHashHistory(), routes })
+// 换包后旧标签页里未加载过的路由会请求已被删除的 hash chunk，表现为点菜单没反应/白屏。
+// 入口与资源均为 no-store，整页刷新即可拿到新入口；自动刷新一次，10 秒冷却防止循环。
+const CHUNK_LOAD_ERROR = /Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module/i
+function recoverFromStaleChunk() {
+  try {
+    const key = 'mockhub:chunk-reload-at', last = Number(sessionStorage.getItem(key) || 0)
+    if (Date.now() - last < 10000) return
+    sessionStorage.setItem(key, String(Date.now()))
+  } catch { /* 存储不可用（如隐私模式）时仍然刷新一次 */ }
+  window.location.reload()
+}
+router.onError(error => { if (CHUNK_LOAD_ERROR.test(String(error?.message || error))) recoverFromStaleChunk() })
 router.beforeEach(async to => {
   const user = useUserStore(), app = useAppStore(), token = localStorage.getItem('token')
   if (!token && user.token) user.clearSession()

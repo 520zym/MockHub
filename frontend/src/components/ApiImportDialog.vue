@@ -3,7 +3,7 @@
     <p class="import-scope">目标团队：<b>{{ teamName }}</b></p>
     <template v-if="!result">
       <div class="import-file" @dragover.prevent @drop.prevent="handleDrop"><FilledIcon name="files" :size="30" /><div><b>{{ file?.name || '选择或拖入 JSON / ZIP 导入包' }}</b><span>{{ file ? formatSize(file.size) : '支持 JSON 与完整 ZIP；响应文件或 WSDL 迁移请使用完整 ZIP，最多 100 MB' }}</span></div><label class="import-choose">选择文件<input ref="fileInput" type="file" accept=".json,.zip,application/json,application/zip" :disabled="submitting || previewing" aria-label="选择导入文件" @change="selectFile($event.target.files?.[0])" /></label></div>
-      <fieldset class="import-modes"><legend>导入模式</legend><el-radio-group v-model="mode" :disabled="submitting || previewing" @change="invalidatePreview"><el-radio value="merge">合并：同路径与方法跳过</el-radio><el-radio value="override" :disabled="!canOverride">覆盖：仅覆盖同路由接口</el-radio></el-radio-group><p>覆盖不会清空整个团队。仅团队管理员或系统维护身份可以覆盖导入。</p></fieldset>
+      <fieldset class="import-modes"><legend>导入模式</legend><el-radio-group v-model="mode" :disabled="submitting || previewing" @change="invalidatePreview"><el-radio value="merge">合并：同路径与方法跳过</el-radio><el-radio value="override" :disabled="!canOverride">覆盖：仅覆盖同路由接口</el-radio></el-radio-group><p>覆盖不会清空整个团队，只影响同路由接口。</p></fieldset>
       <div v-if="error" class="import-feedback import-feedback--error" role="alert">{{ error }}</div>
       <div v-if="versionConflict" class="import-feedback import-feedback--warning" role="alert">目标版本已变化，导入文件仍保留。请重新预览并确认。</div>
       <div v-if="preview" class="import-preview">

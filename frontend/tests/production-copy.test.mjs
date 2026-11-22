@@ -15,7 +15,7 @@ test('response editor has explicit section names, not numbered process metaphors
   const body = await template('components/ResponseTabs.vue'), rules = await template('components/match/ConditionPanel.vue')
   assert.ok(body.includes('<h4>返回内容</h4>')); assert.ok(rules.includes('<strong>匹配条件</strong>'))
   for (const source of [body, rules]) for (const removed of ['body-section-step', 'section-step', '何时返回', '返回什么']) assert.ok(!source.includes(removed), removed)
-  assert.ok(body.includes('tab-current')); assert.ok(rules.includes('<MatchGuide'))
+  assert.ok(body.includes('aria-pressed')); assert.ok(rules.includes('<MatchGuide'))
 })
 
 test('routine page headers do not teach permissions or advertise implementation boundaries', async () => {

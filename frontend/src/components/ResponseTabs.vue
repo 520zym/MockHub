@@ -4,16 +4,32 @@
       <span class="response-readonly">只读查看</span>
       <el-button v-if="currentResponse && !isCurrentFileResponse" text @click="openFullEditor">全文查看</el-button>
     </div>
-    <div class="response-mode-bar">
-      <span class="response-mode-label">返回体选择方式</span>
-      <el-radio-group :model-value="normalizedSelectionMode" :disabled="readOnly" size="small" @change="changeSelectionMode">
-        <el-radio-button value="CONDITION">按条件匹配</el-radio-button>
-        <el-radio-button value="RANDOM">等概率随机</el-radio-button>
-      </el-radio-group>
-      <button type="button" class="match-guide-entry" @click="matchGuideVisible = true">图解用法 <span aria-hidden="true">↗</span></button>
+
+    <!-- 返回体区头：集合标题/数量 + 选择方式 + 新增/删除，合并原来四条零散工具行 -->
+    <div class="response-head">
+      <div class="response-head__title">
+        <h4>返回体</h4>
+        <span class="response-head__count">{{ responses.length }}</span>
+      </div>
+      <div class="response-mode-bar">
+        <span class="response-mode-label">选择方式</span>
+        <el-radio-group :model-value="normalizedSelectionMode" :disabled="readOnly" size="small" @change="changeSelectionMode">
+          <el-radio-button value="CONDITION">按条件匹配</el-radio-button>
+          <el-radio-button value="RANDOM">等概率随机</el-radio-button>
+        </el-radio-group>
+        <button type="button" class="match-guide-entry" @click="matchGuideVisible = true">图解用法 <span aria-hidden="true">↗</span></button>
+      </div>
+      <div v-if="!readOnly" class="response-head__actions">
+        <el-button class="tab-add" type="primary" @click="addResponse">
+          <el-icon><Plus /></el-icon>
+          新增返回体
+        </el-button>
+      </div>
     </div>
-    <!-- Tab 栏 -->
-    <div ref="tabsHeader" class="tabs-header">
+
+    <!-- Tab 栏 + 当前返回体启用状态 -->
+    <div class="response-tabbar">
+      <div ref="tabsHeader" class="tabs-header">
       <div
         v-for="(resp, idx) in responses"
         :key="idx"
@@ -26,11 +42,7 @@
         @keydown.enter="activeIndex = idx" @keydown.space.prevent="activeIndex = idx"
         @click="activeIndex = idx"
       >
-        <!-- 启用/禁用指示点：启用=绿，禁用=灰 -->
-        <span class="active-dot" :class="{ on: resp.isActive, off: !resp.isActive }"></span>
-        <!-- 序号角标 -->
-        <span class="tab-index">{{ ['①','②','③','④','⑤','⑥','⑦','⑧','⑨'][idx] || (idx + 1) }}</span>
-        <!-- 兜底 Tab ⭐ 标记（派生：启用且无规则，且总启用数>=2） -->
+        <!-- 兜底标记：其他条件都不命中时返回这条 -->
         <el-tooltip
           v-if="isFallbackTab(idx)"
           effect="dark"
@@ -42,7 +54,6 @@
         <span v-if="editingTabIndex !== idx" class="tab-name" :title="resp.name || 'Response ' + (idx + 1)" @dblclick="startEditTabName(idx)">
           {{ resp.name || 'Response ' + (idx + 1) }}
         </span>
-        <span v-if="activeIndex === idx" class="tab-current"><span aria-hidden="true">✓</span> {{ readOnly ? '正在查看' : '正在编辑' }}</span>
         <span class="tab-status">{{ resp.responseCode || 200 }}</span>
         <span v-if="conditionCount(resp.conditions) > 0" class="tab-cond">{{ conditionCount(resp.conditions) }} 条件</span>
         <span v-if="editingTabIndex !== idx && !resp.isActive" class="disabled-badge">未启用</span>
@@ -55,15 +66,27 @@
           @keyup.enter="editingTabIndex = -1"
           autofocus
         />
+        <button
+          v-if="!readOnly"
+          type="button"
+          class="tab-remove"
+          :disabled="responses.length <= 1"
+          :aria-label="'删除返回体 ' + (resp.name || 'Response ' + (idx + 1))"
+          :title="responses.length <= 1 ? '至少保留一个返回体' : '删除此返回体'"
+          @click.stop="removeResponse(idx)"
+        >
+          <el-icon><Close /></el-icon>
+        </button>
       </div>
-      <button v-if="!readOnly" type="button" class="tab-add" @click="addResponse" aria-label="添加返回体" title="添加返回体">
-        <el-icon><Plus /></el-icon><span>新增返回体</span>
-      </button>
+      </div>
+      <div v-if="currentResponse" class="response-enable-row">
+        <el-switch :model-value="currentResponse.isActive" :disabled="readOnly" aria-label="启用此返回体" @change="toggleEnabled(activeIndex)" />
+        <span>{{ currentResponse.isActive ? '已启用' : '未启用' }}</span>
+      </div>
     </div>
 
     <!-- 当前 Tab 内容 -->
     <div v-if="currentResponse" class="tab-content">
-      <div class="response-enable-row"><el-switch :model-value="currentResponse.isActive" :disabled="readOnly" aria-label="启用此返回体" @change="toggleEnabled(activeIndex)" /><span>{{ currentResponse.isActive ? '已启用' : '未启用 · 不参与返回' }}</span></div>
       <p v-if="selectionIssue" class="response-selection-warning" role="status">{{ selectionIssue }}</p>
       <!-- 响应规则面板：REST 按接口匹配，SOAP 按当前 operation 独立匹配 -->
       <!-- v-show keeps the local request samples alive when the team toggles the selection mode. -->
@@ -108,20 +131,21 @@
               />
             </el-form-item>
           </el-col>
-          <!-- Content-Type（REST 显示，SOAP 隐藏） -->
+          <!-- Content-Type（REST 显示，SOAP 隐藏）：单一控件，与同行输入框等高 -->
           <el-col :span="8" v-if="!operationName">
-            <el-form-item label="Content-Type">
-              <div class="content-type-bar">
-                <span class="content-type-auto">
-                  自动识别：{{ detectedContentType }}
-                  <el-icon v-if="detectedContentType !== '未知'" class="check-icon"><Check /></el-icon>
+            <el-form-item>
+              <template #label>
+                <span class="field-label">Content-Type
+                  <el-tooltip content="根据返回体内容自动识别，也可以手动指定" placement="top">
+                    <el-icon class="field-label__hint"><InfoFilled /></el-icon>
+                  </el-tooltip>
                 </span>
-                <el-radio-group v-model="manualContentType" size="small">
-                  <el-radio-button value="json">JSON</el-radio-button>
-                  <el-radio-button value="xml">XML</el-radio-button>
-                  <el-radio-button value="text">Text</el-radio-button>
-                </el-radio-group>
-              </div>
+              </template>
+              <el-radio-group v-model="manualContentType" class="content-type-group">
+                <el-radio-button value="json">JSON</el-radio-button>
+                <el-radio-button value="xml">XML</el-radio-button>
+                <el-radio-button value="text">Text</el-radio-button>
+              </el-radio-group>
             </el-form-item>
           </el-col>
           <!-- 延迟 -->
@@ -178,7 +202,7 @@
                 <el-icon style="margin-left: 2px"><ArrowDown /></el-icon>
               </el-button>
             </template>
-            <div class="dynamic-var-header">动态变量（点击插入）</div>
+            <div class="dynamic-var-header">动态变量</div>
             <el-input
               v-model="variableSearchKeyword"
               size="small"
@@ -224,9 +248,6 @@
               class="dynamic-var-empty"
             >
               无匹配变量
-            </div>
-            <div class="dynamic-var-tip">
-              提示：在编辑器中输入 <code>{{ '{{' }}</code> 也会弹出补全建议
             </div>
           </el-popover>
           <el-button
@@ -365,19 +386,6 @@
         @insert="handleAiInsert"
       />
 
-      <!-- 底部操作栏 -->
-      <div v-if="!readOnly" class="tab-actions">
-        <el-button
-          type="danger"
-          size="small"
-          plain
-          :disabled="responses.length <= 1"
-          @click="removeResponse(activeIndex)"
-        >
-          <el-icon><Delete /></el-icon>
-          删除此返回体
-        </el-button>
-      </div>
     </div>
     <MatchGuide v-model="matchGuideVisible" :mode="normalizedSelectionMode" :body-sample-kind="operationName ? 'xml' : 'json'" />
   </div>
@@ -393,7 +401,7 @@
  */
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import {
-  Plus, Check, MagicStick, Upload, Delete, ArrowDown, Search,
+  Plus, Close, InfoFilled, MagicStick, Upload, ArrowDown, Search,
   StarFilled, WarningFilled, EditPen
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
@@ -465,8 +473,8 @@ const selectionIssue = computed(() => {
   if (!enabled.length) return '请至少启用一份返回体。'
   if (normalizedSelectionMode.value === 'RANDOM' || enabled.length === 1) return ''
   const defaults = enabled.filter(r => isEmptyConditions(r.conditions)).length
-  if (!defaults) return '还缺一份兜底：为一份启用的返回体留空条件。'
-  return defaults > 1 ? '有 ' + defaults + ' 份无条件返回体：只留一份兜底，其余添加条件。' : ''
+  if (!defaults) return '启用的返回体都设置了匹配条件；请求都不命中时将没有内容可返回。请留一份不设条件的返回体作为默认返回。'
+  return defaults > 1 ? '有 ' + defaults + ' 份启用的返回体没有设置匹配条件，但只有一份能作为默认返回。请给其中 ' + (defaults - 1) + ' 份补充条件，或停用不需要的。' : ''
 })
 
 function changeSelectionMode(mode) {
@@ -1050,30 +1058,51 @@ async function handleUploadFile(uploadFile) {
 </script>
 
 <style scoped>
-.response-tabs { min-width: 0; display: grid; gap: 15px; }
+.response-tabs { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 15px; }
 .response-view-bar { display: flex; justify-content: flex-end; align-items: center; gap: 10px; min-width: 0; }
 .response-readonly { color: var(--app-text-secondary); font-size: 12px; }
 .response-mode-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; min-width: 0; }
-.response-mode-bar label, .content-type-bar label { display: inline-flex; align-items: center; min-height: 28px; }
-.content-type-bar :deep(.el-radio) { min-height: 28px; display: inline-flex; align-items: center; }
+/* Content-Type：一行文字标签 + 与同行输入框等高的分段控件，不再额外占一行"自动识别" */
+.field-label { display: inline-flex; align-items: center; gap: 4px; }
+.field-label__hint { color: var(--app-text-secondary); font-size: 12px; cursor: help; }
+/* 与同排 el-input / el-input-number 的实际高度对齐（38px token + 2px 内边距边框） */
+.content-type-group { display: flex; align-items: stretch; width: 100%; min-width: 0; height: calc(var(--el-component-size) + 2px); }
+.content-type-group :deep(.el-radio-button) { flex: 1 1 0; min-width: 0; display: flex; }
+.content-type-group :deep(.el-radio-button__inner) { flex: 1; width: 100%; padding: 0 4px; font-size: 12px; line-height: normal; display: flex; align-items: center; justify-content: center; }
 .response-mode-label { font-size: 12px; color: var(--app-text-secondary); }.response-mode-help { font-size: 12px; line-height: 1.6; color: var(--app-text-secondary); flex: 1; min-width: 180px; }
 .tabs-header { display: flex; gap: 7px; align-items: stretch; overflow-x: auto; min-width: 0; padding-bottom: 3px; }
-.tab-item { display: flex; align-items: center; gap: 7px; padding: 8px 10px; min-height: 42px; border: 2px solid transparent; color: var(--app-text-regular); background: var(--app-bg-control); border-radius: 9px; font-size: 12px; cursor: pointer; flex-shrink: 0; }
+.tab-item { display: flex; align-items: center; gap: 7px; padding: 8px 6px 8px 10px; min-height: 42px; border: 2px solid transparent; color: var(--app-text-regular); background: var(--app-bg-control); border-radius: 9px; font-size: 12px; cursor: pointer; flex-shrink: 0; }
+.tab-remove { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; flex-shrink: 0; border: 0; border-radius: 7px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+.tab-remove:hover:not(:disabled) { background: var(--el-color-danger-light-9); color: var(--app-text-danger); }
+.tab-remove:disabled { color: var(--app-text-disabled); cursor: not-allowed; }
+.tab-item.active .tab-remove { color: var(--app-text-inverse); opacity: .75; }
+.tab-item.active .tab-remove:hover:not(:disabled) { background: rgba(255, 255, 255, .2); color: var(--app-text-inverse); opacity: 1; }
+.tab-item.active .tab-remove:disabled { color: var(--app-text-inverse); opacity: .35; }
 .tab-item:hover { border-color: var(--app-divider); }
 .tab-item:focus-visible { outline: 2px solid var(--app-focus-color); outline-offset: 2px; }
 /* Editing selection is independent from runtime enablement. Never fade the selected draft. */
 .tab-item.active { color: var(--app-text-inverse); background: var(--app-accent); border-color: var(--app-accent); font-weight: 600; }
 .tab-item.inactive { opacity: 1; }
-.tab-current { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; white-space: nowrap; }
-.tab-item.active .tab-index, .tab-item.active .tab-status, .tab-item.active .disabled-badge, .tab-item.active .fallback-star { color: var(--app-text-inverse); }
+.tab-item.active .tab-status, .tab-item.active .disabled-badge, .tab-item.active .fallback-star { color: var(--app-text-inverse); }
 .tab-item.active .tab-cond { color: var(--app-text-inverse); background: transparent; }
 .tab-item.active .active-dot { outline: 1px solid var(--app-text-inverse); outline-offset: 1px; }
-.tab-index { font: 11px var(--app-font-mono); }.tab-name { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.tab-status { font: 11px var(--app-font-mono); color: var(--app-text-success); }.disabled-badge { font-size: 11px; color: var(--app-text-secondary); }.tab-name-input { width: 125px; }
+.tab-name { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.tab-status { font: 11px var(--app-font-mono); color: var(--app-text-success); }.disabled-badge { font-size: 11px; color: var(--app-text-secondary); }.tab-name-input { width: 125px; }
 .tab-cond { font-size: var(--app-font-micro); color: var(--app-text-secondary); background: var(--app-bg-hover); border-radius: 6px; padding: 1px 5px; }
-.active-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }.active-dot.on { background: var(--el-color-success); }.active-dot.off { background: var(--app-text-secondary); }.fallback-star { color: var(--app-accent); font-size: 12px; }
-.tab-add { display: flex; align-items: center; gap: 5px; padding: 0 10px; font: inherit; font-size: 12px; border: 0; background: var(--app-bg-control); color: var(--app-accent); border-radius: 9px; min-height: 34px; flex-shrink: 0; cursor: pointer; }
-.tab-content { min-width: 0; display: grid; gap: 15px; }
-.response-body-section { min-width: 0; display: grid; gap: 12px; padding-top: 16px; border-top: 1px solid var(--app-divider); }
+.fallback-star { color: var(--app-accent); font-size: 12px; }
+/* 区头：标题/数量 + 选择方式 + 删除/新增，替代原先四条各自成行的零散工具行 */
+.response-head { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 16px; min-width: 0; }
+.response-head__title { display: flex; align-items: baseline; gap: 7px; flex: none; }
+.response-head__title h4 { margin: 0; font-size: 14px; font-weight: 600; color: var(--app-text-primary); }
+.response-head__count { font: 11px var(--app-font-mono); color: var(--app-text-secondary); background: var(--app-bg-control); border-radius: 6px; padding: 2px 6px; }
+.response-head__actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+.response-head__actions .el-button { margin: 0; }
+
+/* Tab 栏与启用状态同一行，启用开关紧挨它作用的返回体集合 */
+.response-tabbar { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.response-tabbar .tabs-header { flex: 1; }
+.response-tabbar .response-enable-row { flex: none; padding-left: 12px; border-left: 1px solid var(--app-divider); white-space: nowrap; }
+.tab-content { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 15px; }
+.response-body-section { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; padding-top: 16px; border-top: 1px solid var(--app-divider); }
 .response-body-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
 .response-body-heading h4 { margin: 0; font-size: 13px; font-weight: 600; }
 .response-body-heading span { font-size: var(--app-font-caption); color: var(--app-text-secondary); }
@@ -1086,7 +1115,6 @@ async function handleUploadFile(uploadFile) {
 .tab-content :deep(.el-form-item) { margin-bottom: 16px; }.tab-content :deep(.el-form-item__label) { color: var(--app-text-secondary); font-size: 12px; }
 .body-toolbar,.editor-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; margin-bottom: 10px; }
 .editor-container { width: 100%; height: 420px; min-width: 0; background: var(--app-bg-control); border-radius: 12px; overflow: hidden; }
-.tab-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }.tab-actions .el-button { margin-left: 0; }
 .content-type-badge,.body-type-badge { color: var(--app-text-secondary); font: 11px var(--app-font-mono); background: var(--app-bg-control); border-radius: 7px; padding: 4px 7px; }
 .file-info,.file-response-card { padding: 14px; background: var(--app-bg-control); border-radius: 10px; min-width: 0; overflow-wrap: anywhere; }.file-info code { word-break: break-all; }
 .file-hint,.upload-hint,.variable-hint,.editor-size-hint { color: var(--app-text-secondary); font-size: 12px; line-height: 1.6; }
@@ -1094,8 +1122,37 @@ async function handleUploadFile(uploadFile) {
 .full-editor-toolbar { display: flex; align-items: center; gap: 12px; padding-bottom: 12px; }.full-editor-meta { font-size: 12px; color: var(--app-text-secondary); }.full-editor-monaco { flex: 1; min-height: 0; }.group-pick-list { display: grid; gap: 8px; }
 .condition-return-preview { padding: 16px; border-radius: 12px; background: var(--app-bg-control); margin-top: 18px; min-width: 0; }.condition-return-preview > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; }.condition-return-preview b { font-size: 12px; }.condition-return-preview p,.condition-return-preview small { color: var(--app-text-secondary); font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }.condition-return-preview pre { white-space: pre-wrap; word-break: break-word; font: 12px/1.8 var(--app-font-mono); max-height: 230px; overflow: auto; }
 @media(max-width: 1100px) { .tab-content :deep(.el-col) { flex: 0 0 50%; max-width: 50%; } }
-@media(max-width: 760px) { .response-mode-help { min-width: 0; flex-basis: 100%; }.response-readonly { display: none; }.editor-container { height: 360px; } }
-@media(max-width: 500px) { .tab-item.active .tab-name { max-width: 120px; }.tab-item.active .tab-index,.tab-item.active .tab-status,.tab-item.active .tab-cond,.tab-item.active .active-dot { display: none; }.tab-content :deep(.el-col) { flex: 0 0 100%; max-width: 100%; }.condition-return-preview > div { align-items: flex-start; flex-wrap: wrap; } }
+@media(max-width: 760px) {
+  .response-mode-help { min-width: 0; flex-basis: 100%; }
+  .response-readonly { display: none; }
+  .editor-container { height: 360px; }
+  .response-head { align-items: flex-start; }
+  .response-head__actions { margin-left: 0; }
+  .response-tabbar { flex-wrap: wrap; }
+  .response-tabbar .response-enable-row { width: 100%; padding-left: 0; border-left: 0; }
+}
+@media(max-width: 500px) { .tab-item.active .tab-name { max-width: 120px; }.tab-content :deep(.el-col) { flex: 0 0 100%; max-width: 100%; }.condition-return-preview > div { align-items: flex-start; flex-wrap: wrap; }.response-head__actions { width: 100%; justify-content: flex-start; }.response-head__actions .el-button { flex: 1; } }
+
+/* 返回内容设置行按容器宽度折行。四列用 el-col 固定百分比时，右栏变窄后
+   input-number / Content-Type 的固有宽度会把卡片撑出横向滚动（编辑器被裁切）。 */
+.response-body-section :deep(.el-row) { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr)); gap: 0 16px; margin: 0 !important; }
+.response-body-section :deep(.el-col) { width: auto; max-width: none; flex: none; min-width: 0; padding: 0 !important; }
+
+/* 右栏宽度由布局决定，用容器查询而不是视口断点：卡片窄时区头自动变成
+   「标题 + 操作」一行、「选择方式」一行，避免出现三行拼盘。 */
+@container response-card (max-width: 660px) {
+  .response-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px 12px; }
+  .response-head__title { grid-column: 1; grid-row: 1; }
+  .response-head__actions { grid-column: 2; grid-row: 1; margin-left: 0; justify-self: end; }
+  .response-mode-bar { grid-column: 1 / -1; grid-row: 2; }
+}
+@container response-card (max-width: 380px) {
+  .response-head__actions { grid-column: 1 / -1; grid-row: 2; justify-self: stretch; }
+  .response-head__actions .el-button { flex: 1; }
+  .response-mode-bar { grid-row: 3; }
+  .response-tabbar { flex-wrap: wrap; }
+  .response-tabbar .response-enable-row { width: 100%; padding-left: 0; border-left: 0; }
+}
 </style>
 
 <!-- 动态变量 popover 样式（非 scoped，因 popover 渲染在 body 下） -->
@@ -1191,19 +1248,4 @@ async function handleUploadFile(uploadFile) {
   flex: 1;
 }
 
-.dynamic-var-popover .dynamic-var-tip {
-  font-size: 12px;
-  color: var(--app-text-secondary);
-  padding: 8px 10px 2px;
-  margin-top: 4px;
-  border-top: 1px solid var(--app-divider);
-}
-
-.dynamic-var-popover .dynamic-var-tip code {
-  background: var(--app-bg-control);
-  padding: 1px 4px;
-  border-radius: 3px;
-  font-family: 'SFMono-Regular', Consolas, monospace;
-  color: var(--app-accent);
-}
 </style>

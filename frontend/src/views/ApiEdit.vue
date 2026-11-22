@@ -4,24 +4,31 @@
     <header class="editor-page-header">
       <div class="editor-page-heading">
         <el-button text class="back-button" aria-label="返回接口列表" @click="goBack"><el-icon><ArrowLeft /></el-icon></el-button>
-        <div><h1>{{ form.name || (isEdit ? '接口详情' : '新建接口') }}</h1><p class="editor-path"><code>{{ form.method }} {{ form.path || '/path' }}</code><span v-if="loadedRevision" class="editor-version">v{{ loadedRevision }}</span><span :class="{ 'editor-unsaved': isDirty }">{{ readOnly ? (isDirty ? '只读 · 保留未提交草稿' : '只读查看') : (isDirty ? '未保存' : '可编辑') }}</span></p></div>
+        <div class="editor-heading-text">
+          <div class="editor-title-row">
+            <h1 :title="form.name || (isEdit ? '接口详情' : '新建接口')">{{ form.name || (isEdit ? '接口详情' : '新建接口') }}</h1>
+            <code class="editor-route" :title="form.method + ' ' + (form.path || '/path')">{{ form.method }} {{ form.path || '/path' }}</code>
+            <span v-if="loadedRevision" class="editor-version">v{{ loadedRevision }}</span>
+            <span class="editor-path" :class="{ 'editor-unsaved': isDirty, 'editor-readonly': readOnly }">{{ readOnly ? (isDirty ? '只读 · 保留未提交草稿' : '只读查看') : (isDirty ? '未保存' : '可编辑') }}</span>
+          </div>
+        </div>
       </div>
       <div class="editor-page-actions">
-        <el-button v-if="isDirty" @click="downloadDraft">导出本地草稿</el-button>
-        <el-button v-if="saving" @click="copyDraft">复制当前草稿</el-button>
-        <el-button v-if="loadedApiId" :disabled="saving" @click="historyVisible = true"><FilledIcon name="history" :size="15" />变更记录</el-button>
+        <el-button v-if="isDirty && !saving" @click="downloadDraft">导出草稿</el-button>
+        <el-button v-if="saving" @click="copyDraft">复制草稿</el-button>
+        <el-button v-if="loadedApiId" :disabled="saving" @click="historyVisible = true"><FilledIcon name="history" :size="14" />变更记录</el-button>
         <el-button v-if="!readOnly" type="primary" :loading="saving" :disabled="saving || wsdlUploading || pageLoading || !!detailError || (isEdit && !loadedApiId)" @click="handleSave"><el-icon><DocumentChecked /></el-icon>{{ isEdit ? '保存' : '创建接口' }}</el-button>
       </div>
     </header>
-    <p class="editor-attribution" v-if="loadedApiId">{{ appStore.teams.find(team => team.id === form.teamId)?.name || '当前团队' }} · 创建者 {{ persistedMeta.createdByName || '未记录' }} · 最后修改 {{ persistedMeta.updatedByName || '未记录' }}<span v-if="persistedMeta.updatedAt"> · {{ persistedMeta.updatedAt.replace('T', ' ') }}</span></p>
-    <el-alert v-if="revisionConflict" title="版本已变化，当前草稿仍然保留" type="warning" :closable="false" show-icon>
-      <p>请先复制需要保留的编辑，再重新加载最新版本。不会自动用新版本号覆盖队友的修改。</p>
-      <el-button size="small" @click="copyDraft">复制当前草稿</el-button><el-button size="small" :disabled="saving" @click="reloadCurrentVersion">重新加载</el-button>
-    </el-alert>
-    <el-alert v-if="saving" title="正在保存；离开页面不会撤销本次保存。" type="info" :closable="false" show-icon />
-    <el-result v-if="detailError" icon="warning" title="接口详情暂时不可用" :sub-title="detailError"><template #extra><el-button :disabled="saving" @click="reloadCurrentVersion">重新加载</el-button><el-button @click="goBack">返回列表</el-button></template></el-result>
-    <template v-else>
-    <div class="editor-layout">
+    <div v-if="revisionConflict || saving" class="editor-notices">
+      <el-alert v-if="revisionConflict" title="版本已变化，当前草稿仍然保留" type="warning" :closable="false" show-icon>
+        <p>请先复制需要保留的编辑，再重新加载最新版本。不会自动用新版本号覆盖队友的修改。</p>
+        <el-button size="small" @click="copyDraft">复制当前草稿</el-button><el-button size="small" :disabled="saving" @click="reloadCurrentVersion">重新加载</el-button>
+      </el-alert>
+      <el-alert v-if="saving" title="正在保存；离开页面不会撤销本次保存。" type="info" :closable="false" show-icon />
+    </div>
+    <el-result v-if="detailError" class="editor-error" icon="warning" title="接口详情暂时不可用" :sub-title="detailError"><template #extra><el-button :disabled="saving" @click="reloadCurrentVersion">重新加载</el-button><el-button @click="goBack">返回列表</el-button></template></el-result>
+    <div v-else class="editor-body">
     <div class="editor-column editor-column--main">
     <section class="soft-card section-card basic-card">
       <h2 class="section-title"><span></span>基础信息</h2>
@@ -32,8 +39,9 @@
           <el-form-item label="分组"><el-select v-model="form.groupId" :disabled="editLocked || !form.teamId" clearable placeholder="未分组" @change="handleGroupSelectChange"><el-option v-for="g in availableGroups" :key="g.id" :label="g.name" :value="g.id" /><el-option v-if="canCreateGroup" key="__new__" label="+ 新建分组" value="__new__" /></el-select></el-form-item>
         </div>
         <div class="basic-pair">
-          <el-form-item label="接口类型"><el-radio-group v-model="form.type" :disabled="editLocked || pageLoading"><el-radio-button value="REST">REST</el-radio-button><el-radio-button value="SOAP">SOAP</el-radio-button></el-radio-group></el-form-item>
-          <el-form-item label="HTTP 方法"><el-select v-model="form.method" :disabled="editLocked || form.type === 'SOAP'"><el-option v-for="method in ['GET','POST','PUT','DELETE','PATCH','HEAD','OPTIONS']" :key="method" :label="method" :value="method" /></el-select></el-form-item>
+          <el-form-item label="接口类型" :class="{ 'basic-pair__full': form.type === 'SOAP' }"><el-radio-group v-model="form.type" :disabled="editLocked || pageLoading"><el-radio-button value="REST">REST</el-radio-button><el-radio-button value="SOAP">SOAP</el-radio-button></el-radio-group></el-form-item>
+          <!-- SOAP 固定 POST，没有可选方法，因此整个方法字段不渲染 -->
+          <el-form-item v-if="form.type !== 'SOAP'" label="HTTP 方法"><el-select v-model="form.method" :disabled="editLocked || pageLoading"><el-option v-for="method in ['GET','POST','PUT','DELETE','PATCH','HEAD','OPTIONS']" :key="method" :label="method" :value="method" /></el-select></el-form-item>
         </div>
         <el-form-item label="路径" required :error="pathConflictError"><el-input v-model="form.path" :readonly="editLocked" placeholder="/api/order 或 /service.asmx"><template #suffix><el-icon v-if="pathChecking" class="path-status-icon"><Loading /></el-icon><el-icon v-else-if="pathConflictError" class="path-status-icon path-status-icon--error"><CircleClose /></el-icon><el-icon v-else-if="pathChecked" class="path-status-icon path-status-icon--ok"><CircleCheck /></el-icon></template></el-input></el-form-item>
         <el-form-item v-if="form.path" label="Mock 地址"><div class="mock-url-display"><code class="mock-url">{{ mockUrl }}</code><CopyButton :text="mockUrl" :show-label="false" /></div></el-form-item>
@@ -165,7 +173,7 @@
               :readonly="editLocked"
               type="textarea"
               :autosize="{ minRows: 1, maxRows: 4 }"
-              placeholder="接口描述（选填，建议 200 字内说明用途 / 参数 / 注意事项）"
+              placeholder="接口描述（选填）"
               class="operation-description"
             />
             <ResponseTabs
@@ -202,15 +210,7 @@
 
     </div>
     </div>
-    </template>
-    <!-- 底部操作栏 -->
     <ApiHistoryDrawer v-model="historyVisible" :api-id="loadedApiId" :team-id="form.teamId" :current-revision="loadedRevision" :read-only="editLocked || isDirty" @changed="historyChanged" />
-    <div class="bottom-actions">
-      <el-button @click="goBack">{{ saving ? '离开页面' : '取消' }}</el-button>
-      <el-button type="primary" :loading="saving" :disabled="saving || wsdlUploading || pageLoading || !!detailError || readOnly || (isEdit && !loadedApiId)" @click="handleSave">
-        {{ isEdit ? '保存' : '创建' }}
-      </el-button>
-    </div>
   </div>
 </template>
 
@@ -289,8 +289,6 @@ function isEditorContextCurrent(context) {
 
 const writableTeams = computed(() => appStore.teams.filter(team => userStore.canWriteTeam(team.id)))
 const historyVisible = ref(false)
-
-const persistedMeta = reactive({ createdByName: '', updatedByName: '', updatedAt: '' })
 
 /**
  * v1.4.4 性能：SOAP operation 折叠态管理。
@@ -469,6 +467,9 @@ watch(() => [form.teamId, form.method, form.path, form.type], () => {
   schedulePathConflictCheck()
 })
 
+// SOAP 固定 POST：切换类型时同步表单值，页头与保存结果保持一致。
+watch(() => form.type, type => { if (type === 'SOAP') form.method = 'POST' })
+
 // --- 未保存离开提示 ---
 // 在初始化（loadApiDetail 完成 / 新建模式 onMounted）之后立即拍快照，
 // 之后任意修改都让 isDirty 变 true。保存成功后重置快照让用户能正常导航。
@@ -558,7 +559,6 @@ async function loadApiDetail() {
     if (data.id !== id) { detailError.value = '接口详情与当前路由不一致，请重新加载'; return false }
     attaching = true
     loadedApiId.value = id
-    Object.assign(persistedMeta, { createdByName: data.createdByName || data.createdBy || '', updatedByName: data.updatedByName || data.updatedBy || '', updatedAt: data.updatedAt || '' })
     loadedRevision.value = data.revision
     appStore.setFilter(data.teamId)
     revisionConflict.value = false
@@ -1200,21 +1200,57 @@ onBeforeUnmount(() => {
 </script>
 
 <style lang="scss" scoped>
-.page-api-edit { min-width: 0; width: 100%; padding: 7px 0 0; }
-.editor-page-header { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 8px 6px 0; margin-bottom: 10px; }.editor-page-heading { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }.back-button { padding: 7px; height: 30px; flex-shrink: 0; }.editor-page-heading h1 { font-size: 25px; font-weight: 600; line-height: 1.4; letter-spacing: -.5px; overflow-wrap: anywhere; margin: 6px 0 7px; }.editor-eyebrow { color: var(--app-text-secondary); letter-spacing: .1em; font: 11px var(--app-font-mono); }.editor-path { display: flex; flex-wrap: wrap; gap: 9px; align-items: center; margin: 0; font-size: 12px; color: var(--app-text-secondary); }.editor-path code { padding: 5px 8px; border-radius: 7px; background: var(--app-bg-control); color: var(--app-text-regular); overflow-wrap: anywhere; font: 12px var(--app-font-mono); }.editor-version { color: var(--app-text-accent); }.editor-unsaved { color: var(--app-text-accent); }.editor-page-actions { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; flex-shrink: 0; }.editor-page-actions .el-button { margin: 0; font-size: 13px; gap: 5px; }.editor-attribution { color: var(--app-text-secondary); font-size: 12px; line-height: 1.8; padding: 0 10px; margin: 12px 0 16px; overflow-wrap: anywhere; }
-.page-api-edit > .el-alert { margin: 12px 0; }.editor-layout { display: grid; grid-template-columns: minmax(300px, 350px) minmax(0, 1fr); gap: 14px; align-items: start; }.editor-column { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
-.section-card { border: 0; padding: 20px; margin: 0; border-radius: 16px; min-width: 0; box-shadow: none; background: var(--app-bg-surface); }.response-card { min-height: 640px; }
+.page-api-edit { display: flex; flex-direction: column; gap: 12px; min-width: 0; width: 100%; height: 100%; min-height: 0; padding: 7px 2px 0; overflow: hidden; }
+.editor-page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; padding: 2px 6px 0; flex: none; }
+.editor-page-heading { display: flex; align-items: flex-start; gap: 10px; min-width: 0; flex: 1; }
+.back-button { padding: 6px; height: 32px; min-width: 32px; flex-shrink: 0; margin-top: 1px; }
+.editor-heading-text { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.editor-title-row { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; min-width: 0; }
+.editor-title-row h1 { font-size: 24px; font-weight: 600; line-height: 1.25; letter-spacing: -.4px; overflow-wrap: anywhere; margin: 0; }
+.editor-route { padding: 4px 9px; border-radius: 7px; background: var(--app-bg-control); color: var(--app-text-regular); font: 12px/1.6 var(--app-font-mono); overflow-wrap: anywhere; }
+.editor-version { font: 11px var(--app-font-mono); color: var(--app-text-accent); background: var(--app-bg-control); border-radius: 6px; padding: 4px 7px; }
+.editor-path { font-size: 12px; color: var(--app-text-secondary); white-space: nowrap; }.editor-path.editor-unsaved { color: var(--app-text-accent); }.editor-path.editor-readonly { color: var(--app-text-secondary); }
+.editor-page-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex-shrink: 0; padding-top: 2px; }.editor-page-actions .el-button { margin: 0; font-size: 13px; gap: 5px; }
+.editor-notices { flex: none; display: flex; flex-direction: column; gap: 8px; }.editor-notices :deep(.el-alert) { margin: 0; }
+.editor-error { flex: 1; min-height: 0; overflow: auto; }
+.editor-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(300px, 360px) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: 14px; align-items: stretch; }
+.editor-column { display: flex; flex-direction: column; gap: 14px; min-width: 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding: 0 2px 18px 0; }
+/* 固定高度的滚动列里，卡片默认会被 flex 压缩到 min-height，内容仍按自然高度溢出卡片边界。 */
+.editor-column > * { flex: 0 0 auto; }
+.editor-column::-webkit-scrollbar { width: 7px; }.editor-column::-webkit-scrollbar-thumb { background: var(--app-divider); border-radius: 4px; }.editor-column::-webkit-scrollbar-track { background: transparent; }
+.section-card { border: 0; padding: 20px; margin: 0; border-radius: 16px; min-width: 0; box-shadow: none; background: var(--app-bg-surface); }.response-card { min-height: 640px; container-type: inline-size; container-name: response-card; }
 .section-title { font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 7px; margin: 0 0 17px; }.section-title > span { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: var(--app-accent); }.section-title small { margin-left: 3px; color: var(--app-text-secondary); letter-spacing: .08em; font: 11px var(--app-font-mono); }
 .basic-card :deep(.el-form-item__label),.advanced-card :deep(.el-form-item__label) { color: var(--app-text-secondary); font-size: 12px; line-height: 1.6; padding-bottom: 6px; }.basic-card :deep(.el-form-item) { margin-bottom: 15px; }.basic-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; min-width: 0; }.basic-pair > * { min-width: 0; }.basic-pair :deep(.el-radio-button__inner) { padding: 8px 9px; font-size: 12px; min-height: 32px; display: inline-flex; align-items: center; }
 .basic-pair :deep(.el-radio-button) { min-height: 32px; display: inline-flex; align-items: center; }
+.basic-pair__full { grid-column: 1 / -1; }
 .content-type-bar label { display: inline-flex; align-items: center; min-height: 28px; }.field-hint { color: var(--app-text-secondary); font-size: 12px; line-height: 1.6; margin: 7px 0 0; }.description-hint { margin: -6px 0 12px; }.editor-enable { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding-top: 7px; }.editor-enable b { font-size: 12px; font-weight: 500; }.editor-enable small { display: block; font-size: 12px; color: var(--app-text-secondary); margin-top: 4px; }
 .mock-url-display { display: flex; align-items: center; gap: 5px; width: 100%; padding: 9px; background: var(--app-bg-control); border-radius: 10px; min-width: 0; }.mock-url { font: 12px/1.7 var(--app-font-mono); color: var(--app-text-secondary); word-break: break-all; flex: 1; min-width: 0; }
 .header-overrides { display: grid; gap: 9px; width: 100%; }.header-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 6px; min-width: 0; }.header-row > * { min-width: 0; }.header-row :deep(.el-input__inner) { font-size: 12px; }.header-overrides > .el-button { margin: 0; justify-self: start; font-size: 12px; }
 .wsdl-upload-row { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; min-width: 0; }.wsdl-filename { color: var(--app-text-secondary); font-size: 12px; max-width: 100%; overflow-wrap: anywhere; }.operations-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; }.operations-title { font-size: 12px; margin: 0; }.operations-actions { display: flex; gap: 5px; }.operation-card { background: var(--app-bg-control); border-radius: 12px; padding: 14px; margin-bottom: 12px; }.operation-header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; cursor: pointer; margin-bottom: 10px; }.operation-name { font: 600 12px var(--app-font-mono); }.soap-action,.op-desc-preview { font-size: 12px; color: var(--app-text-secondary); overflow-wrap: anywhere; }.op-desc-preview { flex: 1; }.operation-description { margin-bottom: 12px; }.operation-card .operation-card { background: var(--app-bg-surface); }.empty-operations { padding: 35px; text-align: center; color: var(--app-text-secondary); font-size: 12px; }
 .path-status-icon { font-size: 13px; color: var(--app-text-secondary); animation: path-spin 1.2s linear infinite; }.path-status-icon--error { color: var(--app-text-danger); animation: none; }.path-status-icon--ok { color: var(--app-text-success); animation: none; }@keyframes path-spin { to { transform: rotate(360deg); } }
-.bottom-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 14px; padding: 13px 6px; flex-wrap: wrap; }.bottom-actions > span { margin-right: auto; color: var(--app-text-secondary); font-size: 12px; line-height: 1.7; }.bottom-actions .el-button { margin: 0; }
-.editor-layout--rules .response-card { min-height: 600px; }
-@media(max-width: 1150px) { .editor-layout { grid-template-columns: minmax(270px, 310px) minmax(0, 1fr); }.section-card { padding: 16px; }.editor-page-header { align-items: flex-start; }.editor-page-heading h1 { font-size: 22px; }.editor-page-actions { max-width: 40%; justify-content: flex-end; }.editor-layout--rules { grid-template-columns: minmax(0, 1fr); } }
-@media(max-width: 960px) { .editor-layout { display: flex; flex-direction: column; }.editor-column { display: contents; }.section-card { width: 100%; }.response-card { order: 2; min-height: 0; }.basic-card { order: 1; }.description-card { order: 3; }.tags-card { order: 4; }.advanced-card { order: 5; }.editor-layout--rules .response-card { min-height: 0; }.editor-page-actions { max-width: none; }.editor-page-header { flex-wrap: wrap; gap: 12px; }.basic-card .basic-pair { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
-@media(max-width: 560px) { .editor-page-heading h1 { font-size: 20px; }.editor-page-header { padding-left: 0; padding-right: 0; }.editor-page-actions { width: 100%; justify-content: flex-start; }.section-card { padding: 14px; }.editor-page-actions .el-button { padding: 8px 10px; }.editor-attribution { padding: 0; font-size: 12px; }.basic-pair { grid-template-columns: minmax(0, 1fr); }.header-row { grid-template-columns: minmax(0, 1fr) auto; }.header-value { grid-column: 1; grid-row: 2; }.header-row .el-button { grid-column: 2; grid-row: 1 / span 2; }.bottom-actions > span { flex-basis: 100%; }.basic-card .basic-pair { grid-template-columns: minmax(0, 1fr); } }
+@media(max-width: 1150px) { .editor-body { grid-template-columns: minmax(270px, 320px) minmax(0, 1fr); }.section-card { padding: 16px; }.editor-title-row h1 { font-size: 22px; }.editor-page-actions { max-width: 42%; justify-content: flex-end; } }
+@media(max-width: 960px) {
+  .page-api-edit { height: auto; min-height: 100%; overflow: visible; gap: 10px; }
+  .editor-page-header { position: sticky; top: 0; z-index: 5; flex-wrap: wrap; gap: 10px; padding: 8px 6px; margin: 0 -2px; background: var(--app-bg-page); }
+  .editor-page-actions { max-width: none; }
+  .editor-body { display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+  .editor-column { display: contents; }
+  .section-card { width: 100%; }
+  .response-card { order: 2; min-height: 0; }
+  .basic-card { order: 1; }
+  .description-card { order: 3; }
+  .tags-card { order: 4; }
+  .advanced-card { order: 5; }
+}
+@media(max-width: 560px) {
+  .editor-page-header { padding: 8px 2px; }
+  .editor-page-actions { width: 100%; justify-content: flex-start; }
+  .editor-page-actions .el-button { padding: 8px 10px; }
+  .editor-title-row h1 { font-size: 20px; }
+  .section-card { padding: 14px; }
+  .basic-pair { grid-template-columns: minmax(0, 1fr); }
+  .header-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .header-value { grid-column: 1; grid-row: 2; }
+  .header-row .el-button { grid-column: 2; grid-row: 1 / span 2; }
+}
 </style>

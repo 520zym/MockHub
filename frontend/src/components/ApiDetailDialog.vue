@@ -3,6 +3,7 @@
     :model-value="modelValue"
     class="api-detail-dialog"
     width="min(920px, 94vw)"
+    align-center
     :close-on-click-modal="false"
     @update:model-value="emit('update:modelValue', $event)"
   >
@@ -47,23 +48,31 @@
       </section>
 
       <section class="detail-section">
-        <h3>返回体 <span class="detail-count">{{ variants.length }} 个</span></h3>
-        <p v-if="!variants.length" class="detail-empty">没有可展示的返回体。</p>
-        <article v-for="variant in variants" :key="variant.key" class="variant">
-          <header class="variant-head">
-            <span class="variant-index">{{ variant.index }}</span>
-            <b class="variant-name">{{ variant.name }}</b>
-            <span class="variant-code">{{ variant.responseCode }}</span>
-            <span class="variant-state" :class="variant.active ? 'is-on' : 'is-off'">{{ variant.active ? '生效中' : '未启用' }}</span>
-            <span v-if="variant.fallback" class="variant-chip">兜底</span>
-            <span v-if="variant.operationName" class="variant-chip">{{ variant.operationName }}</span>
-            <span v-if="variant.delayMs" class="variant-chip">延迟 {{ variant.delayMs }}ms</span>
-            <span v-if="variant.bodyType === 'FILE'" class="variant-chip">文件</span>
+        <h3>返回体 <span class="detail-count">{{ responseCount }} 个</span><span v-if="isSoap" class="detail-count">· 按 Operation 分组</span></h3>
+        <p v-if="!responseCount" class="detail-empty">没有可展示的返回体。</p>
+        <div v-for="group in displayGroups" :key="group.key" class="response-group">
+          <header v-if="group.title" class="response-group__head">
+            <code class="response-group__name">{{ group.title }}</code>
+            <span v-if="group.subtitle" class="response-group__action" :title="group.subtitle">{{ group.subtitle }}</span>
+            <span class="detail-count">{{ group.variants.length }} 个返回体</span>
           </header>
-          <p class="variant-rule">{{ variant.rule }}</p>
-          <pre v-if="variant.preview" class="variant-body">{{ variant.preview }}</pre>
-          <p v-else-if="variant.bodyType === 'FILE'" class="variant-file">{{ variant.fileLabel }}</p>
-        </article>
+          <p v-if="group.description" class="response-group__desc">{{ group.description }}</p>
+          <p v-if="!group.variants.length" class="detail-empty">该 Operation 还没有配置返回体。</p>
+          <article v-for="variant in group.variants" :key="variant.key" class="variant">
+            <header class="variant-head">
+              <span class="variant-index">{{ variant.index }}</span>
+              <b class="variant-name">{{ variant.name }}</b>
+              <span class="variant-code">{{ variant.responseCode }}</span>
+              <span class="variant-state" :class="variant.active ? 'is-on' : 'is-off'">{{ variant.active ? '生效中' : '未启用' }}</span>
+              <span v-if="variant.fallback" class="variant-chip">兜底</span>
+              <span v-if="variant.delayMs" class="variant-chip">延迟 {{ variant.delayMs }}ms</span>
+              <span v-if="variant.bodyType === 'FILE'" class="variant-chip">文件</span>
+            </header>
+            <p class="variant-rule">{{ variant.rule }}</p>
+            <pre v-if="variant.preview" class="variant-body">{{ variant.preview }}</pre>
+            <p v-else-if="variant.bodyType === 'FILE'" class="variant-file">{{ variant.fileLabel }}</p>
+          </article>
+        </div>
       </section>
     </template>
 
@@ -160,32 +169,76 @@ function conditionText(item) {
   const value = type === 'NUMBER' || type === 'BOOLEAN' || item.operator === 'IN' ? raw : '"' + raw + '"'
   return source + '.' + item.path + ' ' + operator + ' ' + value
 }
+function toVariant(item, index, multiple) {
+  const conditions = parseConditions(item.conditions)
+  const bodyType = String(item.bodyType || 'TEXT').toUpperCase()
+  return {
+    key: item.id || 'response-' + (item.soapOperationName || '') + '-' + index,
+    index: index + 1,
+    name: item.name || '返回体 ' + (index + 1),
+    responseCode: item.responseCode || 200,
+    active: item.active !== undefined ? item.active : !!item.isActive,
+    fallback: !conditions.length && multiple,
+    delayMs: Number(item.delayMs) || 0,
+    bodyType,
+    rule: conditions.length ? conditions.map(conditionText).join(' 且 ') : (multiple ? '无条件，作为兜底' : '无条件'),
+    preview: bodyType === 'FILE' ? '' : previewBody(item.responseBody),
+    fileLabel: (item.fileName || '文件返回') + (item.fileSize ? ' · ' + formatSize(item.fileSize) : '')
+  }
+}
+
+const isSoap = computed(() => (detail.value?.type || props.summary?.type || 'REST') === 'SOAP')
+
+/** 详情接口返回的 soapConfig 是 JSON 字符串（和列表/编辑器一致），这里解析成对象再用。 */
+const soapConfig = computed(() => {
+  const raw = detail.value?.soapConfig
+  if (!raw) return null
+  if (typeof raw === 'object') return raw
+  try { return JSON.parse(raw) } catch { return null }
+})
+
+/** REST: 接口下所有返回体同属一个集合；SOAP: 每个 Operation 是独立集合，不能混在一起算“多个返回体”。 */
 const variants = computed(() => {
   const record = detail.value
   if (!record) return []
-  const type = record.type || props.summary?.type || 'REST'
-  const all = Array.isArray(record.responses) ? record.responses : []
-  const entries = (type === 'SOAP' ? all : all.filter(item => !item.soapOperationName))
+  const entries = (Array.isArray(record.responses) ? record.responses : [])
+    .filter(item => !item.soapOperationName)
     .slice()
-    .sort((left, right) => String(left.soapOperationName || '').localeCompare(String(right.soapOperationName || '')) || (Number(left.sortOrder) || 0) - (Number(right.sortOrder) || 0))
+    .sort((left, right) => (Number(left.sortOrder) || 0) - (Number(right.sortOrder) || 0))
   const multiple = entries.length > 1
-  return entries.map((item, index) => {
-    const conditions = parseConditions(item.conditions)
-    const bodyType = String(item.bodyType || 'TEXT').toUpperCase()
-    return {
-      key: item.id || 'response-' + index,
-      index: index + 1,
-      name: item.name || '返回体 ' + (index + 1),
-      responseCode: item.responseCode || 200,
-      active: item.active !== undefined ? item.active : !!item.isActive,
-      fallback: !conditions.length && multiple,
-      operationName: item.soapOperationName || '',
-      delayMs: Number(item.delayMs) || 0,
-      bodyType,
-      rule: conditions.length ? conditions.map(conditionText).join(' 且 ') : (multiple ? '无条件，作为兜底' : '无条件'),
-      preview: bodyType === 'FILE' ? '' : previewBody(item.responseBody),
-      fileLabel: (item.fileName || '文件返回') + (item.fileSize ? ' · ' + formatSize(item.fileSize) : '')
+  return entries.map((item, index) => toVariant(item, index, multiple))
+})
+
+const responseCount = computed(() => {
+  const record = detail.value
+  return record && Array.isArray(record.responses) ? record.responses.length : 0
+})
+
+const displayGroups = computed(() => {
+  if (!isSoap.value) return [{ key: 'rest', title: '', subtitle: '', description: '', variants: variants.value }]
+  const record = detail.value
+  if (!record) return []
+  const groups = [], byName = new Map()
+  for (const op of (Array.isArray(soapConfig.value?.operations) ? soapConfig.value.operations : [])) {
+    const name = op?.operationName || ''
+    const group = { key: 'op:' + name, title: name || '未命名 Operation', subtitle: op?.soapAction || '', description: op?.description || '', raw: [] }
+    groups.push(group)
+    if (name) byName.set(name, group)
+  }
+  for (const item of (Array.isArray(record.responses) ? record.responses : [])) {
+    const name = item.soapOperationName || ''
+    let group = byName.get(name)
+    if (!group) {
+      group = { key: 'op:' + (name || 'unlinked'), title: name || '未关联 Operation', subtitle: '', description: '', raw: [] }
+      groups.push(group)
+      if (name) byName.set(name, group)
     }
+    group.raw.push(item)
+  }
+  return groups.map(group => {
+    const sorted = group.raw.slice().sort((left, right) => (Number(left.sortOrder) || 0) - (Number(right.sortOrder) || 0))
+    const multiple = sorted.length > 1
+    return { key: group.key, title: group.title, subtitle: group.subtitle, description: group.description, variants: sorted.map((item, index) => toVariant(item, index, multiple)) }
   })
 })
 
@@ -235,6 +288,13 @@ watch([() => props.modelValue, () => props.summary?.id], ([open]) => {
 .detail-url{display:flex;align-items:center;gap:8px;background:var(--app-bg-control);border-radius:9px;padding:8px 10px}
 .detail-url code{flex:1;min-width:0;font:12px/1.7 var(--app-font-mono);color:var(--app-text-regular);overflow-wrap:anywhere}
 .detail-description{margin:0;font-size:13px;line-height:1.9;color:var(--app-text-regular);white-space:pre-wrap;overflow-wrap:anywhere}
+.response-group{display:flex;flex-direction:column;gap:8px;min-width:0}
+.response-group + .response-group{margin-top:16px;padding-top:16px;border-top:1px solid var(--app-divider)}
+.response-group__head{display:flex;align-items:center;flex-wrap:wrap;gap:8px;min-width:0}
+.response-group__name{font:600 12px var(--app-font-mono);color:var(--app-text-primary);background:var(--app-bg-control);border-radius:7px;padding:4px 8px}
+.response-group__action{font:11px var(--app-font-mono);color:var(--app-text-secondary);overflow-wrap:anywhere;min-width:0}
+.response-group__desc{margin:0;font-size:12px;line-height:1.7;color:var(--app-text-secondary);overflow-wrap:anywhere}
+.response-group .detail-empty{padding:6px 0}
 .variant{background:var(--app-bg-control);border-radius:10px;padding:10px 12px;margin-bottom:8px}
 .variant:last-child{margin-bottom:0}
 .variant-head{display:flex;align-items:center;flex-wrap:wrap;gap:8px}

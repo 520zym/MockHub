@@ -116,7 +116,8 @@ for (const type of ['REST', 'SOAP']) test(type + ' deferred success freezes real
   nodes.filter(node => node.type === 'el-input').forEach(node => assert.equal(node.props.readonly, true))
   nodes.filter(node => ['el-select', 'el-switch', 'el-radio-group', 'el-upload'].includes(node.type)).forEach(node => assert.equal(node.props.disabled, true))
   const buttons = nodes.filter(node => node.type === 'el-button' && node.props?.onClick === s.handleSave)
-  assert.equal(buttons.length, 2); buttons.forEach(node => assert.equal(node.props.disabled, true))
+  // v1.4.6 起编辑页只保留顶部保存按钮，底部操作栏已移除。
+  assert.equal(buttons.length, 1); buttons.forEach(node => assert.equal(node.props.disabled, true))
   const headers = JSON.stringify(s.headerOverrideList.value)
   s.addHeaderOverride(); s.removeHeaderOverride(0); s.handleWsdlFileChange({ raw: {} })
   await s.handleUploadWsdl(); await s.handleGroupSelectChange('__new__'); await s.reloadCurrentVersion()

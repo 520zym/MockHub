@@ -5,9 +5,11 @@
       <div class="topbar__breadcrumb"><span>{{ context }}</span><span aria-hidden="true">/</span><b>{{ route.meta.title || 'MockHub' }}</b></div>
     </div>
     <div class="topbar__right">
-      <span class="topbar__scope">{{ route.meta.requiresSuperAdmin ? '系统管理' : route.path.startsWith('/account') ? '个人范围' : '团队工作区' }}</span>
-      <form class="topbar__search" @submit.prevent="search"><el-icon><Search /></el-icon><input v-model="query" type="search" placeholder="搜索当前团队接口" aria-label="搜索当前团队接口" /></form>
-      <button class="topbar__toggle" type="button" aria-label="刷新当前身份" title="刷新当前身份" @click="refresh"><el-icon><Refresh /></el-icon></button>
+      <template v-if="!immersive">
+        <span class="topbar__scope">{{ route.meta.requiresSuperAdmin ? '系统管理' : route.path.startsWith('/account') ? '个人范围' : '团队工作区' }}</span>
+        <form class="topbar__search" @submit.prevent="search"><el-icon><Search /></el-icon><input v-model="query" type="search" placeholder="搜索当前团队接口" aria-label="搜索当前团队接口" /></form>
+        <button class="topbar__toggle" type="button" aria-label="刷新当前身份" title="刷新当前身份" @click="refresh"><el-icon><Refresh /></el-icon></button>
+      </template>
     </div>
   </header>
 </template>
@@ -18,6 +20,8 @@ import { useAppStore } from '@/stores/app'
 import { useUserStore } from '@/stores/user'
 const appStore = useAppStore(), userStore = useUserStore(), route = useRoute(), router = useRouter(), query = ref('')
 const context = computed(() => route.meta.requiresSuperAdmin ? '系统管理' : route.path.startsWith('/account') ? '个人空间' : appStore.currentTeam?.name || 'MockHub')
+// 编辑/新建接口是专注模式：隐藏团队工作区标记、全局搜索与刷新，避免和页面自身的保存/变更记录抢注意力。
+const immersive = computed(() => !!route.meta.immersive)
 function search() { if (appStore.currentTeamId) router.push({ path: '/apis', query: query.value.trim() ? { keyword: query.value.trim() } : {} }) }
 function refresh() { window.dispatchEvent(new CustomEvent('mockhub:permissions-changed')) }
 </script>

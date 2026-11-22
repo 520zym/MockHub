@@ -33,7 +33,6 @@
               <div class="mock-banner__logo">M</div>
               <div class="mock-banner__main">
                 <div class="mock-banner__title">正在使用内置演示模型</div>
-                <div class="mock-banner__desc">本地模板生成，不需要 API Key。</div>
               </div>
               <el-button text @click="useApiProvider">改用 API 供应商</el-button>
             </div>
@@ -92,7 +91,7 @@
                   <el-button v-if="aiClearKey && clearKeySource === 'user'" text @click="undoClearKey">撤销</el-button>
                   <span v-if="aiClearKey && clearKeySource === 'vendor'" class="input-hint">切换供应商后请重新填写 Key</span>
                 </div>
-                <div class="input-hint">仅写入不回显；Key 以 AES-GCM 密文保存在服务端，不会进入日志或 localStorage。</div>
+                <div class="input-hint">仅保存不回显，不会写入日志或浏览器存储。</div>
               </el-form-item>
 
               <el-form-item label="连接测试">
@@ -246,12 +245,10 @@
 
             <el-form-item v-if="form.logRetainMode === 'count'" label="保留条数">
               <el-input-number v-model="form.logRetainCount" :min="100" :max="100000" :step="100" controls-position="right" />
-              <span class="input-hint">超出部分将自动删除最旧的记录</span>
             </el-form-item>
 
             <el-form-item v-if="form.logRetainMode === 'days'" label="保留天数">
               <el-input-number v-model="form.logRetainDays" :min="1" :max="365" :step="1" controls-position="right" />
-              <span class="input-hint">超出天数的日志将被自动清理</span>
             </el-form-item>
 
             <div class="ai-save-row">
@@ -293,7 +290,7 @@
       </div>
     </div>
 
-    <div v-if="!userStore.isSuperAdmin" class="policy-access-denied"><FilledIcon name="shield" :size="30" /><h2>仅超级管理员可配置实例策略</h2><p>个人访问凭证请前往个人账号；团队管理员无权改变全局设置。</p></div>
+    <div v-if="!userStore.isSuperAdmin" class="policy-access-denied"><FilledIcon name="shield" :size="30" /><h2>仅超级管理员可配置实例策略</h2><p>个人访问凭证请前往个人账号。</p></div>
   </div>
 </template>
 
@@ -724,7 +721,6 @@ onMounted(() => {
 .mock-banner__logo { display: grid; place-items: center; flex-shrink: 0; width: 34px; height: 34px; border-radius: 10px; background: #EEF0FF; color: var(--app-accent); font-size: 15px; font-weight: 700; }
 .mock-banner__main { flex: 1; }
 .mock-banner__title { font-size: 13px; font-weight: 600; color: #1B2559; }
-.mock-banner__desc { margin-top: 2px; font-size: var(--app-font-caption); line-height: 1.6; color: var(--app-text-muted); }
 .ai-badge { display: inline-flex; align-items: center; margin-left: 6px; padding: 0 6px; height: 18px; border-radius: 6px; font-size: var(--app-font-micro); font-weight: 700; color: var(--app-text-accent); background: var(--app-bg-selected); border: 1px solid var(--app-divider); vertical-align: middle; }
 .ai-provider-summary { display: flex; align-items: center; gap: 12px; margin: 0 0 18px; padding: 12px 14px; border: 1px solid #F1F5F9; border-radius: 10px; background: #FBFBFE; }
 .ai-provider-summary__logo { display: grid; place-items: center; flex-shrink: 0; width: 34px; height: 34px; border-radius: 10px; background: #EEF0FF; color: var(--app-accent); font-size: 15px; font-weight: 700; }

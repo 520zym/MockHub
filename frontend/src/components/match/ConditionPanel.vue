@@ -14,7 +14,7 @@
             <template #actions><button v-if="!readOnly" type="button" class="soft-button from-request" @click="openSamples('build')">从请求生成条件</button><button v-if="!readOnly && aiStore.capabilities.conditions" type="button" class="text-button ai-rules-button" @click="openAi">AI 生成</button></template>
           </ConditionTable>
         </template>
-        <section v-if="!hideReturnPreview" class="return-preview"><header><strong>命中后返回</strong><button type="button" class="text-button" @click="emit('edit-response')">{{ readOnly ? '查看返回体' : '编辑返回体' }} →</button></header><slot name="return-preview"><p class="preview-placeholder">在返回内容中填写这份响应。</p></slot></section>
+        <section v-if="!hideReturnPreview" class="return-preview"><header><strong>命中后返回</strong><button type="button" class="text-button" @click="emit('edit-response')">{{ readOnly ? '查看返回体' : '编辑返回体' }} →</button></header><slot name="return-preview" /></section>
       </div>
     </section>
 
@@ -34,14 +34,14 @@
         </div>
         <section class="sample-preview">
           <div class="preview-actions"><strong>试匹配结果</strong><button type="button" class="run-preview" :disabled="previewLoading || !teamId || (readOnly && !apiId)" @click="runPreview">{{ previewLoading ? '正在试配…' : isRandom ? '查看随机候选' : '试匹配' }}</button></div>
-          <p v-if="readOnly" class="saved-notice">规则只读 · 按已保存配置试配，未提交草稿不参与</p>
+          <p v-if="readOnly" class="saved-notice">只读 · 按已保存配置试配</p>
           <p v-if="!teamId || (readOnly && !apiId)" class="inline-error">{{ !teamId ? '请选择团队后试配' : '只读试配需要已保存的接口' }}</p>
           <p v-if="previewError" class="inline-error" role="alert">{{ previewError }}</p>
           <div v-if="previewResult" class="preview-result" :class="{ neutral: !previewResult.matchedIndex && previewResult.matchedIndex !== 0 }" role="status">
             <strong>{{ resultTitle }}</strong><p>{{ resultExplanation }}</p>
             <p v-if="previewResult.responseCode != null" class="result-meta">返回 {{ previewResult.responseCode }} · {{ previewResult.bodyType || 'TEXT' }}</p>
             <ul v-if="previewResult.mode === 'RANDOM' && previewResult.candidates?.length" class="random-candidates"><li v-for="candidate in previewResult.candidates" :key="candidate.index"><span>{{ candidate.responseName || candidate.responseId || '返回体 ' + (candidate.index + 1) }}</span><span>1 / {{ previewResult.enabledCount }}</span></li></ul>
-            <p v-if="previewResult.usingSavedConfiguration" class="saved-notice">按已保存配置试配，未提交草稿不参与</p>
+            <p v-if="previewResult.usingSavedConfiguration" class="saved-notice">按已保存配置试配</p>
           </div>
           <details class="privacy-note"><summary>试匹配范围</summary><p>只选择返回体，不执行 Mock、不写调用日志、不返回正文。可编辑时包含当前草稿，保存接口后才正式生效。</p></details>
         </section>
@@ -197,7 +197,7 @@ onBeforeUnmount(() => { disposed = true; invalidatePreview() })
 button { font: inherit; }.text-button,.help-button { border: 0; background: transparent; color: var(--app-text-accent); cursor: pointer; min-height: 34px; padding: 0 5px; font-size: 12px; }
 .help-button { border-left: 1px solid var(--app-divider); padding-left: 12px; }.soft-button { min-height: 34px; border: 0; border-radius: 7px; padding: 0 12px; background: var(--app-bg-control); color: var(--app-text-regular); cursor: pointer; font-size: 13px; }.soft-button:hover { background: var(--app-bg-hover); }.ai-rules-button { margin-left: auto; }
 .mode-notice { display: flex; flex-wrap: wrap; gap: 12px; padding: 10px; background: var(--app-bg-control); border-radius: 8px; }.mode-notice span { color: var(--app-text-secondary); }
-.return-preview { margin-top: 14px; padding: 12px; background: var(--app-bg-control); border-radius: 9px; }.return-preview header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }.preview-placeholder { color: var(--app-text-secondary); font-size: 12px; }
+.return-preview { margin-top: 14px; padding: 12px; background: var(--app-bg-control); border-radius: 9px; }.return-preview header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .sample-card { min-width: 0; color: var(--app-text-primary); font-size: 13px; }.sample-step-line { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 18px; color: var(--app-text-secondary); font-size: 13px; }.sample-step-line b { color: var(--app-text-accent); margin-right: 4px; }
 .source-tabs { display: flex; width: fit-content; max-width: 100%; gap: 4px; border-radius: 8px; padding: 3px; margin-bottom: 16px; background: var(--app-bg-control); }.source-tabs button { border: 0; border-radius: 6px; background: transparent; color: var(--app-text-secondary); cursor: pointer; min-height: 34px; padding: 0 22px; font-size: 13px; }.source-tabs button.active { background: #fff; color: var(--app-text-accent); }
 .sample-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }.sample-input-column,.sample-fields-column { min-width: 0; }.sample-label-row,.fields-heading { min-height: 34px; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; font-size: 12px; }.fields-heading span { color: var(--app-text-secondary); }

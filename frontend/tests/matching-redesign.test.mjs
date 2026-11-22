@@ -68,7 +68,7 @@ test('condition mode protects fallback only when multiple enabled responses rema
 test('invalid conditional drafts show one actionable hint, not a modal, and random never requests fallback', async () => {
   const c = await tabs([row(true), row(false)])
   assert.equal(c.state.selectionIssue.value, '')
-  await c.state.toggleEnabled(1); assert.match(c.state.selectionIssue.value, /2 份无条件/)
+  await c.state.toggleEnabled(1); assert.match(c.state.selectionIssue.value, /2 份启用的返回体没有设置匹配条件/); assert.match(c.state.selectionIssue.value, /默认返回/)
   assert.equal(c.confirmations.length, 0); c.unit.unmount()
   const random = await tabs([row(true), row(true)], 'RANDOM')
   assert.equal(random.state.selectionIssue.value, ''); random.unit.unmount()

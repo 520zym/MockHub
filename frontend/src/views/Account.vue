@@ -84,7 +84,7 @@
               </el-form>
             </section>
             <aside class="account-stack">
-              <section class="account-card"><div class="account-card__header"><div><h2>修改后会发生什么</h2></div></div><ul class="account-guidance"><li>当前浏览器和其它设备上的所有网页会话都会失效，需要重新登录。</li><li>本人已创建的 MCP 访问凭证也将失效，相关客户端需要重新配置凭证。</li><li>不会更改团队成员关系、团队角色或团队资源。</li></ul><div class="account-hint">应用不会把密码写入浏览器本地存储。离开安全标签页时会清空表单。</div></section>
+              <section class="account-card"><div class="account-card__header"><div><h2>修改后会发生什么</h2></div></div><ul class="account-guidance"><li>当前浏览器和其它设备上的所有网页会话都会失效，需要重新登录。</li><li>本人已创建的 MCP 访问凭证也将失效，相关客户端需要重新配置凭证。</li><li>不会更改团队成员关系、团队角色或团队资源。</li></ul></section>
               <section class="account-card"><div class="account-card__header"><div><h2>退出当前登录</h2><p>仅撤销当前网页会话，不影响其它设备或 MCP 凭证。</p></div></div><p v-if="logoutError" class="account-error" role="alert">{{ logoutError }}</p><el-button :loading="pendingAction === 'logout'" :disabled="busy && pendingAction !== 'logout'" @click="logout">退出当前登录</el-button></section>
             </aside>
           </div>
@@ -92,10 +92,10 @@
 
         <el-tab-pane label="登录会话" name="sessions" lazy>
           <section class="account-card" aria-labelledby="account-sessions-title" :aria-busy="sessionsLoading">
-            <div class="account-card__header account-card__header--wrap"><div><h2 id="account-sessions-title">网页登录会话</h2><p>仅展示本人的有效网页会话，不包含 MCP 凭证。</p></div><div class="account-actions"><span v-if="sessionsLoaded && !sessionsError" class="account-badge">{{ sessions.length }} 个会话</span><el-button :loading="sessionsLoading" :disabled="!!pendingAction" @click="loadSessions">刷新会话</el-button></div></div>
+            <div class="account-card__header account-card__header--wrap"><div><h2 id="account-sessions-title">网页登录会话</h2></div><div class="account-actions"><span v-if="sessionsLoaded && !sessionsError" class="account-badge">{{ sessions.length }} 个会话</span><el-button :loading="sessionsLoading" :disabled="!!pendingAction" @click="loadSessions">刷新会话</el-button></div></div>
             <div v-if="sessionsLoading && !sessionsLoaded" class="account-state" aria-live="polite"><el-skeleton :rows="4" /><p>正在读取登录会话…</p></div>
             <div v-else-if="sessionsError" class="account-state" role="alert"><h3>会话加载失败</h3><p>{{ sessionsError }}</p><el-button :loading="sessionsLoading" @click="loadSessions">重新加载</el-button></div>
-            <div v-else-if="!sessions.length" class="account-state"><FilledIcon name="history" :size="32" /><h3>暂无有效网页会话</h3><p>刷新以确认最新状态；如果当前登录已失效，请重新登录。</p></div>
+            <div v-else-if="!sessions.length" class="account-state"><FilledIcon name="history" :size="32" /><h3>暂无有效网页会话</h3></div>
             <ul v-else class="account-session-list">
               <li v-for="session in sortedSessions" :key="session.id" class="account-session">
                 <span class="account-session__icon" aria-hidden="true"><FilledIcon :name="session.current ? 'workspace' : 'history'" :size="22" /></span>

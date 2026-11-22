@@ -100,7 +100,7 @@
             style="width: 100%"
           >
             <template #empty>
-              <div class="empty-hint">暂无候选值，点右上角「新增」或「批量粘贴」</div>
+              <div class="empty-hint">暂无候选值</div>
             </template>
             <el-table-column label="值" min-width="140" show-overflow-tooltip>
               <template #default="{ row }">

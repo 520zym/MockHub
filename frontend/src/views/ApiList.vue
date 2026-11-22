@@ -111,11 +111,11 @@
                 <td class="cell-creator" :title="row.createdByName">{{ row.createdByName || '—' }}</td>
                 <td class="cell-state"><el-switch v-if="canWrite" :model-value="row.enabled" :disabled="busy || loading" :aria-label="(row.enabled ? '停用 ' : '启用 ') + row.name" @change="toggle(row)" /><span v-else class="status-chip" :class="{ enabled: row.enabled }">{{ row.enabled ? '已启用' : '已停用' }}</span></td>
                 <td class="cell-actions"><div class="row-actions">
-                  <el-button text @click="openDetailDialog(row)">详情</el-button>
+                  <el-button text type="primary" class="row-copy" :title="'复制 ' + (row.type === 'SOAP' ? 'WSDL' : 'Mock') + ' 地址'" :aria-label="'复制 ' + (row.type === 'SOAP' ? 'WSDL' : 'Mock') + ' 地址'" @click="copyUrl(row)"><el-icon><CopyDocument /></el-icon>复制</el-button>
                   <el-button v-if="canWrite" text @click="openEditor(row)">编辑</el-button>
-                  <el-button text @click="openHistory(row)">历史</el-button>
+                  <el-button text @click="openDetailDialog(row)">详情</el-button>
                   <el-dropdown trigger="click" @command="command => rowCommand(command, row)"><el-button text :aria-label="row.name + '的更多操作'">更多</el-button><template #dropdown><el-dropdown-menu>
-                    <el-dropdown-item command="url">复制 {{ row.type === 'SOAP' ? 'WSDL' : 'Mock' }} 地址</el-dropdown-item>
+                    <el-dropdown-item command="history">变更历史</el-dropdown-item>
                     <el-dropdown-item v-if="canWrite" command="copy" :disabled="busy || loading">复制为新接口</el-dropdown-item>
                     <el-dropdown-item v-if="canWrite" command="delete" :disabled="busy || loading">移入回收站</el-dropdown-item>
                   </el-dropdown-menu></template></el-dropdown>
@@ -152,15 +152,14 @@
 </div>
 </dl>
 <footer>
-<el-button text @click="openDetailDialog(row)">详情</el-button>
+<el-button text type="primary" class="row-copy" @click="copyUrl(row)"><el-icon><CopyDocument /></el-icon>复制</el-button>
 <el-button v-if="canWrite" text @click="openEditor(row)">编辑</el-button>
-<el-button text @click="openHistory(row)">
-<FilledIcon name="history" :size="14" />历史</el-button>
+<el-button text @click="openDetailDialog(row)">详情</el-button>
 <el-dropdown trigger="click" @command="command => rowCommand(command, row)">
 <el-button text :aria-label="row.name + '的更多操作'">更多</el-button>
 <template #dropdown>
 <el-dropdown-menu>
-<el-dropdown-item command="url">复制 {{ row.type === 'SOAP' ? 'WSDL' : 'Mock' }} 地址</el-dropdown-item>
+<el-dropdown-item command="history">变更历史</el-dropdown-item>
 <el-dropdown-item v-if="canWrite" command="copy" :disabled="busy || loading">复制为新接口</el-dropdown-item>
 <el-dropdown-item v-if="canWrite" command="delete" :disabled="busy || loading">移入回收站</el-dropdown-item>
 </el-dropdown-menu>
@@ -313,7 +312,7 @@ async function mutate(work, message, capability = 'write') {
 }
 function freezeTargets(targets) { try { return freezeRows(targets, teamId.value) } catch (failure) { conflict.value = readableError(failure); return null } }
 function toggle(row) { if (!canWrite.value) return; const frozenRows = freezeTargets([row]); if (!frozenRows) return; const [frozen] = frozenRows; return mutate(() => toggleApi(frozen.id, frozen.revision), row.enabled ? '接口已停用' : '接口已启用') }
-function rowCommand(command, row) { if (command === 'url') return copyUrl(row); if (!canWrite.value) return; if (command === 'delete') return prepareDelete([row], false); if (command === 'copy') { const frozenRows = freezeTargets([row]); if (!frozenRows) return; const [frozen] = frozenRows; return mutate(() => copyApi(frozen.id, frozen.revision), '已复制为新的团队接口') } }
+function rowCommand(command, row) { if (command === 'history') return openHistory(row); if (command === 'url') return copyUrl(row); if (!canWrite.value) return; if (command === 'delete') return prepareDelete([row], false); if (command === 'copy') { const frozenRows = freezeTargets([row]); if (!frozenRows) return; const [frozen] = frozenRows; return mutate(() => copyApi(frozen.id, frozen.revision), '已复制为新的团队接口') } }
 function runBatch(action, targetGroupId) {
   if (!canWrite.value || !selectedRows.value.length) return
   const frozen = freezeTargets(selectedRows.value); if (!frozen) return
@@ -385,21 +384,24 @@ async function copyUrl(row) {
 .api-grid-scroll::-webkit-scrollbar-thumb{background:var(--app-divider);border-radius:4px}
 .api-grid-scroll::-webkit-scrollbar-track{background:var(--app-bg-control)}
 .api-grid-scroll:focus-visible{outline:2px solid var(--app-focus-color);outline-offset:-2px}
-.api-grid{width:100%;min-width:1484px;border-spacing:0;border-collapse:separate;table-layout:fixed;text-align:left}
-.column-select{width:36px}.column-type{width:60px}.column-method{width:76px}.column-path{width:200px}.column-name{width:170px}.column-group{width:100px}.column-tags{width:100px}.column-calls{width:80px}.column-called{width:130px}.column-modified{width:144px}.column-creator{width:88px}.column-state{width:64px}.column-actions{width:136px}
+.api-grid{width:100%;min-width:1452px;border-spacing:0;border-collapse:separate;table-layout:fixed;text-align:left}
+/* 路径列不设固定宽度：由它吸收表格剩余宽度，右侧 sticky 列才能用精确偏移不重叠 */
+.column-select{width:36px}.column-type{width:72px}.column-method{width:76px}.column-name{width:170px}.column-group{width:100px}.column-tags{width:100px}.column-calls{width:80px}.column-called{width:130px}.column-modified{width:144px}.column-creator{width:88px}.column-state{width:64px}.column-actions{width:192px}
 .api-grid th{font-size:12px;font-weight:500;color:var(--app-text-secondary);padding:11px 8px}
 .api-grid td{font-size:12px;color:var(--app-text-regular);padding:8px;vertical-align:middle;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;height:46px;border-top:1px solid var(--app-divider)}
+.api-grid th,.api-grid td{text-align:center}
+.api-grid th:nth-child(4),.api-grid td.cell-path,.api-grid th:nth-child(5),.api-grid td.cell-name{text-align:left}
 .api-grid tbody tr:hover{background:var(--app-bg-control)}
 .api-grid tbody tr.is-selected{background:var(--app-bg-selected)}
 .api-grid .cell-select{width:32px;text-align:center;padding-left:3px;padding-right:3px}
 .api-path{display:flex;align-items:center;min-height:28px;background:transparent;border:0;padding:0;text-align:left;color:var(--app-text-primary);font:13px/1.7 var(--app-font-mono);text-align:left;cursor:pointer;overflow-wrap:anywhere;max-width:100%}
 .api-path:hover{color:var(--app-accent)}
-.type-chip,.group-chip{padding:3px 6px;background:var(--app-bg-control);border-radius:5px;font-size:12px;color:var(--app-text-secondary)}
+.type-chip,.group-chip{padding:3px 6px;background:var(--app-bg-control);border-radius:5px;font-size:12px;color:var(--app-text-secondary);white-space:nowrap}.type-chip{display:inline-block;max-width:100%}
 .row-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
 .row-tags>span{max-width:100%;overflow-wrap:anywhere;min-width:0;font-size:12px;color:var(--app-text-secondary);background:var(--app-bg-control);padding:3px 6px;border-radius:5px;display:inline-flex;align-items:center;gap:4px}
 .row-tags i{width:6px;height:6px;border-radius:50%;flex:none}
-.row-actions{display:flex;justify-content:flex-end;align-items:center;gap:2px}
-.row-actions :deep(.el-button){padding:7px 3px;font-size:12px;margin:0}
+.row-actions{display:flex;justify-content:center;align-items:center;gap:2px}
+.row-actions :deep(.el-button){padding:7px 3px;font-size:12px;margin:0;gap:3px}
 .status-chip{font-size:12px;color:var(--app-text-secondary);background:var(--app-bg-control);padding:4px 7px;border-radius:7px;white-space:nowrap}
 .status-chip.enabled{color:var(--el-color-success-dark-2);background:var(--el-color-success-light-9)}
 .workspace-footer{display:flex;justify-content:flex-end;align-items:center;gap:12px;flex-wrap:wrap;margin-top:16px}
@@ -460,11 +462,11 @@ async function copyUrl(row) {
 
 .readonly-badge{font-size:12px;color:var(--app-text-secondary);padding:5px 8px;background:var(--app-bg-control);border-radius:6px}
 .api-grid .api-path{display:block;width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px}
-.api-grid .row-tags{margin:0;flex-wrap:nowrap;overflow:hidden;max-height:28px}
+.api-grid .row-tags{margin:0;flex-wrap:nowrap;overflow:hidden;max-height:28px;justify-content:center}
 .api-grid .row-tags>span{max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0;display:inline-block;vertical-align:middle}
 .api-grid .row-tags i{display:inline-block;margin-right:4px;vertical-align:middle}
 .api-grid .cell-state,.api-grid .cell-actions{position:sticky;background:var(--app-bg-surface);z-index:1;overflow:visible}
-.api-grid .cell-state{right:136px;text-align:center}.api-grid .cell-actions{right:0;text-align:right}
+.api-grid .cell-state{right:192px;text-align:center}.api-grid .cell-actions{right:0;text-align:center}
 .api-grid thead .cell-state,.api-grid thead .cell-actions{z-index:2}
 .api-grid tr:hover .cell-state,.api-grid tr:hover .cell-actions{background:var(--app-bg-control)}
 .api-grid tr.is-selected .cell-state,.api-grid tr.is-selected .cell-actions{background:var(--app-bg-selected)}
