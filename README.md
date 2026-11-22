@@ -198,7 +198,7 @@
 
 ### 旧版本升级
 
-从任意历史版本升级到 1.4.6 时，**不需要手工修改数据库**：停止服务、备份 `data/`、替换 jar 后启动即可。启动时会自动创建新增表，并逐列补齐旧库可能缺失的字段（如 `vendor`、`conditions`、`scenarios`、`tool_update_api_draft` 等），已有数据保持不变。
+从任意历史版本升级到 2026.11.22 时，**不需要手工修改数据库**：停止服务、备份 `data/`、替换 jar 后启动即可。启动时会自动创建新增表，并逐列补齐旧库可能缺失的字段（如 `vendor`、`conditions`、`scenarios`、`tool_update_api_draft` 等），已有数据保持不变。
 
 > 备份时请同时保留 `data/.ai-key`，否则已保存的 AI API Key 无法解密。
 
@@ -345,7 +345,7 @@ REST 模式使用 `responseMode` 字段，SOAP 使用 `soapConfig.operations[].r
 示例：
 
 ```bash
-java -jar mockhub-1.4.6.jar \
+java -jar mockhub-2026.11.22.jar \
   --server.port=9090 \
   --data.path=D:/mockhub/data \
   --log.retain.mode=days \
@@ -409,7 +409,7 @@ mvn clean package -DskipTests
   <name>MockHub</name>
   <description>MockHub 接口模拟服务</description>
   <executable>java</executable>
-  <arguments>-jar mockhub-1.4.6.jar --server.port=18080 --data.path=./data</arguments>
+  <arguments>-jar mockhub-2026.11.22.jar --server.port=18080 --data.path=./data</arguments>
   <workingdirectory>%BASE%</workingdirectory>
   <logpath>%BASE%\logs</logpath>
   <log mode="roll-by-size">

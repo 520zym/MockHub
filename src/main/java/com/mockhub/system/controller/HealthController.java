@@ -21,6 +21,10 @@ public class HealthController {
     @Value("${server.port:8080}")
     private int serverPort;
 
+    /** 由 Maven 资源过滤注入的版本号（application.yml 的 app.version）。 */
+    @Value("${app.version:dev}")
+    private String appVersion;
+
     /**
      * 用户手动配置的服务器地址（为空时自动检测）。
      * 通过 SettingsController 在内存中修改。
@@ -31,7 +35,7 @@ public class HealthController {
     public Map<String, String> health() {
         Map<String, String> result = new HashMap<String, String>();
         result.put("status", "UP");
-        result.put("version", "1.4.6");
+        result.put("version", appVersion);
         return result;
     }
 

@@ -41,6 +41,10 @@ public class McpServerService {
     private final LogService logService;
     private final McpExecutionPolicyService scopePolicy;
 
+    /** 由 Maven 资源过滤注入；单元测试直接构造实例时回退为 dev。 */
+    @org.springframework.beans.factory.annotation.Value("${app.version:dev}")
+    private String appVersion = "dev";
+
     public McpServerService(ObjectMapper objectMapper,
                             McpSettingsService settingsService,
                             McpToolRegistry registry,
@@ -101,7 +105,7 @@ public class McpServerService {
         ObjectNode serverInfo = result.putObject("serverInfo");
         serverInfo.put("name", "mockhub");
         serverInfo.put("title", "MockHub");
-        serverInfo.put("version", "1.5.0");
+        serverInfo.put("version", appVersion);
         result.put("instructions", "MockHub MCP：可搜索接口、查询统计、生成响应体/条件、创建接口草稿。写操作默认需要回到 MockHub 页面确认。");
         return result(id, result);
     }

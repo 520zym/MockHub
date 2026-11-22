@@ -1,6 +1,6 @@
 <template>
   <aside class="sidebar" :class="{ 'sidebar--collapsed': appStore.sidebarCollapsed }" aria-label="主导航">
-    <router-link to="/apis" class="sidebar__brand" aria-label="MockHub 首页"><span class="sidebar__mark">M</span><b class="sidebar__copy">MockHub</b><small class="sidebar__copy">1.4</small></router-link>
+    <router-link to="/apis" class="sidebar__brand" aria-label="MockHub 首页"><span class="sidebar__mark">M</span><b class="sidebar__copy">MockHub</b><small class="sidebar__copy">{{ appVersion }}</small></router-link>
     <div class="sidebar__scope sidebar__copy">{{ systemContext ? '实例范围' : '团队上下文' }}</div>
     <el-dropdown trigger="click" placement="bottom-start" @command="selectTeam" class="sidebar__team-dropdown">
       <button type="button" class="sidebar__team" :disabled="!appStore.teams.length && !userStore.isSuperAdmin" aria-label="切换团队">
@@ -39,6 +39,7 @@ import { useUserStore } from '@/stores/user'
 import { roleLabel } from '@/utils/permissions'
 import FilledIcon from '@/components/FilledIcon.vue'
 const appStore = useAppStore(), userStore = useUserStore(), route = useRoute(), router = useRouter()
+const appVersion = typeof __APP_VERSION__ === 'undefined' ? 'dev' : __APP_VERSION__
 const systemContext = computed(() => route.meta.requiresSuperAdmin)
 const currentRole = computed(() => roleLabel(appStore.currentTeam))
 const initial = computed(() => (userStore.user?.displayName || userStore.user?.username || 'U').slice(0, 1).toUpperCase())
