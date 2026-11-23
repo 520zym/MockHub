@@ -294,7 +294,7 @@ const teamId = computed(() => appStore.currentTeamId || null)
 const teamName = computed(() => appStore.currentTeam?.name || '')
 const canRead = computed(() => !!teamId.value && !!appStore.currentTeam && userStore.identityReady && appStore.currentTeam?.status !== 'DISABLED' && userStore.hasCapability(teamId.value, 'read'))
 const canWrite = computed(() => canRead.value && appStore.currentTeam?.status !== 'ARCHIVED' && userStore.hasCapability(teamId.value, 'write'))
-const canUseAssistant = computed(() => canRead.value && aiStore.enabled && aiStore.visible && aiStore.available && aiStore.capabilities.assistant === true)
+const canUseAssistant = computed(() => canRead.value && aiStore.enabled && aiStore.visible && aiStore.available)
 const open = ref(false), input = ref(''), loading = ref(false), messages = ref([]), bodyRef = ref(null), composerFocus = ref(false), composerInput = ref(null)
 const lastApiId = ref(''), conversationId = ref(''), historyOpen = ref(false), historyLoading = ref(false), historyError = ref(''), conversations = ref([])
 const previewDialogVisible = ref(false), previewDialogContent = ref(''), previewDialogTitle = ref(''), now = ref(Date.now())
@@ -442,8 +442,11 @@ watch(messages, scrollToBottom, { deep: true })
 
 <style scoped>
 .ai-assistant { position: fixed; inset: 0; pointer-events: none; z-index: 2001; color: var(--app-text-primary); }
-.ai-fab { pointer-events: auto; position: absolute; right: 28px; bottom: 28px; width: 56px; height: 56px; display: grid; place-items: center; border: 0; border-radius: 16px; background: var(--app-accent); color: #FFFFFF; font-size: 26px; cursor: pointer; box-shadow: none; }
-.ai-fab:hover { background: var(--app-accent-hover); }.ai-fab__dot { position: absolute; top: 4px; right: 4px; width: 8px; height: 8px; border-radius: 50%; background: #FFFFFF; }
+.ai-fab { pointer-events: auto; position: absolute; right: 40px; bottom: 40px; width: 56px; height: 56px; display: grid; place-items: center; border: 0; border-radius: 16px; background: var(--app-primary); color: #FFFFFF; font-size: 26px; cursor: pointer; box-shadow: 0 10px 24px rgba(23, 25, 29, .18), 0 2px 6px rgba(23, 25, 29, .12); animation: ai-fab-float 5s ease-in-out infinite; will-change: transform; }
+.ai-fab:hover { background: var(--app-primary-hover); box-shadow: 0 14px 30px rgba(23, 25, 29, .24), 0 3px 8px rgba(23, 25, 29, .14); }
+.ai-fab:focus-visible { outline: 2px solid var(--app-focus-color); outline-offset: 3px; }
+.ai-fab__dot { position: absolute; top: 4px; right: 4px; width: 8px; height: 8px; border-radius: 50%; background: #FFFFFF; }
+@keyframes ai-fab-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
 .ai-chat { pointer-events: auto; position: absolute; right: 24px; bottom: 16px; width: min(460px, calc(100vw - 32px)); height: min(824px, calc(100vh - 32px)); height: min(824px, calc(100dvh - 32px)); min-height: 0; display: flex; flex-direction: column; background: var(--app-bg-surface); border: 0; border-radius: 20px; box-shadow: none; overflow: hidden; }
 .ai-chat__head { min-height: 68px; padding: 12px 14px; display: flex; align-items: center; gap: 10px; flex-shrink: 0; background: var(--app-bg-surface); }
 .ai-chat__avatar, .ai-msg__avatar { display: grid; place-items: center; flex-shrink: 0; color: #FFFFFF; background: var(--app-accent); border-radius: 10px; }
@@ -460,6 +463,6 @@ watch(messages, scrollToBottom, { deep: true })
 .ai-composer { flex-shrink: 0; padding: 12px 14px; background: var(--app-bg-surface); }.ai-composer__box { min-width: 0; padding: 10px 12px; border: 0; border-radius: 10px; background: var(--app-bg-control); cursor: text; }.ai-composer__box--focus { outline: 2px solid var(--app-focus-color); outline-offset: 1px; }.ai-composer__box :deep(.el-textarea__inner) { min-height: 44px !important; padding: 0; border: 0; background: var(--app-bg-control); box-shadow: none; font-size: 13px; line-height: 1.8; }.ai-composer__box :deep(.el-textarea__inner:focus) { outline: none; }.ai-composer__foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; }.ai-composer__scope { display: inline-flex; align-items: center; gap: 4px; min-width: 0; font-size: 12px; color: var(--app-text-secondary); overflow-wrap: anywhere; }.ai-composer__tip { display: flex; align-items: flex-start; justify-content: center; gap: 4px; margin-top: 8px; font-size: 12px; line-height: 1.6; color: var(--app-text-secondary); }.ai-composer__tip .el-icon { margin-top: 3px; flex-shrink: 0; }
 .ai-bubble--typing { display: flex; align-items: center; gap: 4px; padding: 14px; }.ai-bubble--typing span { width: 5px; height: 5px; border-radius: 50%; background: var(--app-accent); animation: ai-typing 1s ease-in-out infinite; }.ai-bubble--typing span:nth-child(2) { animation-delay: .15s; }.ai-bubble--typing span:nth-child(3) { animation-delay: .3s; }@keyframes ai-typing { 0%,60%,100% { transform: translateY(0); } 30% { transform: translateY(-3px); } }
 .ai-pop-enter-active, .ai-pop-leave-active { transition: opacity .18s ease, transform .18s ease; }.ai-pop-enter-from, .ai-pop-leave-to { opacity: 0; transform: translateY(8px); }
-@media(max-width:520px) { .ai-chat { inset: 8px; width: auto; height: auto; }.ai-chat__head { padding: 12px; gap: 8px; }.ai-chat__ctx { padding: 8px 12px; }.ai-chat__body { padding: 14px 12px; }.ai-confirm__grid { grid-template-columns: minmax(0,1fr); }.ai-fab { right: 16px; bottom: 16px; } }
-@media(prefers-reduced-motion:reduce) { .ai-pop-enter-active,.ai-pop-leave-active { transition: none; }.ai-bubble--typing span { animation: none; } }
+@media(max-width:520px) { .ai-chat { inset: 8px; width: auto; height: auto; }.ai-chat__head { padding: 12px; gap: 8px; }.ai-chat__ctx { padding: 8px 12px; }.ai-chat__body { padding: 14px 12px; }.ai-confirm__grid { grid-template-columns: minmax(0,1fr); }.ai-fab { right: 24px; bottom: 24px; } }
+@media(prefers-reduced-motion:reduce) { .ai-pop-enter-active,.ai-pop-leave-active { transition: none; }.ai-bubble--typing span { animation: none; }.ai-fab { animation: none; } }
 </style>
