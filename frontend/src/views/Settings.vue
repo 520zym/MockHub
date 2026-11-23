@@ -27,7 +27,7 @@
         <el-form label-position="top" class="settings-form">
           <!-- AI 供应商 -->
           <section v-show="activeSection === 'provider'" class="settings-section">
-            <h3 class="section-title">AI 供应商 <span class="api-chip">API 接入</span></h3>
+            <h3 class="section-title">AI 供应商</h3>
 
             <div v-if="aiForm.provider === 'MOCK'" class="mock-banner">
               <div class="mock-banner__logo">M</div>
@@ -60,20 +60,15 @@
               </div>
 
               <div v-if="isQwenProvider" class="qwen-plan-row">
-                <span class="qwen-plan-row__label">千问AI 计费方式</span>
+                <span class="qwen-plan-row__label">计费方式</span>
                 <el-radio-group v-model="qwenPlanMode" size="small">
                   <el-radio-button value="token-plan">Token Plan</el-radio-button>
                   <el-radio-button value="payg">按量计费</el-radio-button>
                 </el-radio-group>
-                <span class="qwen-plan-row__host">{{ hostOf(aiForm.baseUrl) }}</span>
               </div>
 
               <el-form-item label="API 地址">
                 <el-input v-model="aiForm.baseUrl" class="ai-field" placeholder="https://api.deepseek.com/v1" />
-                <div class="input-hint">自动拼接 /chat/completions；也可直接粘贴完整地址。</div>
-                <div v-if="isQwenProvider" class="input-hint">
-                  Token Plan Key（sk-sp- 开头）选 Token Plan；按量付费 Key 选按量计费。
-                </div>
               </el-form-item>
 
               <el-form-item label="API Key">
@@ -90,12 +85,10 @@
                   <el-tag v-else-if="aiKeyConfigured" type="success" effect="plain" round>已配置 {{ aiKeyMask }}</el-tag>
                   <el-button v-if="aiKeyConfigured && !aiClearKey" text type="danger" @click="clearAiKey">清除</el-button>
                   <el-button v-if="aiClearKey && clearKeySource === 'user'" text @click="undoClearKey">撤销</el-button>
-                  <span v-if="aiClearKey && clearKeySource === 'vendor'" class="input-hint">切换供应商后请重新填写 Key</span>
+                  <span v-if="aiClearKey && clearKeySource === 'vendor'" class="input-hint">保存后需重新填写 Key</span>
                 </div>
-                <div class="input-hint">仅保存不回显，不会写入日志或浏览器存储。</div>
                 <div v-if="currentPreset?.consoleUrl" class="ai-console-row">
-                  <span>还没有 API Key？</span>
-                  <a :href="currentPreset.consoleUrl" target="_blank" rel="noopener noreferrer">前往 {{ currentPreset.name }} 工作台创建 <span aria-hidden="true">↗</span></a>
+                  <a :href="currentPreset.consoleUrl" target="_blank" rel="noopener noreferrer">创建 API Key <span aria-hidden="true">↗</span></a>
                 </div>
               </el-form-item>
 
@@ -111,18 +104,8 @@
                     <span v-if="aiTestResult.modelCount" class="ai-test-model">发现 {{ aiTestResult.modelCount }} 个模型</span>
                     <span v-else-if="aiTestResult.model" class="ai-test-model">已验证 · {{ aiTestResult.model }}</span>
                   </span>
-                  <span v-if="aiConnectionDirty && !aiTestResult" class="input-hint">先测试连接，通过后再保存</span>
                 </div>
               </el-form-item>
-
-              <el-alert
-                type="info"
-                :closable="false"
-                show-icon
-                class="ai-security"
-                title="Key 只存在服务端"
-                description="API Key 不会返回前端；备份数据库时请同时备份 data/.ai-key，否则已保存的 Key 无法解密。"
-              />
             </template>
 
             <div class="ai-save-row">
@@ -133,10 +116,7 @@
 
             <section v-if="aiConnectionReady" class="ai-model-section">
               <div class="ai-model-section__head">
-                <div>
-                  <h4>选择默认模型</h4>
-                  <p>连接已保存，从上游拉取模型列表后选择一个模型使用。</p>
-                </div>
+                <h4>选择默认模型</h4>
                 <span v-if="aiSaved.model" class="ai-test-model">当前：{{ aiSaved.model }}</span>
               </div>
               <AiModelPicker
@@ -148,12 +128,8 @@
                 :auto-fetch="autoFetchModels"
                 :dirty="aiModelDirty"
               />
-              <p v-if="isQwenProvider" class="input-hint" style="margin-left:0">
-                千问AI 可能不提供 /models 列表；可以直接选择推荐模型，或手动输入模型 ID。
-              </p>
               <div class="ai-model-actions">
                 <el-button type="primary" :loading="aiSaving" :disabled="!canSaveModel" @click="handleSaveModel">保存模型</el-button>
-                <span v-if="!aiSaved.model" class="input-hint">选择模型后保存，助手才会变为可用。</span>
               </div>
             </section>
           </section>
@@ -904,7 +880,7 @@ onMounted(() => {
 .ai-scope-wrap { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
 .ai-scope { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 .ai-security { margin-top: 4px; }
-.ai-save-row { display: flex; align-items: center; gap: 12px; margin-top: 18px; }
+.ai-save-row { display: flex; align-items: center; gap: 12px; margin-top: 18px; }.ai-save-row .input-hint { margin-left: 0; }
 .ai-model-section { margin-top: 22px; padding-top: 18px; border-top: 1px solid #F1F5F9; }
 .ai-model-section__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
 .ai-model-section__head h4 { margin: 0; font-size: 14px; font-weight: 600; color: #1B2559; }
