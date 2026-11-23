@@ -26,30 +26,30 @@
         class="soft-table"
         :header-cell-style="headerCellStyle"
       >
-        <el-table-column label="时间" prop="createdAt" width="180">
+        <el-table-column label="时间" prop="createdAt" width="180" align="center">
           <template #default="{ row }">
             {{ formatTime(row.createdAt) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作人" prop="username" width="120">
+        <el-table-column label="操作人" prop="username" width="140" align="center">
           <template #default="{ row }">
             <span class="cell-title" :title="row.username">{{ row.username }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作类型" prop="action" width="120">
+        <el-table-column label="操作类型" prop="action" width="120" align="center">
           <template #default="{ row }">
             <span class="action-tag" :style="actionTagStyle(row.action)">
               {{ actionLabel(row.action) }}
             </span>
           </template>
         </el-table-column>
-        <el-table-column label="目标类型" prop="targetType" width="100" />
-        <el-table-column label="目标名称" prop="targetName" min-width="300">
+        <el-table-column label="目标类型" prop="targetType" width="110" align="center" />
+        <el-table-column label="目标名称" prop="targetName" min-width="300" align="left" header-align="center">
           <template #default="{ row }">
             <span class="cell-title" :title="row.targetName">{{ row.targetName }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="详细信息" prop="detail" min-width="200" show-overflow-tooltip />
+        <el-table-column label="详细信息" prop="detail" min-width="220" show-overflow-tooltip align="left" header-align="center" />
         <!-- 空状态 -->
         <template #empty>
           <div class="empty-state">
@@ -66,35 +66,35 @@
         class="soft-table"
         :header-cell-style="headerCellStyle"
       >
-        <el-table-column label="时间" prop="createdAt" width="180">
+        <el-table-column label="时间" prop="createdAt" width="180" align="center">
           <template #default="{ row }">
             {{ formatTime(row.createdAt) }}
           </template>
         </el-table-column>
-        <el-table-column label="方法" prop="method" width="100">
+        <el-table-column label="方法" prop="method" width="100" align="center">
           <template #default="{ row }">
             <HttpMethodTag :method="row.method" />
           </template>
         </el-table-column>
-        <el-table-column label="请求路径" prop="apiPath" min-width="280">
+        <el-table-column label="请求路径" prop="apiPath" min-width="280" align="left" header-align="center">
           <template #default="{ row }">
             <el-tag v-if="row.targetType === 'FILE'" size="small" class="target-tag">文件</el-tag>
             <span class="cell-title" :title="row.apiPath">{{ row.apiPath }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="响应码" prop="responseCode" width="100">
+        <el-table-column label="响应码" prop="responseCode" width="100" align="center">
           <template #default="{ row }">
             <span class="status-code-tag" :style="statusCodeStyle(row.responseCode)">
               {{ row.responseCode }}
             </span>
           </template>
         </el-table-column>
-        <el-table-column label="耗时" prop="durationMs" width="100">
+        <el-table-column label="耗时" prop="durationMs" width="100" align="center">
           <template #default="{ row }">
             <span class="duration-text">{{ row.durationMs }} ms</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="100" fixed="right">
+        <el-table-column label="操作" width="110" fixed="right" align="center">
           <template #default="{ row }">
             <el-button type="primary" link size="small" @click="showDetail(row)">
               查看详情
@@ -300,7 +300,7 @@ onBeforeUnmount(() => { disposed = true; contextVersion++; listSequence++; detai
 <style lang="scss" scoped>
 .page-log-view { min-width: 0; color: var(--app-text-primary); }.resource-header { margin-bottom: 20px; }.resource-header h1 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -.025em; }
 .log-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; margin-bottom: 16px; }.log-tabs { display: flex; gap: 4px; background: var(--app-bg-control); border-radius: 10px; padding: 4px; }.log-tab { padding: 8px 18px; font: inherit; border: 0; border-radius: 8px; color: var(--app-text-secondary); cursor: pointer; background: var(--app-bg-control); }.log-tab:hover { color: var(--app-text-primary); }.log-tab.active { color: var(--app-accent); background: var(--app-bg-surface); }.toolbar-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }.team-context { font-size: 12px; color: var(--app-text-secondary); padding: 8px 12px; background: var(--app-bg-surface); border-radius: 8px; }
-.log-card { min-width: 0; background: var(--app-bg-surface); border-radius: 16px; padding: 20px; }.target-tag { margin-right: 6px; border-color: transparent; background: var(--app-bg-selected); color: var(--app-text-accent); }
+.log-card { min-width: 0; background: var(--app-bg-surface); border-radius: 16px; padding: 20px; }.log-card :deep(.el-table .cell) { line-height: 1.6; }.log-card :deep(.el-table td.el-table__cell), .log-card :deep(.el-table th.el-table__cell) { vertical-align: middle; }.target-tag { margin-right: 6px; border-color: transparent; background: var(--app-bg-selected); color: var(--app-text-accent); }
 .cell-title { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.action-tag, .status-code-tag { display: inline-block; padding: 3px 8px; border-radius: 8px; font-size: var(--app-font-caption); font-weight: 500; line-height: 1.6; white-space: nowrap; }.duration-text { color: var(--app-text-secondary); font-size: 12px; }.pagination-wrapper { display: flex; justify-content: flex-end; margin-top: 16px; padding-top: 12px; min-width: 0; }.empty-state { padding: 36px 16px; text-align: center; color: var(--app-text-secondary); font-size: 13px; }.empty-state p { margin: 0; }.resource-state { padding: 32px 20px; border-radius: 16px; background: var(--app-bg-surface); color: var(--app-text-secondary); text-align: center; font-size: 13px; }.resource-state p { margin: 12px 0; }
 .detail-content { display: flex; flex-direction: column; gap: 18px; min-width: 0; }.detail-label { font-size: 13px; font-weight: 500; color: var(--app-text-secondary); margin-bottom: 8px; }.detail-value { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }.detail-path { font: 13px var(--app-font-mono); color: var(--app-text-primary); overflow-wrap: anywhere; min-width: 0; }.detail-pre { margin: 0; padding: 14px; background: var(--app-bg-control); border-radius: 10px; color: var(--app-text-regular); font: 12px/1.8 var(--app-font-mono); max-height: 300px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 .ai-diagnosis { padding-top: 4px; min-width: 0; }.ai-diagnosis__head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }.ai-diagnosis__body { margin-top: 12px; display: flex; flex-direction: column; gap: 12px; }.ai-verdict, .ai-suggestion { padding: 14px; border-radius: 10px; background: var(--app-bg-control); }.ai-verdict__title { font-size: 14px; font-weight: 600; color: var(--app-text-primary); }.ai-verdict__desc, .ai-suggestion__text { font-size: 13px; line-height: 1.8; margin-top: 5px; color: var(--app-text-regular); overflow-wrap: anywhere; }.ai-chain { display: flex; flex-direction: column; gap: 14px; }.ai-chain__item { display: flex; align-items: flex-start; gap: 10px; }.ai-chain__dot { width: 24px; height: 24px; border-radius: 8px; background: var(--app-bg-control); color: var(--app-text-regular); font-size: var(--app-font-caption); font-weight: 500; display: grid; place-items: center; flex-shrink: 0; }.ai-chain__dot--hit, .ai-chain__dot--fallback_hit { color: var(--app-text-success); background: var(--el-color-success-light-9); }.ai-chain__dot--fallback { color: var(--app-text-warning); background: var(--el-color-warning-light-9); }.ai-chain__content { min-width: 0; flex: 1; }.ai-chain__title { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 13px; font-weight: 500; }.ai-chain__badge { padding: 3px 8px; border-radius: 8px; background: var(--app-bg-control); color: var(--app-text-secondary); font-size: var(--app-font-caption); line-height: 1.6; }.ai-chain__desc { color: var(--app-text-secondary); margin-top: 4px; font-size: 12px; line-height: 1.8; overflow-wrap: anywhere; }.ai-suggestion__title { display: flex; align-items: center; gap: 6px; color: var(--app-accent); font-size: 13px; font-weight: 500; }.ai-diagnosis__note { color: var(--app-text-secondary); font-size: 12px; line-height: 1.8; }
