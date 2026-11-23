@@ -43,9 +43,9 @@ const appVersion = typeof __APP_VERSION__ === 'undefined' ? 'dev' : __APP_VERSIO
 const systemContext = computed(() => route.meta.requiresSuperAdmin)
 const currentRole = computed(() => roleLabel(appStore.currentTeam))
 const initial = computed(() => (userStore.user?.displayName || userStore.user?.username || 'U').slice(0, 1).toUpperCase())
-const workspaceItems = [{ path: '/apis', label: '接口管理', icon: 'api' }, { path: '/files', label: '文件服务器', icon: 'files' }, { path: '/variables', label: '动态变量', icon: 'variables' }, { path: '/stats', label: '使用统计', icon: 'stats' }, { path: '/logs/request', label: '日志记录', icon: 'logs' }]
+const workspaceItems = [{ path: '/apis', label: '接口管理', icon: 'api' }, { path: '/files', label: '文件服务器', icon: 'files' }, { path: '/variables', label: '动态变量', icon: 'variables' }, { path: '/stats', label: '使用统计', icon: 'stats' }, { path: '/logs/operation', label: '日志记录', icon: 'logs' }]
 const systemItems = [{ path: '/users', label: '账号管理', icon: 'user' }, { path: '/teams', label: '团队管理', icon: 'team' }, { path: '/settings', label: '全局设置', icon: 'settings' }]
-function isActive(path) { return path === '/apis' ? route.path.startsWith('/apis') : path === '/logs/request' ? route.path.startsWith('/logs') : route.path === path }
+function isActive(path) { return path === '/apis' ? route.path.startsWith('/apis') : path === '/logs/operation' ? route.path.startsWith('/logs') : route.path === path }
 async function selectTeam(id) {
   if (id === '@system') { await router.push('/users'); return }
   if (id === appStore.currentTeamId && !systemContext.value) return

@@ -41,6 +41,12 @@ textarea {
   outline-offset: 3px;
 }
 
+// Form controls often sit flush against scroll/clip edges; keep their focus ring inside the box.
+:where(input, select, textarea):focus-visible {
+  outline-offset: -2px;
+}
+
+
 ::selection {
   color: var(--app-text-primary);
   background: #DCE7FC;

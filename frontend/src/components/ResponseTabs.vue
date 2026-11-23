@@ -1071,8 +1071,8 @@ async function handleUploadFile(uploadFile) {
 .content-type-group :deep(.el-radio-button__inner) { flex: 1; width: 100%; padding: 0 4px; font-size: 12px; line-height: normal; display: flex; align-items: center; justify-content: center; }
 .response-mode-label { font-size: 12px; color: var(--app-text-secondary); }.response-mode-help { font-size: 12px; line-height: 1.6; color: var(--app-text-secondary); flex: 1; min-width: 180px; }
 .tabs-header { display: flex; gap: 7px; align-items: stretch; overflow-x: auto; min-width: 0; padding-bottom: 3px; }
-.tab-item { display: flex; align-items: center; gap: 7px; padding: 8px 6px 8px 10px; min-height: 42px; border: 2px solid transparent; color: var(--app-text-regular); background: var(--app-bg-control); border-radius: 9px; font-size: 12px; cursor: pointer; flex-shrink: 0; }
-.tab-remove { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; flex-shrink: 0; border: 0; border-radius: 7px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+.tab-item { display: flex; align-items: center; gap: 6px; padding: 6px 5px 6px 9px; min-height: 38px; border: 2px solid transparent; color: var(--app-text-regular); background: var(--app-bg-control); border-radius: 9px; font-size: 12px; cursor: pointer; flex-shrink: 0; }
+.tab-remove { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; flex-shrink: 0; border: 0; border-radius: 7px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
 .tab-remove:hover:not(:disabled) { background: var(--el-color-danger-light-9); color: var(--app-text-danger); }
 .tab-remove:disabled { color: var(--app-text-disabled); cursor: not-allowed; }
 .tab-item.active .tab-remove { color: var(--app-text-inverse); opacity: .75; }
@@ -1086,7 +1086,7 @@ async function handleUploadFile(uploadFile) {
 .tab-item.active .tab-status, .tab-item.active .disabled-badge, .tab-item.active .fallback-star { color: var(--app-text-inverse); }
 .tab-item.active .tab-cond { color: var(--app-text-inverse); background: transparent; }
 .tab-item.active .active-dot { outline: 1px solid var(--app-text-inverse); outline-offset: 1px; }
-.tab-name { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.tab-status { font: 11px var(--app-font-mono); color: var(--app-text-success); }.disabled-badge { font-size: 11px; color: var(--app-text-secondary); }.tab-name-input { width: 125px; }
+.tab-name { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.tab-status { font: 11px var(--app-font-mono); color: var(--app-text-success); }.disabled-badge { font-size: 11px; color: var(--app-text-secondary); }.tab-name-input { width: 125px; }
 .tab-cond { font-size: var(--app-font-micro); color: var(--app-text-secondary); background: var(--app-bg-hover); border-radius: 6px; padding: 1px 5px; }
 .fallback-star { color: var(--app-accent); font-size: 12px; }
 /* 区头：标题/数量 + 选择方式 + 删除/新增，替代原先四条各自成行的零散工具行 */

@@ -16,6 +16,7 @@ const routes = [
     { path: 'variables', name: 'TeamVariables', component: () => import('@/views/TeamVariables.vue'), meta: { title: '动态变量', teamRequired: true } },
     { path: 'files', name: 'FileServer', component: () => import('@/views/FileServer.vue'), meta: { title: '文件服务器', teamRequired: true } },
     { path: 'stats', name: 'Stats', component: () => import('@/views/Stats.vue'), meta: { title: '使用统计', teamRequired: true } },
+    { path: 'logs', redirect: '/logs/operation' },
     { path: 'logs/operation', name: 'OperationLog', component: () => import('@/views/LogView.vue'), meta: { title: '操作日志', teamRequired: true } },
     { path: 'logs/request', name: 'RequestLog', component: () => import('@/views/LogView.vue'), meta: { title: '请求日志', teamRequired: true } },
     { path: 'mcp-confirm/:id', name: 'McpConfirm', component: () => import('@/views/McpConfirm.vue'), meta: { title: 'AI 草稿确认', teamRequired: true } },

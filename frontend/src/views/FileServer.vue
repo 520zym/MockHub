@@ -44,21 +44,23 @@
         <el-table-column label="fileId" min-width="140" show-overflow-tooltip>
           <template #default="{ row }"><code class="file-id">{{ row.fileId }}</code></template>
         </el-table-column>
-        <el-table-column label="标签" min-width="110" show-overflow-tooltip>
+        <el-table-column label="标签" min-width="120" show-overflow-tooltip>
           <template #default="{ row }">
             <div v-if="row.tags?.length" class="tag-list"><el-tag v-for="item in row.tags" :key="item.id" size="small" round :style="tagStyle(item)">{{ item.name }}</el-tag></div>
             <span v-else class="muted">-</span>
           </template>
         </el-table-column>
         <el-table-column label="大小" width="88" align="right"><template #default="{ row }">{{ formatSize(row.size) }}</template></el-table-column>
-        <el-table-column label="上传时间" width="148" align="center"><template #default="{ row }">{{ formatFull(row.uploadedAt) }}</template></el-table-column>
+        <el-table-column label="上传时间" width="160" align="left"><template #default="{ row }">{{ formatFull(row.uploadedAt) }}</template></el-table-column>
         <el-table-column label="下载次数" width="88" align="right"><template #default="{ row }">{{ row.downloadCount || 0 }}</template></el-table-column>
         <el-table-column label="传输量" width="96" align="right"><template #default="{ row }">{{ formatSize(row.transferredBytes) }}</template></el-table-column>
-        <el-table-column label="操作" width="160" fixed="right" align="center">
+        <el-table-column label="操作" width="156" fixed="right" align="center">
           <template #default="{ row }">
-            <el-button text size="small" type="primary" @click="openDetail(row)">详情</el-button>
-            <el-button text size="small" @click="copy(row.downloadUrl)"><el-icon><DocumentCopy /></el-icon></el-button>
-            <el-button v-if="canDelete(row)" text size="small" type="danger" @click="handleDelete(row)"><el-icon><Delete /></el-icon></el-button>
+            <div class="file-actions">
+              <el-button text size="small" type="primary" @click="openDetail(row)">详情</el-button>
+              <el-tooltip content="复制下载链接" placement="top"><el-button text size="small" aria-label="复制下载链接" @click="copy(row.downloadUrl)"><el-icon><DocumentCopy /></el-icon></el-button></el-tooltip>
+              <el-tooltip v-if="canDelete(row)" content="删除文件" placement="top"><el-button text size="small" type="danger" aria-label="删除文件" @click="handleDelete(row)"><el-icon><Delete /></el-icon></el-button></el-tooltip>
+            </div>
           </template>
         </el-table-column>
         <template #empty><el-empty :description="loading ? '正在加载文件…' : '当前团队暂无符合筛选条件的文件'" /></template>
@@ -320,8 +322,10 @@ function excelColumnName(index) { let value = '', n = index + 1; while (n) { con
 .team-context { color: var(--app-text-secondary); padding: 8px 12px; background: var(--app-bg-control); border-radius: 8px; font-size: 12px; overflow-wrap: anywhere; }
 .table-card { min-width: 0; padding: 16px; }.batch-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 12px 16px; }
 .pagination { display: flex; justify-content: flex-end; padding-top: 16px; min-width: 0; }
-.file-name-cell { display: flex; align-items: center; gap: 9px; min-width: 0; }.file-name-cell > div { min-width: 0; }.file-name-cell__name { font-weight: 500; }
-.file-name-cell__original, .muted, .preview-note { color: var(--app-text-secondary); font-size: var(--app-font-caption); }.file-id { color: var(--app-accent); font: 13px var(--app-font-mono); }
+.file-name-cell { display: flex; align-items: center; gap: 9px; min-width: 0; }.file-name-cell > div { min-width: 0; flex: 1; }.file-name-cell__name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-name-cell__original, .muted, .preview-note { color: var(--app-text-secondary); font-size: var(--app-font-caption); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.file-id { display: block; color: var(--app-accent); font: 13px var(--app-font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.table-card :deep(.el-table .cell) { line-height: 1.6; }.table-card :deep(.el-table td.el-table__cell), .table-card :deep(.el-table th.el-table__cell) { vertical-align: middle; }
+.file-actions { display: flex; align-items: center; justify-content: center; gap: 2px; white-space: nowrap; }.file-actions :deep(.el-button) { margin-left: 0; min-height: 28px; padding: 0 6px; }.file-actions :deep(.el-button + .el-button) { margin-left: 0; }
 .tag-list { gap: 4px; }.url-row { width: 100%; flex-wrap: nowrap; }.url-row code { flex: 1; min-width: 0; color: var(--app-text-regular); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; }
 .upload-example { width: 100%; margin-top: 8px; padding: 10px 12px; border-radius: 8px; background: var(--app-bg-control); color: var(--app-text-secondary); font: 12px/1.7 var(--app-font-mono); overflow-wrap: anywhere; }
 .tag-option { display: flex; align-items: center; gap: 8px; }.tag-option__dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }

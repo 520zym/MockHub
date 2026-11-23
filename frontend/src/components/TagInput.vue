@@ -76,9 +76,10 @@ import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { Check, Plus } from '@element-plus/icons-vue'
 import { getTags, createTag } from '@/api/tags'
 import { hexToRgba, tagTextColor } from '@/utils/tag-color'
+import { pickDistinctColor } from '@/utils/palette'
 import { ElMessage } from 'element-plus'
 
-// 新标签随机颜色预设色板
+// 新标签配色预设色板（优先选当前未使用的颜色）
 const PRESET_COLORS = [
   '#6366F1', '#8B5CF6', '#EC4899', '#EF4444', '#F59E0B',
   '#10B981', '#06B6D4', '#3B82F6', '#6B7280', '#D97706'
@@ -207,7 +208,7 @@ async function handleCreateTag() {
   creating.value = true
   const teamId = props.teamId, sequence = tagRequest
   try {
-    const color = PRESET_COLORS[Math.floor(Math.random() * PRESET_COLORS.length)]
+    const color = pickDistinctColor(allTags.value.map(tag => tag.color), PRESET_COLORS)
     const newTag = await createTag({
       teamId,
       name,
