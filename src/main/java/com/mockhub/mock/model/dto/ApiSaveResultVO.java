@@ -9,6 +9,9 @@ import com.mockhub.mock.model.entity.ApiDefinition;
  */
 public class ApiSaveResultVO {
 
+    private long revision = 1;
+    public long getRevision() { return revision; }
+    public void setRevision(long revision) { this.revision = revision; }
     private String id;
     private String name;
     private String path;
@@ -19,6 +22,7 @@ public class ApiSaveResultVO {
     public static ApiSaveResultVO from(ApiDefinition api) {
         ApiSaveResultVO vo = new ApiSaveResultVO();
         vo.setId(api.getId());
+        vo.setRevision(api.getRevision());
         vo.setName(api.getName());
         vo.setPath(api.getPath());
         vo.setMethod(api.getMethod());

@@ -6,7 +6,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
 
 const props = defineProps({
@@ -21,13 +21,16 @@ const props = defineProps({
 })
 
 const copied = ref(false)
+let timer = null
+onBeforeUnmount(() => clearTimeout(timer))
 
 async function handleCopy() {
   try {
     await navigator.clipboard.writeText(props.text)
     copied.value = true
     ElMessage.success('已复制到剪贴板')
-    setTimeout(() => {
+    clearTimeout(timer)
+    timer = setTimeout(() => {
       copied.value = false
     }, 2000)
   } catch (err) {
@@ -38,11 +41,14 @@ async function handleCopy() {
     textarea.style.opacity = '0'
     document.body.appendChild(textarea)
     textarea.select()
-    document.execCommand('copy')
-    document.body.removeChild(textarea)
+    let success = false
+    try { success = document.execCommand('copy') === true } catch { success = false }
+    finally { document.body.removeChild(textarea) }
+    if (!success) { ElMessage.warning('浏览器未允许复制，请手动选择并复制内容'); return }
     copied.value = true
     ElMessage.success('已复制到剪贴板')
-    setTimeout(() => {
+    clearTimeout(timer)
+    timer = setTimeout(() => {
       copied.value = false
     }, 2000)
   }
@@ -51,11 +57,11 @@ async function handleCopy() {
 
 <style scoped>
 .copy-button {
-  color: #A3AED0;
+  color: var(--app-text-secondary);
   transition: color 0.2s ease;
 
   &:hover {
-    color: #6366F1;
+    color: var(--app-accent);
   }
 }
 </style>

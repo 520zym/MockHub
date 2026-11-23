@@ -26,7 +26,7 @@ public class AssignTeamsRequest {
         /** 团队 ID */
         private String teamId;
 
-        /** 团队内角色：TEAM_ADMIN / MEMBER */
+        /** 团队内角色：TEAM_ADMIN / EDITOR / VIEWER（兼容输入 MEMBER 为 EDITOR） */
         private String role;
 
         public String getTeamId() {

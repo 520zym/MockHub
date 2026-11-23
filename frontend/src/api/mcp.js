@@ -10,17 +10,17 @@ export function saveMcpSettings(data) {
   return request.put('/mcp/settings', data)
 }
 
-/** Token 列表（仅超管） */
+/** 本人的凭证列表，不含明文或哈希 */
 export function getMcpTokens() {
-  return request.get('/mcp/tokens')
+  return request.get('/me/mcp-tokens')
 }
 
-/** 创建 Token，返回明文仅一次（仅超管） */
+/** 本人显式按队签发，明文仅创建响应可见 */
 export function createMcpToken(data) {
-  return request.post('/mcp/tokens', data)
+  return request.post('/me/mcp-tokens', data)
 }
 
-/** 撤销 Token（仅超管） */
+/** 仅撤销本人的凭证及其关联草稿授权 */
 export function revokeMcpToken(id) {
-  return request.delete('/mcp/tokens/' + id)
+  return request.delete('/me/mcp-tokens/' + encodeURIComponent(id))
 }

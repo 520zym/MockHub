@@ -31,12 +31,17 @@ public class McpTokenService {
     private static final String PREFIX = "mhk_";
 
     private final McpTokenRepository repository;
+    @org.springframework.beans.factory.annotation.Autowired
+    private McpScopeService scopeService;
 
     public McpTokenService(McpTokenRepository repository) {
         this.repository = repository;
     }
 
+    @org.springframework.transaction.annotation.Transactional
     public McpTokenCreateResult create(String userId, McpTokenCreateRequest request) {
+        if (!userId.equals(com.mockhub.common.util.SecurityContextUtil.getCurrentUserId())) throw new BizException(40101, "只能为本人签发MCP凭证");
+        if (request == null) throw new BizException(40001, "请求不能为空");
         String name = request.getName() == null ? "" : request.getName().trim();
         if (name.isEmpty()) {
             throw new BizException(40001, "请填写 Token 名称");
@@ -44,9 +49,10 @@ public class McpTokenService {
         if (name.length() > 60) {
             throw new BizException(40001, "Token 名称不能超过 60 个字符");
         }
-        if (request.getExpiresInDays() < 0) {
-            throw new BizException(40001, "有效期不能为负数");
+        if (request.getExpiresInDays() < 1 || request.getExpiresInDays() > 365) {
+            throw new BizException(40001, "有效期须为1至365天，不签发永久凭证");
         }
+        java.util.Map<String, java.util.Set<com.mockhub.mcp.model.McpScope>> scopes = scopeService.authorizeMint(userId, request);
 
         byte[] bytes = new byte[32];
         RANDOM.nextBytes(bytes);
@@ -59,11 +65,8 @@ public class McpTokenService {
         token.setTokenPrefix(raw.substring(0, 12));
         token.setUserId(userId);
         token.setCreatedAt(now());
-        if (request.getExpiresInDays() > 0) {
-            Calendar calendar = Calendar.getInstance();
-            calendar.add(Calendar.DAY_OF_MONTH, request.getExpiresInDays());
-            token.setExpiresAt(format(calendar.getTime()));
-        }
+        token.setExpiresAt(java.time.Instant.now().plus(request.getExpiresInDays(), java.time.temporal.ChronoUnit.DAYS).toString());
+        McpScopeCodec.encode(token, scopes);
         repository.insert(token);
 
         McpTokenCreateResult result = new McpTokenCreateResult();
@@ -72,6 +75,9 @@ public class McpTokenService {
         result.setToken(raw);
         result.setTokenPrefix(token.getTokenPrefix());
         result.setExpiresAt(token.getExpiresAt());
+        result.setTeamIds(new java.util.ArrayList<String>(scopes.keySet()));
+        result.setScopes(McpScopeCodec.union(scopes));
+        result.setTeamScopes(McpScopeCodec.strings(scopes));
         return result;
     }
 
@@ -83,20 +89,15 @@ public class McpTokenService {
             return null;
         }
         McpToken token = repository.findByHash(sha256(raw));
-        if (token == null || token.getRevokedAt() != null) {
-            return null;
-        }
+        if (!McpScopeCodec.isUsable(token)) return null;
         String now = now();
-        if (token.getExpiresAt() != null && now.compareTo(token.getExpiresAt()) > 0) {
-            return null;
-        }
         repository.touchLastUsed(token.getId(), now);
         return token;
     }
 
     public List<McpTokenVO> list() {
         List<McpTokenVO> result = new ArrayList<McpTokenVO>();
-        for (McpToken token : repository.findAllWithOwner()) {
+        for (McpToken token : repository.findByOwner(com.mockhub.common.util.SecurityContextUtil.getCurrentUserId())) {
             McpTokenVO vo = new McpTokenVO();
             vo.setId(token.getId());
             vo.setName(token.getName());
@@ -107,6 +108,10 @@ public class McpTokenService {
             vo.setLastUsedAt(token.getLastUsedAt());
             vo.setExpiresAt(token.getExpiresAt());
             vo.setRevoked(token.getRevokedAt() != null);
+            try {
+                java.util.Map<String, java.util.Set<com.mockhub.mcp.model.McpScope>> scopes=McpScopeCodec.decode(token);
+                vo.setTeamIds(new java.util.ArrayList<String>(scopes.keySet()));vo.setScopes(McpScopeCodec.union(scopes));vo.setTeamScopes(McpScopeCodec.strings(scopes));
+            } catch (BizException invalid) { vo.setLegacy(true);vo.setRevoked(true); }
             result.add(vo);
         }
         return result;
@@ -114,7 +119,7 @@ public class McpTokenService {
 
     public void revoke(String id) {
         McpToken token = repository.findById(id);
-        if (token == null) {
+        if (token == null || !com.mockhub.common.util.SecurityContextUtil.getCurrentUserId().equals(token.getUserId())) {
             throw new BizException(40405, "Token 不存在");
         }
         if (token.getRevokedAt() != null) {

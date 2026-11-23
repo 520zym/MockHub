@@ -19,6 +19,19 @@ public class TeamRole {
 
     /** 用户在该团队中的角色：TEAM_ADMIN / MEMBER */
     private String role;
+    private String membershipRole;
+    private String accessMode;
+    private String teamStatus;
+    public String getTeamStatus() { return teamStatus; }
+    public void setTeamStatus(String status) { this.teamStatus = status; }
+    private java.util.Map<String, Boolean> capabilities;
+
+    public String getMembershipRole() { return membershipRole; }
+    public void setMembershipRole(String membershipRole) { this.membershipRole = membershipRole; }
+    public String getAccessMode() { return accessMode; }
+    public void setAccessMode(String accessMode) { this.accessMode = accessMode; }
+    public java.util.Map<String, Boolean> getCapabilities() { return capabilities; }
+    public void setCapabilities(java.util.Map<String, Boolean> capabilities) { this.capabilities = capabilities; }
 
     public TeamRole() {
     }

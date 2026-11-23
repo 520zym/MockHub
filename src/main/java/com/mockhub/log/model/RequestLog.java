@@ -41,6 +41,14 @@ public class RequestLog {
     /** 创建时间，ISO 格式 */
     private String createdAt;
 
+    /** 请求来源：API = Mock 接口调用，FILE = 文件服务器公开链接下载 */
+    private String targetType = "API";
+
+    /** Presentation metadata only, never stored or used by live response matching. */
+    private boolean redacted;
+    public boolean isRedacted(){return redacted;}
+    public void setRedacted(boolean value){redacted=value;}
+
     public RequestLog() {
     }
 
@@ -130,5 +138,13 @@ public class RequestLog {
 
     public void setCreatedAt(String createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public String getTargetType() {
+        return targetType;
+    }
+
+    public void setTargetType(String targetType) {
+        this.targetType = targetType;
     }
 }

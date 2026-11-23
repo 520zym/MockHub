@@ -10,6 +10,7 @@ import com.mockhub.files.model.StoredFile;
 import com.mockhub.files.repository.FileRepository;
 import com.mockhub.files.service.FilePreviewService;
 import com.mockhub.files.service.FileServerService;
+import com.mockhub.mock.repository.TagRepository;
 import com.mockhub.system.repository.TeamRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -56,8 +57,8 @@ class FileServerTest {
         teams = new TeamRepository(); ReflectionTestUtils.setField(teams, "jdbcTemplate", jdbc);
         permission = mock(PermissionChecker.class);
         repo = new FileRepository(jdbc);
-        service = new FileServerService(repo, teams, permission, temp.toString(), 100);
-        mvc = MockMvcBuilders.standaloneSetup(new FileDownloadController(service),
+        service = new FileServerService(repo, teams, new TagRepository(jdbc), permission, temp.toString(), 100);
+        mvc = MockMvcBuilders.standaloneSetup(new FileDownloadController(service, mock(com.mockhub.log.service.LogService.class), new ObjectMapper()),
                 new FileManagementController(service, new FilePreviewService(), new ObjectMapper(), "")).build();
         login("SUPER_ADMIN");
     }
@@ -111,15 +112,19 @@ class FileServerTest {
 
     @Test void metadataSearchTagsAndTeamIsolation() {
         StoredFile file = upload("测试.txt");
-        service.update(file.getFileId(), "测试别名", Arrays.asList("航图", "航图", "测试"));
-        assertEquals(1, service.list(null, file.getFileId(), "航图", 1, 20).getTotal());
-        assertEquals(1, service.list("t1", "别名", null, 1, 20).getTotal());
+        service.update(file.getFileId(), "测试别名", null, Arrays.asList("航图", "航图", "测试"));
+        assertEquals(1, service.list(null, file.getFileId(), null, "航图", 1, 20).getTotal());
+        assertEquals(1, service.list("t1", "别名", null, null, 1, 20).getTotal());
         assertEquals(2, service.detail(file.getFileId()).getTags().size());
+        // 文件标签进入团队共享标签表，与接口标签同一套
+        assertEquals(2, jdbc.queryForObject("SELECT count(*) FROM tag WHERE team_id='t1'", Integer.class));
+        String tagId = service.detail(file.getFileId()).getTags().get(0).getId();
+        assertEquals(1, service.list("t1", null, tagId, null, 1, 20).getTotal());
         login("USER");
-        assertEquals(0, service.list(null, null, null, 1, 20).getTotal());
+        assertEquals(0, service.list(null, null, null, null, 1, 20).getTotal());
         jdbc.update("INSERT INTO user_team(user_id,team_id) VALUES('u1','t1')");
-        assertEquals(1, service.list(null, null, null, 1, 20).getTotal());
-        verify(permission).checkTeamAdmin("t1");
+        assertEquals(1, service.list(null, null, null, null, 1, 20).getTotal());
+        verify(permission).checkTeamWrite("t1");
     }
 
     @Test void batchDeleteChecksEveryTeamBeforeDeletingAnyFile() throws Exception {
@@ -137,7 +142,7 @@ class FileServerTest {
 
     @Test void rejectsTraversalAndOversizeWithoutLeakingFiles() throws Exception {
         assertThrows(BizException.class, () -> service.path("../test.db"));
-        FileServerService tiny = new FileServerService(repo, teams, permission, temp.toString(), 5);
+        FileServerService tiny = new FileServerService(repo, teams, new TagRepository(jdbc), permission, temp.toString(), 5);
         assertThrows(BizException.class, () -> tiny.uploadPublic("T1", new MockMultipartFile("file", "a", "text/plain", body)));
         assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM file_server_file", Integer.class));
         mvc.perform(get("/files/not-a-file-id")).andExpect(status().isNotFound());

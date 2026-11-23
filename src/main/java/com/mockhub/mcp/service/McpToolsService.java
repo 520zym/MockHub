@@ -71,6 +71,10 @@ public class McpToolsService {
     }
 
     public Object execute(String name, JsonNode args) {
+        return com.mockhub.mock.lifecycle.ApiMutationSource.withSource("MCP", () -> executeInternal(name,args));
+    }
+
+    private Object executeInternal(String name, JsonNode args) {
         if (McpToolRegistry.SEARCH_APIS.equals(name)) {
             return searchApis(args);
         }
@@ -190,7 +194,7 @@ public class McpToolsService {
 
     private Object createDraft(JsonNode args) {
         String teamId = required(args, "teamId");
-        permissionChecker.checkTeamAccess(teamId);
+        permissionChecker.checkTeamWrite(teamId);
         String method = required(args, "method").toUpperCase();
         if (!method.matches("GET|POST|PUT|DELETE|PATCH")) {
             throw new BizException(40001, "不支持的 HTTP 方法：" + method);
@@ -246,7 +250,7 @@ public class McpToolsService {
     private Object updateDraft(JsonNode args) {
         String apiId = required(args, "apiId");
         ApiDefinitionDetailVO detail = apiService.getById(apiId);
-        permissionChecker.checkTeamAccess(detail.getTeamId());
+        permissionChecker.checkTeamWrite(detail.getTeamId());
 
         ApiDefinitionDTO dto = new ApiDefinitionDTO();
         dto.setTeamId(detail.getTeamId());
@@ -314,6 +318,7 @@ public class McpToolsService {
 
         AiApiFullUpdateDraft draft = new AiApiFullUpdateDraft();
         draft.setApiId(apiId);
+        draft.setBaseRevision(detail.getRevision());
         draft.setTeamId(detail.getTeamId());
         draft.setDto(dto);
         Map<String, Object> action = pendingActionService.createApiFullUpdateDraft(

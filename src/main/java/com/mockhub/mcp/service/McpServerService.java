@@ -39,17 +39,23 @@ public class McpServerService {
     private final McpToolRegistry registry;
     private final McpToolsService toolsService;
     private final LogService logService;
+    private final McpExecutionPolicyService scopePolicy;
+
+    /** 由 Maven 资源过滤注入；单元测试直接构造实例时回退为 dev。 */
+    @org.springframework.beans.factory.annotation.Value("${app.version:dev}")
+    private String appVersion = "dev";
 
     public McpServerService(ObjectMapper objectMapper,
                             McpSettingsService settingsService,
                             McpToolRegistry registry,
                             McpToolsService toolsService,
-                            LogService logService) {
+                            LogService logService, McpExecutionPolicyService scopePolicy) {
         this.objectMapper = objectMapper;
         this.settingsService = settingsService;
         this.registry = registry;
         this.toolsService = toolsService;
         this.logService = logService;
+        this.scopePolicy = scopePolicy;
     }
 
     /**
@@ -99,7 +105,7 @@ public class McpServerService {
         ObjectNode serverInfo = result.putObject("serverInfo");
         serverInfo.put("name", "mockhub");
         serverInfo.put("title", "MockHub");
-        serverInfo.put("version", "1.5.0");
+        serverInfo.put("version", appVersion);
         result.put("instructions", "MockHub MCP：可搜索接口、查询统计、生成响应体/条件、创建接口草稿。写操作默认需要回到 MockHub 页面确认。");
         return result(id, result);
     }
@@ -108,7 +114,7 @@ public class McpServerService {
         McpSettings settings = settingsService.load();
         ArrayNode tools = objectMapper.createArrayNode();
         for (McpToolRegistry.Definition definition : registry.listEnabled(settings)) {
-            tools.add(definition.toJson(objectMapper));
+            if (scopePolicy.canListTool(definition.getName())) tools.add(definition.toJson(objectMapper));
         }
         ObjectNode result = objectMapper.createObjectNode();
         result.set("tools", tools);
@@ -127,7 +133,7 @@ public class McpServerService {
         JsonNode args = params.path("arguments");
         long started = System.currentTimeMillis();
         try {
-            Object data = toolsService.execute(name, args);
+            Object data = executeScoped(name, args);
             String text = toText(data);
             ObjectNode result = objectMapper.createObjectNode();
             ArrayNode content = result.putArray("content");
@@ -144,6 +150,17 @@ public class McpServerService {
             audit(token, name, args, false, e.getMessage(), System.currentTimeMillis() - started);
             return toolError(id, "工具执行失败，请稍后重试");
         }
+    }
+
+    private Object executeScoped(String name,JsonNode args) {
+        java.util.List<ObjectNode> plan=scopePolicy.assertTool(name,args);
+        if(plan.size()==1)return toolsService.execute(name,plan.get(0));
+        java.util.List<Object> results=new java.util.ArrayList<Object>();
+        for(ObjectNode teamArgs:plan){scopePolicy.assertTool(name,teamArgs);results.add(toolsService.execute(name,teamArgs));}
+        java.util.Map<String,Object> scoped=new java.util.LinkedHashMap<String,Object>();
+        scoped.put("scope", "EXPLICIT_TEAMS");
+        scoped.put("teams",results);
+        return scoped;
     }
 
     private ObjectNode toolError(JsonNode id, String message) {

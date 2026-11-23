@@ -41,7 +41,7 @@ public class StatsRepository {
      * @return 启用接口数
      */
     public long countEnabledApis(String teamId) {
-        String sql = "SELECT COUNT(*) FROM api_definition WHERE enabled = 1";
+        String sql = "SELECT COUNT(*) FROM api_definition WHERE deleted_at IS NULL AND enabled = 1";
         Long count;
         if (teamId == null) {
             count = jdbcTemplate.queryForObject(sql, Long.class);
@@ -78,7 +78,9 @@ public class StatsRepository {
      * @return 平均耗时（毫秒，向下取整）
      */
     public long avgDurationMs(String teamId, String startInclusive) {
-        String sql = "SELECT AVG(duration_ms) FROM request_log WHERE created_at >= ?";
+        // 平均耗时衡量 Mock 响应速度；文件下载时长受文件体积与带宽影响，单独统计以免失真。
+        String sql = "SELECT AVG(duration_ms) FROM request_log WHERE created_at >= ? "
+                + "AND (target_type IS NULL OR target_type = 'API')";
         Double avg;
         if (teamId == null) {
             avg = jdbcTemplate.queryForObject(sql, Double.class, startInclusive);
@@ -138,7 +140,7 @@ public class StatsRepository {
                 "       ad.name AS name, " +
                 "       COUNT(*) AS cnt " +
                 "FROM request_log rl " +
-                "LEFT JOIN api_definition ad ON ad.id = rl.api_id " +
+                "JOIN api_definition ad ON ad.id = rl.api_id AND ad.deleted_at IS NULL " +
                 "LEFT JOIN team t ON t.id = ad.team_id " +
                 "WHERE rl.created_at >= ? AND rl.api_id IS NOT NULL ");
         List<Object> args = new ArrayList<Object>();
@@ -190,7 +192,7 @@ public class StatsRepository {
                 "       ad.hit_count AS hit_count " +
                 "FROM api_definition ad " +
                 "LEFT JOIN team t ON t.id = ad.team_id " +
-                "WHERE ad.enabled = 1 " +
+                "WHERE ad.deleted_at IS NULL AND ad.enabled = 1 " +
                 "  AND (ad.last_called_at IS NULL OR ad.last_called_at < ?) ");
         List<Object> args = new ArrayList<Object>();
         args.add(threshold);
@@ -230,7 +232,7 @@ public class StatsRepository {
      */
     public long countZombieApis(String teamId, String threshold) {
         String sql = "SELECT COUNT(*) FROM api_definition " +
-                "WHERE enabled = 1 AND (last_called_at IS NULL OR last_called_at < ?)";
+                "WHERE deleted_at IS NULL AND enabled = 1 AND (last_called_at IS NULL OR last_called_at < ?)";
         Long count;
         if (teamId == null) {
             count = jdbcTemplate.queryForObject(sql, Long.class, threshold);

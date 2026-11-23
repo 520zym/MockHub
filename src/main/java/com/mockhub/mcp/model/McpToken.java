@@ -15,6 +15,15 @@ public class McpToken {
     private String expiresAt;
     private String revokedAt;
     private String ownerName;
+    private int scopeVersion;
+    private String teamIdsJson;
+    private String scopesJson;
+    public int getScopeVersion() { return scopeVersion; }
+    public void setScopeVersion(int scopeVersion) { this.scopeVersion=scopeVersion; }
+    public String getTeamIdsJson() { return teamIdsJson; }
+    public void setTeamIdsJson(String value) { this.teamIdsJson=value; }
+    public String getScopesJson() { return scopesJson; }
+    public void setScopesJson(String value) { this.scopesJson=value; }
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }

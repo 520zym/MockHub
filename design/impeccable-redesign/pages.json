@@ -1,0 +1,82 @@
+[
+  {
+    "id": "01-login",
+    "file": "01-login.html",
+    "title": "登录",
+    "desc": "内网账号登录 · 与产品事实同屏",
+    "group": "入口",
+    "route": "/login",
+    "width": 1440,
+    "height": 900
+  },
+  {
+    "id": "02-api-list",
+    "file": "02-api-list.html",
+    "title": "接口管理",
+    "desc": "信号台主屏：分组、筛选、行内检视",
+    "group": "工作区",
+    "route": "/apis",
+    "width": 1440,
+    "height": 900
+  },
+  {
+    "id": "03-api-edit",
+    "file": "03-api-edit.html",
+    "title": "接口编辑",
+    "desc": "返回体工作区 + 条件摘要 + 试配",
+    "group": "工作区",
+    "route": "/apis/:id/edit",
+    "width": 1440,
+    "height": 900
+  },
+  {
+    "id": "04-logs",
+    "file": "04-logs.html",
+    "title": "请求日志",
+    "desc": "主从对照：请求、响应与命中链路",
+    "group": "工作区",
+    "route": "/logs/request",
+    "width": 1440,
+    "height": 900
+  },
+  {
+    "id": "05-stats",
+    "file": "05-stats.html",
+    "title": "使用统计",
+    "desc": "读数行、调用曲线与闲置接口",
+    "group": "工作区",
+    "route": "/stats",
+    "width": 1440,
+    "height": 900
+  },
+  {
+    "id": "06-assistant",
+    "file": "06-assistant.html",
+    "title": "对话助手",
+    "desc": "问答、数据回答与待确认草稿",
+    "group": "工作区",
+    "route": "全局助手",
+    "width": 1440,
+    "height": 900
+  },
+  {
+    "id": "07-teams",
+    "file": "07-teams.html",
+    "title": "团队与成员",
+    "desc": "团队、成员与权限",
+    "group": "管理",
+    "route": "/teams",
+    "width": 1440,
+    "height": 900
+  },
+  {
+    "id": "pilot-dock",
+    "file": "pilot-dock.html",
+    "title": "工作台（方向 A 试样）",
+    "desc": "去侧栏：顶部 Dock + 全宽工作台",
+    "group": "试验",
+    "route": "/apis",
+    "width": 1440,
+    "height": 900
+  }
+]

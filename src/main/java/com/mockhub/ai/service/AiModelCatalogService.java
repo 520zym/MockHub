@@ -43,7 +43,14 @@ public class AiModelCatalogService {
     }
 
     public List<Map<String, Object>> listModels() {
-        AiSettings settings = settingsService.load();
+        return listModels(settingsService.load());
+    }
+
+    /** 使用给定配置拉取模型；该配置可以来自已保存设置，也可以来自未保存的测试候选。 */
+    public List<Map<String, Object>> listModels(AiSettings settings) {
+        if (settings == null) {
+            throw new BizException(40303, "请先填写服务地址与 API Key");
+        }
         if (AiSettings.PROVIDER_MOCK.equals(settings.getProvider())) {
             List<Map<String, Object>> mock = new ArrayList<Map<String, Object>>();
             Map<String, Object> item = new LinkedHashMap<String, Object>();
@@ -53,8 +60,8 @@ public class AiModelCatalogService {
             mock.add(item);
             return mock;
         }
-        if (!settingsService.isConfigured(settings)) {
-            throw new BizException(40303, "请先保存服务地址、模型与 API Key");
+        if (!settingsService.isConnectionConfigured(settings)) {
+            throw new BizException(40303, "请先保存服务地址与 API Key");
         }
         String endpoint = modelsEndpoint(settings.getBaseUrl());
         if (endpoint == null) {

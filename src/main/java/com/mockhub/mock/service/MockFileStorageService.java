@@ -5,13 +5,18 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
+import java.nio.file.LinkOption;
+import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -33,40 +38,35 @@ public class MockFileStorageService {
 
     private final Path rootDir;
     private final long maxSizeBytes;
+    private final com.mockhub.mock.repository.MockBlobRepository blobs;
+    private final JdbcTemplate jdbc;
 
     @Autowired
     public MockFileStorageService(@Value("${data.path:./data}") String dataDir,
-                                  @Value("${mock.file.max-size-bytes:10485760}") long maxSizeBytes) {
+                                  @Value("${mock.file.max-size-bytes:10485760}") long maxSizeBytes,
+                                  com.mockhub.mock.repository.MockBlobRepository blobs, JdbcTemplate jdbc) {
+        this.blobs=blobs;
+        this.jdbc=jdbc;
         this.rootDir = Paths.get(dataDir, "files").toAbsolutePath().normalize();
         this.maxSizeBytes = maxSizeBytes;
     }
+
+    /** Compatibility constructor for isolated tests; application injection also supplies the transaction coordinator. */
+    public MockFileStorageService(String dataDir,long maxSizeBytes,com.mockhub.mock.repository.MockBlobRepository blobs) {
+        this(dataDir,maxSizeBytes,blobs,null);
+    }
+
+    /** Low-level filesystem constructor for isolated storage tests; application injection always supplies the registry. */
+    public MockFileStorageService(String dataDir,long maxSizeBytes) { this(dataDir,maxSizeBytes,null); }
 
     public MockFileStorageService(String dataDir) {
         this(dataDir, 10L * 1024L * 1024L);
     }
 
     public StoredMockFile store(String teamId, MultipartFile file) {
-        if (teamId == null || teamId.trim().isEmpty()) {
-            throw new BizException(40000, "团队不能为空");
-        }
-        if (file == null || file.isEmpty()) {
-            throw new BizException(40000, "上传文件不能为空");
-        }
-        if (maxSizeBytes > 0 && file.getSize() > maxSizeBytes) {
-            throw new BizException(40000, "上传文件不能超过 " + formatSize(maxSizeBytes));
-        }
-        try {
-            String safeName = sanitizeFileName(file.getOriginalFilename());
-            String storedName = UUID.randomUUID().toString() + "-" + safeName;
-            Path teamDir = rootDir.resolve(teamId).normalize();
-            Files.createDirectories(teamDir);
-            Path target = teamDir.resolve(storedName).normalize();
-            if (!target.startsWith(rootDir)) {
-                throw new BizException(40000, "非法文件路径");
-            }
-            file.transferTo(target.toFile());
-            String relativePath = rootDir.relativize(target).toString().replace('\\', '/');
-            return new StoredMockFile(relativePath, safeName, file.getContentType(), file.getSize());
+        if (file == null || file.isEmpty()) throw new BizException(40000, "上传文件不能为空");
+        try (InputStream in = file.getInputStream()) {
+            return store(teamId, file.getOriginalFilename(), file.getContentType(), file.getSize(), in);
         } catch (IOException e) {
             throw new BizException(50000, "文件保存失败");
         }
@@ -74,34 +74,101 @@ public class MockFileStorageService {
 
     public StoredMockFile store(String teamId, String originalFileName, String contentType,
                                 long size, InputStream inputStream) {
-        if (teamId == null || teamId.trim().isEmpty()) {
-            throw new BizException(40000, "团队不能为空");
-        }
-        if (inputStream == null) {
-            throw new BizException(40000, "上传文件不能为空");
-        }
-        if (maxSizeBytes > 0 && size > maxSizeBytes) {
+        if (teamId == null || teamId.trim().isEmpty()) throw new BizException(40000, "团队不能为空");
+        if (inputStream == null) throw new BizException(40000, "上传文件不能为空");
+        if (maxSizeBytes > 0 && size > maxSizeBytes)
             throw new BizException(40000, "上传文件不能超过 " + formatSize(maxSizeBytes));
+        // Hold the same SQLite writer lock as GC until BOTH the lease and physical write complete.
+        // REQUIRED joins aggregate/import transactions; an ordinary upload still commits its lease.
+        if (jdbc != null && blobs != null) {
+            return new com.mockhub.mock.repository.ApiLifecycleRepository(jdbc).write(
+                    () -> storeNewFile(teamId, originalFileName, contentType, inputStream));
         }
+        return storeNewFile(teamId, originalFileName, contentType, inputStream);
+    }
+
+    private StoredMockFile storeNewFile(String teamId, String originalFileName, String contentType, InputStream in) {
+        String safeName = sanitizeFileName(originalFileName);
+        Path teamDir = rootDir.resolve(teamId).normalize();
+        if (teamId.contains("/") || teamId.indexOf('\\') >= 0 || !teamDir.startsWith(rootDir) || teamDir.equals(rootDir))
+            throw new BizException(40000, "非法团队文件路径");
+        Path target = teamDir.resolve(UUID.randomUUID().toString() + "-" + safeName);
+        NewFile created = null;
+        boolean transactional = TransactionSynchronizationManager.isActualTransactionActive();
+        if (transactional && !TransactionSynchronizationManager.isSynchronizationActive())
+            throw new IllegalStateException("File storage requires transaction synchronization");
         try {
-            String safeName = sanitizeFileName(originalFileName);
-            String storedName = UUID.randomUUID().toString() + "-" + safeName;
-            Path teamDir = rootDir.resolve(teamId).normalize();
             Files.createDirectories(teamDir);
-            Path target = teamDir.resolve(storedName).normalize();
-            if (!target.startsWith(rootDir)) {
-                throw new BizException(40000, "非法文件路径");
+            if (Files.isSymbolicLink(rootDir) || Files.isSymbolicLink(teamDir)
+                    || !teamDir.toRealPath().equals(rootDir.toRealPath().resolve(teamId)))
+                throw new IOException("Unsafe team file directory");
+            // Never replace a pre-existing file, even in the (unlikely) event of a UUID collision.
+            long storedSize = 0;
+            try (java.io.OutputStream out = Files.newOutputStream(target, StandardOpenOption.CREATE_NEW,
+                    StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
+                created = new NewFile(target, teamDir.toRealPath(),
+                        Files.readAttributes(target, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS).fileKey());
+                if (transactional) registerRollback(teamId, created);
+                byte[] buffer = new byte[8192];
+                int n;
+                while ((n = in.read(buffer)) != -1) {
+                    storedSize += n;
+                    if (maxSizeBytes > 0 && storedSize > maxSizeBytes)
+                        throw new BizException(40000, "上传文件不能超过 " + formatSize(maxSizeBytes));
+                    out.write(buffer, 0, n);
+                }
             }
-            Files.copy(inputStream, target, StandardCopyOption.REPLACE_EXISTING);
-            long storedSize = Files.size(target);
-            if (maxSizeBytes > 0 && storedSize > maxSizeBytes) {
-                Files.deleteIfExists(target);
-                throw new BizException(40000, "上传文件不能超过 " + formatSize(maxSizeBytes));
-            }
-            String relativePath = rootDir.relativize(target).toString().replace('\\', '/');
-            return new StoredMockFile(relativePath, safeName, contentType, storedSize);
+            // Register only after successful I/O, so even a caught I/O failure cannot leave a lease.
+            registerLease(teamId, target);
+            return new StoredMockFile(relativePath(target), safeName, contentType, storedSize);
         } catch (IOException e) {
+            if (created != null) created.delete();
             throw new BizException(50000, "文件保存失败");
+        } catch (RuntimeException e) {
+            if (created != null) created.delete();
+            throw e;
+        }
+    }
+
+    private String relativePath(Path target) {
+        return rootDir.relativize(target).toString().replace('\\', '/');
+    }
+
+    private void registerLease(String teamId, Path target) {
+        if (blobs != null) blobs.registerLease(teamId, relativePath(target), System.currentTimeMillis() + 60 * 60 * 1000L);
+    }
+
+    private void registerRollback(final String teamId, final NewFile created) {
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override public void beforeCommit(boolean readOnly) {
+                // Spring 5 has no savepoint callbacks. A nested savepoint rollback removes the newly
+                // inserted lease; detect it before the enclosing commit while the GC lock is held.
+                if (jdbc != null && blobs != null && jdbc.queryForObject(
+                        "SELECT COUNT(*) FROM mock_blob WHERE file_path=? AND team_id=?", Integer.class,
+                        relativePath(created.path), teamId) == 0) created.delete();
+            }
+            @Override public void afterCompletion(int status) {
+                if (status == STATUS_ROLLED_BACK) created.delete();
+            }
+        });
+    }
+
+    /** Capability for exactly the inode created by this call, never a DTO/source/current/history path. */
+    private static final class NewFile {
+        private final Path path;
+        private final Path parent;
+        private final Object fileKey;
+        private NewFile(Path path, Path parent, Object fileKey) {
+            this.path = path; this.parent = parent; this.fileKey = fileKey;
+        }
+        private void delete() {
+            try {
+                if (Files.isSymbolicLink(path.getParent()) || !path.getParent().toRealPath().equals(parent)) return;
+                BasicFileAttributes attrs = Files.readAttributes(path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+                if (attrs.isRegularFile() && fileKey != null && fileKey.equals(attrs.fileKey())) Files.deleteIfExists(path);
+            } catch (IOException ignored) {
+                // No broad sweep or parent deletion: a failed compensation remains eligible for normal GC.
+            }
         }
     }
 

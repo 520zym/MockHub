@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MockHub 登录页重设计 · 三方向</title>
+<style>
+  :root{--page:#f2f4f7;--surface:#fff;--ink:#171b22;--muted:#6b7481;--line:#dfe4ec;--blue:#3568d4;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  *{box-sizing:border-box} body{margin:0;background:var(--page);color:var(--ink);font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+  main{max-width:1280px;margin:0 auto;padding:42px 26px 60px}
+  header{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:8px}
+  .eyebrow{margin:0 0 8px;color:var(--blue);font:600 10px/1.4 var(--mono);letter-spacing:.12em}
+  h1{margin:0;font-size:30px;letter-spacing:-.04em;line-height:1.2}
+  .intro{max-width:620px;margin:10px 0 26px;color:var(--muted);font-size:12.5px;line-height:1.85}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px}
+  .card{display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden;text-decoration:none;color:inherit;transition:border-color .15s ease,transform .15s ease}
+  .card:hover{border-color:#b9c7db;transform:translateY(-2px)}
+  .thumb{display:block;width:100%;aspect-ratio:16/10;object-fit:cover;object-position:top left;background:#e9edf3;border-bottom:1px solid var(--line)}
+  .body{padding:18px 18px 20px}
+  .tag{display:inline-flex;align-items:center;gap:6px;padding:3px 7px;border-radius:5px;background:#eef3fb;color:var(--blue);font:600 10px/1.4 var(--mono);letter-spacing:.04em}
+  .body h2{margin:10px 0 6px;font-size:18px;letter-spacing:-.025em}
+  .body p{margin:0;color:var(--muted);font-size:12px;line-height:1.8}
+  .meta{display:flex;justify-content:space-between;gap:10px;margin-top:12px;padding-top:12px;border-top:1px solid var(--line);color:#8a94a2;font:10px/1.6 var(--mono)}
+  .foot{margin-top:30px;color:#8a94a2;font:10.5px/1.7 var(--mono)}
+  a{color:var(--blue)}
+  @media(max-width:560px){main{padding:26px 14px 40px}h1{font-size:25px}.thumb{aspect-ratio:4/3}}
+</style>
+</head>
+<body>
+<main>
+  <header><div><p class="eyebrow">MOCKHUB / LOGIN REDESIGN</p><h1>登录页三个方向</h1></div></header>
+  <p class="intro">同一套账号密码流程，三种视觉与信息层级。均未修改现有登录页；点击任一方向查看独立设计稿。截图基于真实浏览器渲染。</p>
+  <div class="grid">
+    <a class="card" href="01-workbench.html">
+      <img class="thumb" src="screens/01-workbench.png" alt="方向 A 工作台入口预览" />
+      <div class="body"><span class="tag">方向 A · 推荐</span><h2>工作台入口</h2><p>左侧用请求 → 匹配 → 响应动画替代说明文字，右侧只保留登录表单。</p><div class="meta"><span>品牌 / 产品预览</span><span>适合默认入口</span></div></div>
+    </a>
+    <a class="card" href="02-focus.html">
+      <img class="thumb" src="screens/02-focus.png" alt="方向 B 专注单卡预览" />
+      <div class="body"><span class="tag">方向 B · 轻量</span><h2>专注单卡</h2><p>居中单卡、环形节点动画、弱化背景，打开即登录。</p><div class="meta"><span>极简 / 快速</span><span>适合高频登录</span></div></div>
+    </a>
+    <a class="card" href="03-console.html">
+      <img class="thumb" src="screens/03-console.png" alt="方向 C 控制台分屏预览" />
+      <div class="body"><span class="tag">方向 C · 控制台</span><h2>控制台分屏</h2><p>深色控制台栏 + 拓扑动画 + 浅色登录区，强调内网与研发/运维气质。</p><div class="meta"><span>控制台 / 可信</span><span>适合运维研发</span></div></div>
+    </a>
+  </div>
+  <p class="foot">MockHub / DESIGN DRAFTS / 2026.11 · <a href="README.md">设计说明</a></p>
+</main>
+</body>
+</html>

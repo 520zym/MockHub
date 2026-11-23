@@ -397,7 +397,7 @@ public class MockDispatchService {
             SoapConfig cfg = objectMapper.readValue(soapConfigJson, SoapConfig.class);
             wsdlFileName = cfg.getWsdlFileName();
         } catch (Exception e) {
-            log.error("解析 SoapConfig 失败: {}", e.getMessage(), e);
+            log.warn("SOAP配置无法解析");
             return buildErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR,
                     "SOAP config parse error");
         }
@@ -419,7 +419,7 @@ public class MockDispatchService {
         mockUrl.append("/mock/").append(teamIdentifier).append(path);
 
         // 5. 读取 WSDL 并替换 location
-        String content = soapService.getWsdlContent(wsdlFileName, mockUrl.toString());
+        String content = soapService.getWsdlContent(team.getId(), wsdlFileName, mockUrl.toString());
 
         HttpHeaders headers = new HttpHeaders();
         headers.set(HttpHeaders.CONTENT_TYPE, "text/xml; charset=UTF-8");
@@ -511,7 +511,7 @@ public class MockDispatchService {
                 return config.getOperations().get(0);
             }
         } catch (Exception e) {
-            log.error("解析 SoapConfig 失败: {}", e.getMessage(), e);
+            log.warn("SOAP配置无法解析");
         }
 
         return null;

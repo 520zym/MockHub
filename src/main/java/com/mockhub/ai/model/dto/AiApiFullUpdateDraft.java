@@ -5,6 +5,9 @@ import com.mockhub.mock.model.dto.ApiDefinitionDTO;
 /** MCP 修改已有接口（含多返回体）的待确认草稿。 */
 public class AiApiFullUpdateDraft {
 
+    private Long baseRevision;
+    public Long getBaseRevision() { return baseRevision; }
+    public void setBaseRevision(Long value) { baseRevision=value; }
     private String apiId;
     private String teamId;
     private ApiDefinitionDTO dto;

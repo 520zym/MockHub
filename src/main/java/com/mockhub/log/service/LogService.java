@@ -44,4 +44,7 @@ public interface LogService {
      * @return 分页结果
      */
     PageResult<RequestLog> getRequestLogs(String teamId, int page, int size);
+
+    /** Same privacy policy as the list; target team is resolved from the persisted request log. */
+    RequestLog getRequestLog(String id);
 }

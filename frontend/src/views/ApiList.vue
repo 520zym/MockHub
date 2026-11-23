@@ -1,1629 +1,473 @@
 <template>
-  <!-- 接口列表页：工具栏筛选 + 数据表格 + 分页 + 导入导出 -->
-  <div class="page-api-list">
-    <!-- 工具栏 -->
-    <div class="toolbar soft-card">
-      <div class="toolbar__filters">
-        <!-- 搜索框 -->
-        <el-input
-          v-model="keyword"
-          placeholder="搜索接口名称或路径"
-          clearable
-          prefix-icon="Search"
-          class="toolbar__search"
-          @clear="handleKeywordChange"
-          @keyup.enter="handleKeywordChange"
-        />
-
-        <!-- 接口类型筛选：REST / SOAP -->
-        <el-select
-          v-model="typeFilter"
-          placeholder="接口类型"
-          clearable
-          class="toolbar__select"
-          @change="handleTypeChange"
-        >
-          <el-option label="REST" value="REST" />
-          <el-option label="SOAP" value="SOAP" />
-        </el-select>
-
-        <!-- 分组筛选：选择特定分组、未分组或全部 -->
-        <!-- 未选中团队时禁用：跨团队分组语义混乱 -->
-        <el-select
-          v-model="groupFilter"
-          :placeholder="appStore.currentTeamId ? '分组筛选' : '请先选择团队'"
-          clearable
-          :disabled="!appStore.currentTeamId"
-          class="toolbar__select"
-          @change="handleGroupChange"
-        >
-          <el-option label="未分组" value="__none__" />
-          <el-option
-            v-for="g in availableGroups"
-            :key="g.id"
-            :label="g.name"
-            :value="g.id"
-          />
-        </el-select>
-
-        <!-- HTTP 方法筛选 -->
-        <el-select
-          v-model="methodFilter"
-          placeholder="HTTP 方法"
-          clearable
-          class="toolbar__select"
-          @change="handleMethodChange"
-        >
-          <el-option
-            v-for="m in httpMethods"
-            :key="m"
-            :label="m"
-            :value="m"
-          />
-        </el-select>
-
-        <!-- 启用状态筛选 -->
-        <el-select
-          v-model="enabledFilter"
-          placeholder="启用状态"
-          clearable
-          class="toolbar__select"
-          @change="handleEnabledChange"
-        >
-          <el-option label="已启用" :value="true" />
-          <el-option label="已禁用" :value="false" />
-        </el-select>
-
-        <!-- 标签筛选（支持多选，命中任一标签即返回） -->
-        <el-select
-          v-model="tagFilter"
-          placeholder="标签筛选"
-          multiple
-          collapse-tags
-          collapse-tags-tooltip
-          clearable
-          class="toolbar__select"
-          @change="handleTagChange"
-        >
-          <el-option
-            v-for="tag in availableTags"
-            :key="tag.id"
-            :label="tag.name"
-            :value="tag.id"
-          >
-            <span class="tag-option">
-              <span class="tag-option__dot" :style="{ backgroundColor: tag.color }" />
-              {{ tag.name }}
-            </span>
-          </el-option>
-        </el-select>
-      </div>
-
-      <div class="toolbar__actions">
-        <!-- 分组管理按钮 -->
-        <el-button @click="handleOpenGroupManager">
-          <el-icon><Folder /></el-icon>
-          管理分组
-        </el-button>
-        <!-- 标签管理按钮 -->
-        <el-button @click="handleOpenTagManager">
-          <el-icon><PriceTag /></el-icon>
-          标签管理
-        </el-button>
-        <!-- 导入按钮 -->
-        <el-button @click="importDialogVisible = true">
-          <el-icon><Upload /></el-icon>
-          导入
-        </el-button>
-        <!-- 导出按钮（有选中时显示数量） -->
-        <el-button @click="handleExport">
-          <el-icon><Download /></el-icon>
-          {{ selectedRows.length > 0 ? `导出(${selectedRows.length})` : '导出' }}
-        </el-button>
-        <!-- 新建接口按钮 -->
-        <el-button type="primary" @click="$router.push('/apis/new')">
-          <el-icon><Plus /></el-icon>
-          新建接口
-        </el-button>
-      </div>
-    </div>
-
-    <!-- 接口表格 -->
-    <div class="table-card soft-card">
-      <!--
-        批量操作条：选中至少一项时显示。reserve-selection 跨页保留选择，
-        所以可能跨团队，move-group 时再校验同团队。
-      -->
-      <transition name="batch-bar-fade">
-        <div v-if="selectedRows.length > 0" class="batch-bar">
-          <span class="batch-bar__count">已选 <strong>{{ selectedRows.length }}</strong> 项</span>
-          <el-button size="small" :disabled="batchLoading" @click="handleBatchEnable">
-            <el-icon><Select /></el-icon>批量启用
-          </el-button>
-          <el-button size="small" :disabled="batchLoading" @click="handleBatchDisable">
-            <el-icon><CloseBold /></el-icon>批量禁用
-          </el-button>
-          <el-dropdown
-            trigger="click"
-            :disabled="batchLoading || availableGroups.length === 0 && !canMoveToNoGroup"
-            @command="handleBatchMoveGroup"
-          >
-            <el-button size="small" :disabled="batchLoading">
-              <el-icon><FolderAdd /></el-icon>移动到分组<el-icon class="el-icon--right"><ArrowDown /></el-icon>
-            </el-button>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item :command="'__none__'">未分组</el-dropdown-item>
-                <el-dropdown-item v-for="g in availableGroups" :key="g.id" :command="g.id">
-                  {{ g.name }}
-                </el-dropdown-item>
-                <el-dropdown-item v-if="availableGroups.length === 0" disabled>
-                  当前团队无分组
-                </el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
-          <el-button size="small" type="danger" :loading="batchLoading" @click="handleBatchDelete">
-            <el-icon><Delete /></el-icon>批量删除
-          </el-button>
-          <el-button text size="small" @click="handleClearSelection">清除选中</el-button>
-        </div>
-      </transition>
-      <el-table
-        ref="tableRef"
-        :data="apiList"
-        v-loading="loading"
-        style="width: 100%"
-        row-key="id"
-        :row-class-name="apiRowClass"
-        :default-sort="defaultSort"
-        @selection-change="handleSelectionChange"
-        @sort-change="handleSortChange"
-      >
-        <!-- 多选框列：reserve-selection 跨页保留勾选 -->
-        <el-table-column type="selection" width="40" reserve-selection />
-
-        <!-- 空状态 -->
-        <template #empty>
-          <div class="empty-state">
-            <el-icon class="empty-state__icon"><Connection /></el-icon>
-            <p class="empty-state__text">暂无接口数据</p>
-            <el-button type="primary" size="small" @click="$router.push('/apis/new')">
-              新建接口
-            </el-button>
-          </div>
-        </template>
-
-        <!-- 接口类型列（REST / SOAP） -->
-        <el-table-column label="类型" width="70" align="center">
-          <template #default="{ row }">
-            <ApiTypeTag :type="row.type || 'REST'" />
-          </template>
-        </el-table-column>
-
-        <!-- HTTP 方法列 -->
-        <el-table-column label="方法" width="80" align="center">
-          <template #default="{ row }">
-            <HttpMethodTag :method="row.method" />
-          </template>
-        </el-table-column>
-
-        <!-- 路径列（可排序） -->
-        <el-table-column
-          prop="path"
-          label="路径"
-          min-width="200"
-          show-overflow-tooltip
-          sortable="custom"
-          :sort-orders="['ascending', 'descending']"
-        >
-          <template #default="{ row }">
-            <span class="api-path">{{ row.path }}</span>
-          </template>
-        </el-table-column>
-
-        <!-- 接口名称列（可排序） -->
-        <el-table-column
-          prop="name"
-          label="名称"
-          min-width="180"
-          show-overflow-tooltip
-          sortable="custom"
-          :sort-orders="['ascending', 'descending']"
-        />
-
-        <!-- 分组列：未分组 / 跨团队找不到分组 / 分组已删除——一律显示 "-" -->
-        <el-table-column label="分组" min-width="100" show-overflow-tooltip>
-          <template #default="{ row }">
-            <span v-if="displayGroupName(row)" class="group-name">
-              {{ displayGroupName(row) }}
-            </span>
-            <span v-else class="no-group">-</span>
-          </template>
-        </el-table-column>
-
-        <!-- 标签列 -->
-        <el-table-column label="标签" min-width="120" show-overflow-tooltip>
-          <template #default="{ row }">
-            <div class="tag-cell" v-if="row.tags && row.tags.length">
-              <el-tag
-                v-for="tag in row.tags"
-                :key="tag.id"
-                size="small"
-                :color="tag.color"
-                effect="dark"
-                round
-                class="api-tag"
-              >{{ tag.name }}</el-tag>
-            </div>
-            <span v-else class="no-tags">-</span>
-          </template>
-        </el-table-column>
-
-        <!-- 团队列 -->
-        <el-table-column label="团队" width="80" align="center">
-          <template #default="{ row }">
-            <TeamTag :identifier="row.teamIdentifier" :color="row.teamColor" />
-          </template>
-        </el-table-column>
-
-        <!-- 累计命中次数（永久累加，不受日志清理影响） -->
-        <el-table-column
-          prop="hitCount"
-          label="命中次数"
-          width="110"
-          align="right"
-          sortable="custom"
-          :sort-orders="['descending', 'ascending']"
-        >
-          <template #default="{ row }">
-            <span class="hit-count-cell">{{ formatHitCount(row.hitCount) }}</span>
-          </template>
-        </el-table-column>
-
-        <!-- 最近调用时间（相对时间显示，hover 看绝对时间） -->
-        <el-table-column
-          prop="lastCalledAt"
-          label="最近调用"
-          width="130"
-          align="center"
-          sortable="custom"
-          :sort-orders="['descending', 'ascending']"
-        >
-          <template #default="{ row }">
-            <el-tooltip
-              v-if="row.lastCalledAt"
-              :content="formatFull(row.lastCalledAt)"
-              placement="top"
-            >
-              <span class="last-called-cell">{{ formatRelativeTime(row.lastCalledAt) }}</span>
-            </el-tooltip>
-            <span v-else class="last-called-cell--never">从未调用</span>
-          </template>
-        </el-table-column>
-
-        <!--
-          修改时间列：完整格式 yyyy-MM-dd HH:mm:ss，可排序。
-          位置：刻意放在"创建人"列之前，让"创建人"做与 fixed-right 区的缓冲列。
-          这样 sortable 列不与 fixed 列毗邻，规避 EP 已知的 fixed-right 表头双重渲染 bug
-          （sortable 排序图标导致 fixed-right 容器克隆表头时裁切不干净，文字会穿透叠字）。
-        -->
-        <el-table-column
-          prop="updatedAt"
-          label="修改时间"
-          width="170"
-          align="center"
-          sortable="custom"
-          :sort-orders="['descending', 'ascending']"
-        >
-          <template #default="{ row }">
-            <span class="time-cell">{{ formatFull(row.updatedAt) }}</span>
-          </template>
-        </el-table-column>
-
-        <!-- 创建人列（兼任 fixed-right 区前的缓冲列） -->
-        <el-table-column label="创建人" width="100" align="center" show-overflow-tooltip>
-          <template #default="{ row }">
-            <span v-if="row.createdByName">{{ row.createdByName }}</span>
-            <span v-else class="no-creator">-</span>
-          </template>
-        </el-table-column>
-
-        <!-- 启用开关列（固定右侧，与操作列一起常驻视野） -->
-        <el-table-column label="启用" width="65" align="center" fixed="right">
-          <template #default="{ row }">
-            <el-switch
-              :model-value="row.enabled"
-              size="small"
-              @click.stop
-              @change="handleToggle(row)"
-            />
-          </template>
-        </el-table-column>
-
-        <!-- 操作列（固定在右侧，横滚时也始终可见） -->
-        <el-table-column label="操作" width="200" align="center" class-name="action-col" fixed="right">
-          <template #default="{ row }">
-            <div class="action-buttons" @click.stop>
-              <el-button
-                text
-                size="small"
-                @click="handleCopyUrl(row)"
-                :title="row.type === 'SOAP' ? '复制 WSDL 地址' : '复制 Mock 地址'"
-              >
-                <el-icon><DocumentCopy /></el-icon>
-              </el-button>
-              <el-button text size="small" type="primary" @click="handleEdit(row)" title="编辑">
-                <el-icon><Edit /></el-icon>
-              </el-button>
-              <el-button text size="small" @click="handleCopy(row)" title="复制接口">
-                <el-icon><CopyDocument /></el-icon>
-              </el-button>
-              <el-button text size="small" type="danger" @click="handleDelete(row)" title="删除">
-                <el-icon><Delete /></el-icon>
-              </el-button>
-            </div>
-          </template>
-        </el-table-column>
-      </el-table>
-
-      <!-- 分页 -->
-      <div class="pagination-wrapper" v-if="total > 0">
-        <el-pagination
-          v-model:current-page="currentPage"
-          v-model:page-size="pageSize"
-          :total="total"
-          :page-sizes="[10, 20, 50, 100]"
-          layout="total, sizes, prev, pager, next, jumper"
-          background
-          @current-change="handlePageChange"
-          @size-change="handleSizeChange"
-        />
-      </div>
-    </div>
-
-    <!-- 分组管理弹窗 -->
-    <GroupManageDialog
-      v-model="groupManagerVisible"
-      :team-id="appStore.currentTeamId"
-      @changed="handleGroupChanged"
-    />
-
-    <!-- 标签管理抽屉 -->
-    <el-drawer
-      v-model="tagDrawerVisible"
-      title="标签管理"
-      direction="rtl"
-      size="400px"
-      class="tag-drawer"
-      @close="handleTagDrawerClose"
-    >
-      <!-- 标签列表 -->
-      <div class="tag-manager">
-        <div v-if="tagList.length === 0 && !tagLoading" class="tag-manager__empty">
-          暂无标签
-        </div>
-        <div v-loading="tagLoading" class="tag-manager__list">
-          <div
-            v-for="tag in tagList"
-            :key="tag.id"
-            class="tag-manager__item"
-          >
-            <!-- 编辑态 -->
-            <template v-if="editingTagId === tag.id">
-              <el-color-picker
-                v-model="editingTagColor"
-                size="small"
-                :predefine="PRESET_COLORS"
-              />
-              <el-input
-                v-model="editingTagName"
-                size="small"
-                class="tag-manager__edit-input"
-                @keyup.enter="handleSaveTag(tag)"
-              />
-              <el-button text size="small" type="primary" @click="handleSaveTag(tag)">
-                保存
-              </el-button>
-              <el-button text size="small" @click="handleCancelEdit">
-                取消
-              </el-button>
-            </template>
-            <!-- 展示态 -->
-            <template v-else>
-              <span class="tag-manager__dot" :style="{ backgroundColor: tag.color }" />
-              <span class="tag-manager__name">{{ tag.name }}</span>
-              <span class="tag-manager__spacer" />
-              <el-button text size="small" type="primary" @click="handleStartEdit(tag)">
-                <el-icon><Edit /></el-icon>
-              </el-button>
-              <el-button text size="small" type="danger" @click="handleDeleteTag(tag)">
-                <el-icon><Delete /></el-icon>
-              </el-button>
-            </template>
-          </div>
-        </div>
-
-        <!-- 新建标签区域 -->
-        <div class="tag-manager__create">
-          <el-color-picker
-            v-model="newTagColor"
-            size="small"
-            :predefine="PRESET_COLORS"
-          />
-          <el-input
-            v-model="newTagName"
-            placeholder="新标签名称"
-            size="small"
-            class="tag-manager__create-input"
-            @keyup.enter="handleCreateTag"
-          />
-          <el-button type="primary" size="small" @click="handleCreateTag" :disabled="!newTagName.trim()">
-            添加
-          </el-button>
-        </div>
-      </div>
-    </el-drawer>
-
-    <!-- 导入对话框 -->
-    <el-dialog
-      v-model="importDialogVisible"
-      title="导入接口"
-      width="500"
-      destroy-on-close
-    >
-      <el-form label-width="80px">
-        <el-form-item label="目标团队">
-          <el-select v-model="importForm.teamId" placeholder="选择导入到哪个团队" style="width: 100%">
-            <el-option
-              v-for="team in appStore.teams"
-              :key="team.id"
-              :label="team.name"
-              :value="team.id"
-            >
-              <span style="display: flex; align-items: center; gap: 8px">
-                <TeamTag :identifier="team.identifier" :color="team.color" />
-                {{ team.name }}
-              </span>
-            </el-option>
-          </el-select>
-        </el-form-item>
-        <el-form-item label="导入模式">
-          <el-radio-group v-model="importForm.mode">
-            <el-radio value="merge">合并（已存在的跳过）</el-radio>
-            <el-radio value="override">覆盖（已存在的替换）</el-radio>
-          </el-radio-group>
-        </el-form-item>
-        <el-form-item label="文件">
-          <el-upload
-            ref="importUploadRef"
-            :auto-upload="false"
-            :limit="1"
-            accept=".json,.zip"
-            :on-change="handleImportFileChange"
-          >
-            <el-button>选择 JSON/ZIP 文件</el-button>
-          </el-upload>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="importDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="importLoading" @click="handleImport">确认导入</el-button>
-      </template>
-    </el-dialog>
-  </div>
+  <section class="api-workspace">
+    <header class="workspace-heading">
+<div>
+<div class="workspace-title">
+<h1>接口管理</h1>
+<span>{{ loading ? '读取中' : error ? '读取失败' : total + ' 个' + (filtered ? '匹配' : '') + '接口' }}</span>
+<span v-if="canRead && !canWrite" class="readonly-badge">{{ archived ? '已归档' : '只读' }}</span>
+</div>
+</div>
+<div class="workspace-actions">
+<el-button :disabled="!canRead || busy || loading" @click="exportCurrent">{{ selectedRows.length ? '导出选中 (' + selectedRows.length + ')' : '导出' }}</el-button>
+<el-button v-if="canWrite" :disabled="busy" @click="importOpen = true">导入</el-button>
+<el-button v-if="canWrite" type="primary" :disabled="busy" @click="router.push('/apis/new')">＋ 新建接口</el-button>
+</div>
+</header>
+    <div v-if="!canRead" class="workspace-empty">
+<FilledIcon name="team" :size="38" />
+<h2>请选择有读取权限的团队</h2>
+</div>
+    <template v-else>
+      <section class="workspace-table">
+        <div class="api-filters">
+<el-input v-model="filters.keyword" clearable placeholder="搜索接口名称或路径" aria-label="搜索接口名称或路径" class="api-search" @keyup.enter="applyFilters" />
+<el-select v-model="filters.method" clearable placeholder="全部方法" aria-label="HTTP 方法" @change="applyFilters">
+<el-option v-for="method in methods" :key="method" :label="method" :value="method" />
+</el-select>
+<el-select v-model="filters.groupId" clearable placeholder="全部分组" aria-label="接口分组" @change="applyFilters">
+<el-option label="未分组" value="__none__" />
+<el-option v-for="group in groups" :key="group.id" :label="group.name" :value="group.id" />
+</el-select>
+<button type="button" class="mine-filter" :aria-pressed="filters.mine" :class="{ 'is-active': filters.mine }" @click="filters.mine = !filters.mine; applyFilters()">我创建的</button>
+<el-button text @click="showMoreFilters = !showMoreFilters">{{ showMoreFilters ? '收起筛选' : '更多筛选' }}</el-button>
+<span class="filters-spacer" />
+<el-dropdown trigger="click" @command="manage">
+<el-button text>分组 / 标签</el-button>
+<template #dropdown>
+<el-dropdown-menu>
+<el-dropdown-item command="groups">{{ canWrite ? '管理' : '查看' }}分组</el-dropdown-item>
+<el-dropdown-item command="tags">{{ canWrite ? '管理' : '查看' }}标签</el-dropdown-item>
+</el-dropdown-menu>
 </template>
-
+</el-dropdown>
+<el-button v-if="trashAvailable" text @click="router.push('/apis/trash')">
+<FilledIcon name="trash" :size="15" />回收站</el-button>
+</div>
+        <div v-if="showMoreFilters" class="api-more-filters">
+<el-select v-model="filters.type" clearable placeholder="全部类型" aria-label="接口类型" @change="applyFilters">
+<el-option label="REST" value="REST" />
+<el-option label="SOAP" value="SOAP" />
+</el-select>
+<el-select v-model="filters.enabled" clearable placeholder="全部状态" aria-label="启用状态" @change="applyFilters">
+<el-option label="已启用" :value="true" />
+<el-option label="已停用" :value="false" />
+</el-select>
+<el-select v-model="filters.tagIds" multiple clearable collapse-tags placeholder="全部标签" aria-label="标签筛选" @change="applyFilters">
+<el-option v-for="tag in tags" :key="tag.id" :label="tag.name" :value="tag.id" />
+</el-select>
+<el-select v-model="sort" aria-label="排序" @change="applyFilters">
+<el-option label="最近修改优先" value="updatedAt:desc" />
+<el-option label="最近创建优先" value="createdAt:desc" />
+<el-option label="接口名称 A–Z" value="name:asc" />
+<el-option label="接口路径 A–Z" value="path:asc" />
+</el-select>
+<el-button text @click="resetFilters">重置</el-button>
+</div>
+        <div v-if="error" class="workspace-feedback workspace-feedback--error" role="alert">{{ error }} <el-button text @click="loadPage">重试读取</el-button>
+</div>
+        <div v-if="conflict" class="workspace-feedback workspace-feedback--warning" role="alert">{{ conflict }} <el-button text @click="explicitRefresh">刷新并核对版本</el-button>
+</div>
+        <div v-if="metadataError" class="workspace-feedback">{{ metadataError }} <el-button text @click="retryMetadata">重试共享配置</el-button>
+</div>
+        <div v-if="selectedRows.length" class="api-selection">
+<span>已选 <b>{{ selectedRows.length }}</b> 项</span>
+<template v-if="canWrite">
+<el-button text :disabled="busy || loading" @click="runBatch('enable')">启用</el-button>
+<el-button text :disabled="busy || loading" @click="runBatch('disable')">停用</el-button>
+<el-dropdown :disabled="busy || loading" trigger="click" @command="moveGroup">
+<el-button text :disabled="busy || loading">移动分组</el-button>
+<template #dropdown>
+<el-dropdown-menu>
+<el-dropdown-item command="__none__">未分组</el-dropdown-item>
+<el-dropdown-item v-for="group in groups" :key="group.id" :command="group.id">{{ group.name }}</el-dropdown-item>
+</el-dropdown-menu>
+</template>
+</el-dropdown>
+<el-button v-if="canBatchDelete" text type="danger" :disabled="busy || loading" @click="prepareDelete(selectedRows, true)">批量删除</el-button>
+</template>
+<span class="filters-spacer" />
+<el-button text @click="selectedIds = []">取消选择</el-button>
+</div>
+        <div class="api-results" v-loading="loading" :aria-busy="loading">
+          <div v-if="rows.length" class="api-grid-scroll" role="region" aria-label="接口列表" tabindex="0">
+            <table class="api-grid">
+              <colgroup><col class="column-select" /><col class="column-type" /><col class="column-method" /><col class="column-path" /><col class="column-name" /><col class="column-group" /><col class="column-tags" /><col class="column-calls" /><col class="column-called" /><col class="column-modified" /><col class="column-creator" /><col class="column-state" /><col class="column-actions" /></colgroup>
+              <thead><tr>
+                <th class="cell-select"><el-checkbox :model-value="allSelected" :indeterminate="partiallySelected" aria-label="选择当前页全部接口" :disabled="loading || busy" @change="selectAll" /></th>
+                <th>类型</th><th>方法</th><th>路径</th><th>名称</th><th>分组</th><th>标签</th><th class="cell-calls">命中次数</th><th>最近调用</th><th>修改时间</th><th class="cell-creator">创建人</th><th class="cell-state">启用</th><th class="cell-actions">操作</th>
+              </tr></thead>
+              <tbody><tr v-for="row in rows" :key="row.id" :class="{ 'is-selected': selectedIds.includes(row.id), 'is-disabled': !row.enabled }">
+                <td class="cell-select"><el-checkbox :model-value="selectedIds.includes(row.id)" :aria-label="'选择 ' + row.name" :disabled="busy || loading" @change="value => selectRow(row, value)" /></td>
+                <td><span class="type-chip">{{ row.type || 'REST' }}</span></td>
+                <td><HttpMethodTag :method="row.method" /></td>
+                <td class="cell-path"><button type="button" class="api-path" :title="row.path" @click="openDetailDialog(row)">{{ row.path }}</button></td>
+                <td class="cell-name" :title="row.name">{{ row.name }}</td>
+                <td :title="row.groupName || ''">{{ row.groupName || '—' }}</td>
+                <td class="cell-tags" :title="row.tags?.map(tag => tag.name).join('、')"><div v-if="row.tags?.length" class="row-tags"><span v-for="tag in row.tags.slice(0, 2)" :key="tag.id"><i :style="{ backgroundColor: tag.color }" />{{ tag.name }}</span><span v-if="row.tags.length > 2">+{{ row.tags.length - 2 }}</span></div><span v-else>—</span></td>
+                <td class="cell-calls">{{ formatCount(row.hitCount) }}</td>
+                <td :title="formatDate(row.lastCalledAt)">{{ row.lastCalledAt ? formatDate(row.lastCalledAt) : '—' }}</td>
+                <td class="cell-modified">{{ formatDate(row.updatedAt) }}</td>
+                <td class="cell-creator" :title="row.createdByName">{{ row.createdByName || '—' }}</td>
+                <td class="cell-state"><el-switch v-if="canWrite" :model-value="row.enabled" :disabled="busy || loading" :aria-label="(row.enabled ? '停用 ' : '启用 ') + row.name" @change="toggle(row)" /><span v-else class="status-chip" :class="{ enabled: row.enabled }">{{ row.enabled ? '已启用' : '已停用' }}</span></td>
+                <td class="cell-actions"><div class="row-actions">
+                  <el-button text type="primary" class="row-copy" :title="'复制 ' + (row.type === 'SOAP' ? 'WSDL' : 'Mock') + ' 地址'" :aria-label="'复制 ' + (row.type === 'SOAP' ? 'WSDL' : 'Mock') + ' 地址'" @click="copyUrl(row)"><el-icon><CopyDocument /></el-icon>复制</el-button>
+                  <el-button v-if="canWrite" text @click="openEditor(row)">编辑</el-button>
+                  <el-button text @click="openDetailDialog(row)">详情</el-button>
+                  <el-dropdown trigger="click" @command="command => rowCommand(command, row)"><el-button text :aria-label="row.name + '的更多操作'">更多</el-button><template #dropdown><el-dropdown-menu>
+                    <el-dropdown-item command="history">变更历史</el-dropdown-item>
+                    <el-dropdown-item v-if="canWrite" command="copy" :disabled="busy || loading">复制为新接口</el-dropdown-item>
+                    <el-dropdown-item v-if="canWrite" command="delete" :disabled="busy || loading">移入回收站</el-dropdown-item>
+                  </el-dropdown-menu></template></el-dropdown>
+                </div></td>
+              </tr></tbody>
+            </table>
+          </div>
+          <div v-if="rows.length" class="api-cards">
+<article v-for="row in rows" :key="row.id" class="api-card" :class="{ 'is-selected': selectedIds.includes(row.id) }">
+<header>
+<el-checkbox :model-value="selectedIds.includes(row.id)" :aria-label="'选择 ' + row.name" :disabled="busy || loading" @change="value => selectRow(row, value)" />
+<HttpMethodTag :method="row.method" />
+<span class="type-chip">{{ row.type || 'REST' }}</span>
+<span class="filters-spacer" />
+<el-switch v-if="canWrite" :model-value="row.enabled" :disabled="busy || loading" :aria-label="(row.enabled ? '停用 ' : '启用 ') + row.name" @change="toggle(row)" />
+<span v-else class="status-chip" :class="{ enabled: row.enabled }">{{ row.enabled ? '已启用' : '已停用' }}</span>
+</header>
+<button type="button" class="api-path" @click="openDetailDialog(row)">{{ row.path }}</button>
+<h3>{{ row.name }}</h3>
+<div v-if="row.tags?.length || row.groupName" class="row-tags">
+<span v-if="row.groupName">{{ row.groupName }}</span>
+<span v-for="tag in row.tags" :key="tag.id">
+<i :style="{ backgroundColor: tag.color }" />{{ tag.name }}</span>
+</div>
+<dl>
+<div>
+<dt>修改时间</dt>
+<dd>{{ formatDate(row.updatedAt) }}</dd>
+</div>
+<div>
+<dt>创建人 / 累计调用</dt>
+<dd>{{ row.createdByName || '—' }}</dd>
+<dd>{{ formatCount(row.hitCount) }} 次</dd>
+</div>
+</dl>
+<footer>
+<el-button text type="primary" class="row-copy" @click="copyUrl(row)"><el-icon><CopyDocument /></el-icon>复制</el-button>
+<el-button v-if="canWrite" text @click="openEditor(row)">编辑</el-button>
+<el-button text @click="openDetailDialog(row)">详情</el-button>
+<el-dropdown trigger="click" @command="command => rowCommand(command, row)">
+<el-button text :aria-label="row.name + '的更多操作'">更多</el-button>
+<template #dropdown>
+<el-dropdown-menu>
+<el-dropdown-item command="history">变更历史</el-dropdown-item>
+<el-dropdown-item v-if="canWrite" command="copy" :disabled="busy || loading">复制为新接口</el-dropdown-item>
+<el-dropdown-item v-if="canWrite" command="delete" :disabled="busy || loading">移入回收站</el-dropdown-item>
+</el-dropdown-menu>
+</template>
+</el-dropdown>
+</footer>
+</article>
+</div>
+          <div v-if="!loading && !rows.length && !error" class="workspace-empty workspace-empty--rows">
+<FilledIcon name="api" :size="34" />
+<h2>{{ filtered ? '没有匹配的接口' : '当前团队暂无接口' }}</h2>
+<el-button v-if="filtered" @click="resetFilters">重置筛选</el-button>
+</div>
+        </div>
+        <footer class="workspace-footer">
+<el-pagination v-model:current-page="page" v-model:page-size="size" :total="total" :page-sizes="[10,20,50,100]" layout="prev, pager, next" :pager-count="5" small :disabled="loading || busy" @current-change="loadPage" />
+<el-select v-model="size" aria-label="每页数量" class="page-size" :disabled="loading || busy" @change="page = 1; loadPage()">
+<el-option v-for="count in [10,20,50,100]" :key="count" :value="count" :label="count + ' / 页'" />
+</el-select>
+</footer>
+      </section>
+    </template>
+    <ApiHistoryDrawer v-model="historyOpen" :api-id="historyRow?.id || ''" :team-id="teamId || ''" :current-revision="historyRow?.revision || 0" :capabilities="membership?.capabilities" :read-only="!canWrite" @changed="historyChanged" />
+    <ApiDetailDialog v-model="detailOpen" :summary="detailRow" :server-address="serverAddress" :can-write="canWrite" @history="historyFromDetail" @edit="editFromDetail" />
+    <ApiImportDialog v-model="importOpen" :team-id="teamId || ''" @imported="imported" />
+    <GroupManageDialog v-model="groupOpen" :team-id="teamId || ''" @changed="metadataChanged" />
+    <TagManageDialog v-model="tagOpen" :team-id="teamId || ''" @changed="metadataChanged" />
+    <el-dialog v-model="deleteOpen" :title="deleteRequest?.batch ? '批量移入回收站' : '移入回收站'" width="min(470px, 94vw)" :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy">
+<p class="delete-copy">确认将 {{ deleteRequest?.rows.length || 0 }} 个接口移入「{{ deleteRequest?.teamName }}」回收站？保留 30 天，恢复后默认停用。</p>
+<ul class="delete-targets">
+<li v-for="row in deleteRequest?.rows.slice(0, 8) || []" :key="row.id">
+<code>{{ row.method }} {{ row.path }}</code>
+<span>v{{ row.revision }}</span>
+</li>
+</ul>
+<p v-if="(deleteRequest?.rows.length || 0) > 8" class="delete-copy">以及其余 {{ deleteRequest.rows.length - 8 }} 项。</p>
+<template #footer>
+<el-button :disabled="busy" @click="deleteOpen = false">取消</el-button>
+<el-button type="danger" :loading="busy" :disabled="loading || !deleteRequest || !canWrite || (deleteRequest.batch && !canBatchDelete)" @click="confirmDelete">确认移入回收站</el-button>
+</template>
+</el-dialog>
+    <el-dialog v-model="urlOpen" title="手动复制地址" width="min(620px, 94vw)">
+<p class="delete-copy">浏览器未允许自动复制，请选择并复制以下当前团队地址。</p>
+<el-input :model-value="urlText" readonly aria-label="当前接口 Mock 或 WSDL 地址" @focus="$event.target.select()" />
+</el-dialog>
+  </section>
+</template>
 <script setup>
-/**
- * 接口列表页
- * 功能：接口的搜索/筛选、分页展示、启用/禁用切换、复制、删除、导入/导出
- * 数据流：筛选条件来自 appStore（团队/分组）和 apiStore（关键词/方法/状态/标签/分页）
- */
-import { ref, computed, watch, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { computed, reactive, ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { useAppStore } from '@/stores/app'
-import { useApiStore } from '@/stores/api'
 import { useUserStore } from '@/stores/user'
-import { getApis, deleteApi, copyApi, toggleApi, importApis, exportApis, batchApis } from '@/api/apis'
-import { getTags, createTag, updateTag, deleteTag } from '@/api/tags'
+import { useApiStore } from '@/stores/api'
+import { selectedRevisions } from '@/utils/revisions'
+import { formatDate, freezeRows, isVersionConflict, readableError } from '@/utils/api-lifecycle'
+import { getApis, deleteApi, toggleApi, copyApi, batchApis, exportApis } from '@/api/apis'
 import { getGroups } from '@/api/groups'
+import { getTags } from '@/api/tags'
 import { getServerAddress } from '@/api/settings'
+import FilledIcon from '@/components/FilledIcon.vue'
 import HttpMethodTag from '@/components/HttpMethodTag.vue'
-import ApiTypeTag from '@/components/ApiTypeTag.vue'
-import TeamTag from '@/components/TeamTag.vue'
+import ApiHistoryDrawer from '@/components/ApiHistoryDrawer.vue'
+import ApiDetailDialog from '@/components/ApiDetailDialog.vue'
+import ApiImportDialog from '@/components/ApiImportDialog.vue'
 import GroupManageDialog from '@/components/GroupManageDialog.vue'
-import { formatFull, fromNow } from '@/utils/time'
-
-// 命中次数千分位格式化（0 显示为占位符 '—'，避免一片 0 视觉嘈杂）
-function formatHitCount(n) {
-  if (n == null || n === 0) return '—'
-  return Number(n).toLocaleString('zh-CN')
+import TagManageDialog from '@/components/TagManageDialog.vue'
+const app = useAppStore(), user = useUserStore(), apiStore = useApiStore(), router = useRouter(), route = useRoute()
+const rows = ref([]), total = ref(0), groups = ref([]), tags = ref([]), loading = ref(false), busy = ref(false), error = ref(''), conflict = ref(''), metadataError = ref(''), selectedIds = ref([]), page = ref(1), size = ref(20), sort = ref('updatedAt:desc'), showMoreFilters = ref(false)
+const filters = reactive({ keyword: '', method: '', groupId: '', type: '', enabled: '', tagIds: [], mine: false })
+const importOpen = ref(false), groupOpen = ref(false), tagOpen = ref(false), historyOpen = ref(false), historyRow = ref(null), detailOpen = ref(false), detailRow = ref(null), deleteOpen = ref(false), deleteRequest = ref(null), urlOpen = ref(false), urlText = ref(''), serverAddress = ref('')
+const methods = ['GET','POST','PUT','DELETE','PATCH','HEAD','OPTIONS']
+const trashAvailable = computed(() => router.getRoutes().some(record => record.path === '/apis/trash'))
+let generation = 0, listRequest = 0, metadataRequest = 0, keywordTimer = null, firstContext = true, noticeRevision = -1
+const teamId = computed(() => app.currentTeamId), team = computed(() => app.currentTeam), membership = computed(() => user.user?.teams?.find(item => item.teamId === teamId.value))
+const archived = computed(() => team.value?.status === 'ARCHIVED' || membership.value?.teamStatus === 'ARCHIVED')
+const canRead = computed(() => !!teamId.value && user.hasCapability(teamId.value, 'read'))
+const canWrite = computed(() => canRead.value && !archived.value && user.hasCapability(teamId.value, 'write'))
+const canBatchDelete = computed(() => canWrite.value && user.hasCapability(teamId.value, 'batchDelete'))
+const canOverride = computed(() => canWrite.value && user.hasCapability(teamId.value, 'overwriteImport'))
+const key = computed(() => [teamId.value, user.token, user.user?.id, user.identityReady, canRead.value, canWrite.value, canBatchDelete.value, canOverride.value, archived.value].join('|'))
+const contextStamp = computed(() => [teamId.value, canRead.value, canWrite.value, canBatchDelete.value, canOverride.value, archived.value].join('|'))
+const selectedRows = computed(() => rows.value.filter(row => selectedIds.value.includes(row.id)))
+const allSelected = computed(() => rows.value.length > 0 && selectedRows.value.length === rows.value.length)
+const partiallySelected = computed(() => selectedRows.value.length > 0 && !allSelected.value)
+const filtered = computed(() => !!(filters.keyword || filters.method || filters.groupId || filters.type || (filters.enabled === true || filters.enabled === false) || filters.tagIds.length || filters.mine))
+function scope() { return { generation, key: key.value, teamId: teamId.value } }
+function live(captured, capability = 'read') { return captured.generation === generation && captured.key === key.value && !!captured.teamId && captured.teamId === teamId.value && user.hasCapability(captured.teamId, capability) && (capability === 'read' || !archived.value) }
+function scopeStorageKey() { return user.user?.id ? 'mockhub:' + user.user.id + ':api-list-context' : '' }
+function storeFilters() { const [sortBy, sortDir] = sort.value.split(':'); Object.entries({ keyword: filters.keyword, method: filters.method || null, groupId: filters.groupId || null, type: filters.type || null, enabled: filters.enabled === '' ? null : filters.enabled, tagIds: [...filters.tagIds], createdBy: filters.mine ? 'me' : null, sortBy, sortDir, page: page.value, size: size.value }).forEach(([name, value]) => apiStore.setParam(name, value)); apiStore.setParam('page', page.value) }
+function setDefaultFilters() { Object.assign(filters, { keyword: '', method: '', groupId: '', type: '', enabled: '', tagIds: [], mine: false }); page.value = 1; size.value = 20; sort.value = 'updatedAt:desc' }
+function clearContext() { generation++; listRequest++; metadataRequest++; clearTimeout(keywordTimer); rows.value = []; total.value = 0; groups.value = []; tags.value = []; selectedIds.value = []; loading.value = false; busy.value = false; error.value = ''; conflict.value = ''; metadataError.value = ''; importOpen.value = false; groupOpen.value = false; tagOpen.value = false; historyOpen.value = false; historyRow.value = null; detailOpen.value = false; detailRow.value = null; deleteOpen.value = false; deleteRequest.value = null; urlOpen.value = false; urlText.value = '' }
+watch(key, () => {
+  const storageKey = scopeStorageKey(), restore = firstContext && storageKey && sessionStorage.getItem(storageKey) === contextStamp.value
+  clearContext()
+  if (restore) { const saved = apiStore.listParams; Object.assign(filters, { keyword: saved.keyword || '', method: saved.method || '', groupId: saved.groupId || '', type: saved.type || '', enabled: saved.enabled ?? '', tagIds: [...(saved.tagIds || [])], mine: saved.createdBy === 'me' }); page.value = saved.page || 1; size.value = saved.size || 20; sort.value = (saved.sortBy || 'updatedAt') + ':' + (saved.sortDir || 'desc') }
+  else { apiStore.resetParams(); setDefaultFilters() }
+  firstContext = false; if (storageKey) sessionStorage.setItem(storageKey, contextStamp.value)
+  if (canRead.value) { if (typeof route.query.keyword === 'string') filters.keyword = route.query.keyword; loadPage(); loadMetadata() }
+}, { immediate: true, flush: 'sync' })
+watch(() => filters.keyword, () => { clearTimeout(keywordTimer); keywordTimer = setTimeout(() => applyFilters(), 300) })
+watch(() => route.query.keyword, value => { if (canRead.value) filters.keyword = typeof value === 'string' ? value : '' })
+watch(() => app.apiRevision, value => { if (value !== noticeRevision && canRead.value) { selectedIds.value = []; loadPage(); loadMetadata() } })
+onMounted(async () => { try { const result = await getServerAddress(); serverAddress.value = /^https?:\/\//.test(result.address || '') ? result.address.replace(/\/$/, '') : '' } catch { serverAddress.value = '' } })
+onBeforeUnmount(clearContext)
+async function loadPage() {
+  if (!canRead.value || !teamId.value) return
+  const captured = scope(), request = ++listRequest; loading.value = true; error.value = ''; selectedIds.value = []; storeFilters()
+  const [sortBy, sortDir] = sort.value.split(':'), params = { teamId: captured.teamId, page: page.value, size: size.value, sortBy, sortDir }
+  if (filters.keyword) params.keyword = filters.keyword
+  if (filters.method) params.method = filters.method
+  if (filters.type) params.type = filters.type
+  if (filters.enabled !== '' && filters.enabled !== null && filters.enabled !== undefined) params.enabled = filters.enabled
+  if (filters.groupId === '__none__') params.groupId = ''; else if (filters.groupId) params.groupId = filters.groupId
+  if (filters.tagIds.length) params.tagIds = filters.tagIds.join(',')
+  if (filters.mine) params.createdBy = 'me'
+  try { const result = await getApis(params); if (!live(captured) || request !== listRequest) return; if (!Array.isArray(result.items) || result.items.some(row => row.teamId !== captured.teamId)) throw new Error('接口响应不属于当前团队，已拒绝显示'); rows.value = result.items; total.value = result.total || 0; if (page.value > 1 && !rows.value.length && total.value > 0) { page.value = Math.max(1, Math.ceil(total.value / size.value)); await loadPage() } }
+  catch (failure) { if (live(captured) && request === listRequest) { rows.value = []; total.value = 0; error.value = readableError(failure, '接口列表加载失败，不会将失败当成空团队') } }
+  finally { if (live(captured) && request === listRequest) loading.value = false }
 }
-
-// 最近调用相对时间（沿用全局 fromNow 工具，保持与日志页等地方一致）
-function formatRelativeTime(input) {
-  return fromNow(input)
+async function loadMetadata() {
+  if (!canRead.value || !teamId.value) return
+  const captured = scope(), request = ++metadataRequest; metadataError.value = ''
+  try { const [groupList, tagList] = await Promise.all([getGroups(captured.teamId), getTags(captured.teamId)]); if (!live(captured) || request !== metadataRequest) return; if (![...groupList, ...tagList].every(row => row.teamId === captured.teamId)) throw new Error('共享配置响应团队不匹配'); groups.value = groupList; tags.value = tagList; let corrected = false; if (filters.groupId && filters.groupId !== '__none__' && !groups.value.some(group => group.id === filters.groupId)) { filters.groupId = ''; corrected = true } const validTags = filters.tagIds.filter(id => tags.value.some(tag => tag.id === id)); if (validTags.length !== filters.tagIds.length) { filters.tagIds = validTags; corrected = true } if (corrected) applyFilters() }
+  catch (failure) { if (live(captured) && request === metadataRequest) { groups.value = []; tags.value = []; metadataError.value = readableError(failure, '分组和标签暂时无法读取') } }
 }
-
-const router = useRouter()
-const appStore = useAppStore()
-const apiStore = useApiStore()
-const userStore = useUserStore()
-
-// --- 列表数据 ---
-const apiList = ref([])
-const total = ref(0)
-const loading = ref(false)
-const tableRef = ref(null)
-const selectedRows = ref([])
-const batchLoading = ref(false)
-
-// 批量操作下拉里的"未分组"项是否可见：始终可见（即使当前团队没分组也可以把接口移到未分组状态）
-const canMoveToNoGroup = computed(() => true)
-
-/** 多选变化 */
-function handleSelectionChange(rows) {
-  selectedRows.value = rows
+function applyFilters() { clearTimeout(keywordTimer); if (!canRead.value) return; page.value = 1; loadPage() }
+function resetFilters() { setDefaultFilters(); apiStore.resetParams(); loadPage() }
+function selectAll(value) { if (!busy.value) selectedIds.value = value ? rows.value.map(row => row.id) : [] }
+function selectRow(row, selected) { if (busy.value || row.teamId !== teamId.value) return; selectedIds.value = selected ? [...new Set([...selectedIds.value, row.id])] : selectedIds.value.filter(id => id !== row.id) }
+function formatCount(value) { return Number(value || 0).toLocaleString('zh-CN') }
+function openDetailDialog(row) {
+  if (!canRead.value || row.teamId !== teamId.value) return
+  detailRow.value = { ...row }
+  detailOpen.value = true
 }
-
-/**
- * 行 className：禁用接口降透明度，让一眼能看出哪些是禁用状态。
- * row-key + reserve-selection 配合时，row 是 row-key 命中的同一引用，写入安全。
- */
-function apiRowClass({ row }) {
-  return row.enabled ? 'api-row' : 'api-row api-row--disabled'
+function openEditor(row) { if (canRead.value && row.teamId === teamId.value) router.push('/apis/' + encodeURIComponent(row.id) + '/edit') }
+function editFromDetail() { const row = detailRow.value; if (!row) return; detailOpen.value = false; openEditor(row) }
+function historyFromDetail() { const row = detailRow.value; if (row) openHistory(row) }
+function openHistory(row) { if (!canRead.value || row.teamId !== teamId.value) return; historyRow.value = { ...row }; historyOpen.value = true }
+function manage(kind) { if (!canRead.value) return; if (kind === 'groups') groupOpen.value = true; else tagOpen.value = true }
+async function retryMetadata() { const captured = scope(); if (!live(captured)) return; await Promise.all([loadMetadata(), app.loadTeams().catch(failure => { if (live(captured)) metadataError.value = '团队目录未同步，计数可能是旧值：' + readableError(failure) })]) }
+async function refreshAfterMutation(captured) { if (!live(captured)) return; selectedIds.value = []; conflict.value = ''; noticeRevision = app.apiRevision + 1; app.bumpApiRevision(); await Promise.all([loadPage(), loadMetadata(), app.loadTeams().catch(failure => { if (live(captured)) metadataError.value = '接口操作已完成，但团队目录尚未同步：' + readableError(failure) })]) }
+async function mutate(work, message, capability = 'write') {
+  if (busy.value || loading.value || !user.hasCapability(teamId.value, capability) || archived.value) return
+  const captured = scope(); busy.value = true; error.value = ''
+  try { await work(captured); if (!live(captured, capability)) return; ElMessage.success(message); await refreshAfterMutation(captured) }
+  catch (failure) { if (live(captured)) { if (isVersionConflict(failure)) conflict.value = '接口版本已变化，原操作没有自动重试。请刷新并核对后重新选择。'; else error.value = readableError(failure) } }
+  finally { if (live(captured)) busy.value = false }
 }
-
-/** 清空跨页选中 */
-function handleClearSelection() {
-  if (tableRef.value) {
-    tableRef.value.clearSelection()
-  }
-  selectedRows.value = []
+function freezeTargets(targets) { try { return freezeRows(targets, teamId.value) } catch (failure) { conflict.value = readableError(failure); return null } }
+function toggle(row) { if (!canWrite.value) return; const frozenRows = freezeTargets([row]); if (!frozenRows) return; const [frozen] = frozenRows; return mutate(() => toggleApi(frozen.id, frozen.revision), row.enabled ? '接口已停用' : '接口已启用') }
+function rowCommand(command, row) { if (command === 'history') return openHistory(row); if (command === 'url') return copyUrl(row); if (!canWrite.value) return; if (command === 'delete') return prepareDelete([row], false); if (command === 'copy') { const frozenRows = freezeTargets([row]); if (!frozenRows) return; const [frozen] = frozenRows; return mutate(() => copyApi(frozen.id, frozen.revision), '已复制为新的团队接口') } }
+function runBatch(action, targetGroupId) {
+  if (!canWrite.value || !selectedRows.value.length) return
+  const frozen = freezeTargets(selectedRows.value); if (!frozen) return
+  const ids = frozen.map(row => row.id), expectedRevisions = selectedRevisions(ids, frozen)
+  return mutate(() => batchApis({ action, ids, expectedRevisions, ...(action === 'move-group' ? { targetGroupId } : {}) }), '批量操作已完成，正在显示实际版本')
 }
-
-// --- 工具栏筛选状态（双向绑定到输入控件，变化后同步到 store） ---
-const keyword = ref(apiStore.listParams.keyword)
-const methodFilter = ref(apiStore.listParams.method)
-const enabledFilter = ref(apiStore.listParams.enabled)
-const typeFilter = ref(apiStore.listParams.type)
-// 多标签筛选：数组形式,兼容 store 里可能残留的旧字段
-const tagFilter = ref(Array.isArray(apiStore.listParams.tagIds) ? [...apiStore.listParams.tagIds] : [])
-// 分组筛选：null=全部，'__none__'=未分组，其余=分组 ID
-const groupFilter = ref(apiStore.listParams.groupId)
-const currentPage = ref(apiStore.listParams.page)
-const pageSize = ref(apiStore.listParams.size)
-
-const httpMethods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
-
-// 当前可选标签（基于当前团队筛选加载）
-const availableTags = ref([])
-
-// 当前可选分组（基于当前团队加载，用于筛选下拉；表格列优先使用后端 groupName）
-const availableGroups = ref([])
-
-// 分组 ID → 分组名 映射，给表格列展示用
-const groupNameMap = computed(() => {
-  const map = {}
-  availableGroups.value.forEach(g => { map[g.id] = g.name })
-  return map
-})
-
-function displayGroupName(row) {
-  return row.groupName || groupNameMap.value[row.groupId] || ''
+function moveGroup(id) { if (id !== '__none__' && !groups.value.some(group => group.id === id)) return; return runBatch('move-group', id === '__none__' ? '' : id) }
+function prepareDelete(targets, batch) { if (!canWrite.value || busy.value || loading.value || (batch && !canBatchDelete.value)) return; const frozen = freezeTargets(targets); if (!frozen?.length) return; deleteRequest.value = Object.freeze({ ...scope(), batch, teamName: team.value?.name, rows: Object.freeze(frozen) }); deleteOpen.value = true }
+async function confirmDelete() {
+  const captured = deleteRequest.value, capability = captured?.batch ? 'batchDelete' : 'write'
+  if (busy.value || loading.value) return
+  if (!captured || !live(captured, capability)) { deleteOpen.value = false; return }
+  await mutate(() => captured.batch ? batchApis({ action: 'delete', ids: captured.rows.map(row => row.id), expectedRevisions: selectedRevisions(captured.rows.map(row => row.id), captured.rows) }) : deleteApi(captured.rows[0].id, captured.rows[0].revision), '接口已移入回收站', capability)
+  if (live(captured)) deleteOpen.value = false
 }
-
-// 分组管理弹窗显示状态
-const groupManagerVisible = ref(false)
-
-/**
- * el-table 的 default-sort：把 store 中的 sortBy/sortDir 转成 el-table 期望的 {prop, order}。
- * order 取值：'ascending' / 'descending' / null。
- */
-const defaultSort = computed(() => ({
-  prop: apiStore.listParams.sortBy || 'updatedAt',
-  order: apiStore.listParams.sortDir === 'asc' ? 'ascending' : 'descending'
-}))
-
-// --- 服务器地址（用于拼接 Mock URL） ---
-const serverAddress = ref('')
-
-// --- 标签管理相关 ---
-
-/** 预设色板 */
-const PRESET_COLORS = [
-  '#6366F1', '#8B5CF6', '#EC4899', '#EF4444', '#F59E0B',
-  '#10B981', '#06B6D4', '#3B82F6', '#6B7280', '#D97706'
-]
-
-const tagDrawerVisible = ref(false)
-const tagList = ref([])
-const tagLoading = ref(false)
-
-// 编辑态
-const editingTagId = ref(null)
-const editingTagName = ref('')
-const editingTagColor = ref('')
-
-// 新建态
-const newTagName = ref('')
-const newTagColor = ref(PRESET_COLORS[Math.floor(Math.random() * PRESET_COLORS.length)])
-
-/** 打开标签管理抽屉，未选团队时自动取用户所属的第一个团队 */
-function handleOpenTagManager() {
-  if (!appStore.currentTeamId) {
-    if (userStore.userTeamIds.length > 0) {
-      appStore.setFilter(userStore.userTeamIds[0])
-    } else if (appStore.teams.length > 0) {
-      // 超管没有所属团队时取团队列表第一个
-      appStore.setFilter(appStore.teams[0].id)
-    } else {
-      ElMessage.warning('请先选择一个团队')
-      return
-    }
-  }
-  tagDrawerVisible.value = true
-  loadTagList()
+function explicitRefresh() { conflict.value = ''; selectedIds.value = []; loadPage(); loadMetadata() }
+function metadataChanged(result) { if (result?.teamId && result.teamId !== teamId.value) return; refreshAfterMutation(scope()) }
+function imported(result) { if (result.teamId === teamId.value) refreshAfterMutation(scope()) }
+function historyChanged(result) { if (result.teamId === teamId.value) refreshAfterMutation(scope()) }
+async function exportCurrent() {
+  if (!canRead.value || busy.value) return
+  const captured = scope(), ids = selectedRows.value.map(row => row.id); busy.value = true
+  try { const blob = await exportApis(captured.teamId, ids); if (!live(captured)) return; const url = URL.createObjectURL(blob), link = document.createElement('a'); link.href = url; link.download = 'mockhub-' + (team.value?.identifier || 'team') + '-' + new Date().toISOString().slice(0,10) + (blob.type?.includes('zip') ? '.zip' : '.json'); link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); ElMessage.success('导出成功') }
+  catch (failure) { if (live(captured)) error.value = readableError(failure, '导出未完成') }
+  finally { if (live(captured)) busy.value = false }
 }
-
-/** 加载标签管理列表 */
-async function loadTagList() {
-  tagLoading.value = true
-  try {
-    tagList.value = await getTags(appStore.currentTeamId)
-  } catch (e) {
-    tagList.value = []
-  } finally {
-    tagLoading.value = false
-  }
+async function copyUrl(row) {
+  if (!canRead.value || row.teamId !== teamId.value) return
+  const captured = scope(), identifier = row.teamIdentifier || team.value?.identifier
+  if (!identifier) { error.value = '团队标识缺失，无法生成正确地址'; return }
+  const base = serverAddress.value || window.location.origin, value = base.replace(/\/$/, '') + '/mock/' + encodeURIComponent(identifier) + row.path + (row.type === 'SOAP' ? '?wsdl' : '')
+  try { await navigator.clipboard.writeText(value); if (live(captured)) ElMessage.success((row.type === 'SOAP' ? 'WSDL' : 'Mock') + '地址已复制') }
+  catch { if (live(captured)) { urlText.value = value; urlOpen.value = true } }
 }
-
-/** 关闭抽屉后刷新接口列表（标签可能变了） */
-function handleTagDrawerClose() {
-  editingTagId.value = null
-  loadApis()
-  loadTags()
-}
-
-/** 开始行内编辑 */
-function handleStartEdit(tag) {
-  editingTagId.value = tag.id
-  editingTagName.value = tag.name
-  editingTagColor.value = tag.color
-}
-
-/** 取消编辑 */
-function handleCancelEdit() {
-  editingTagId.value = null
-}
-
-/** 保存编辑 */
-async function handleSaveTag(tag) {
-  if (!editingTagName.value.trim()) {
-    ElMessage.warning('标签名称不能为空')
-    return
-  }
-  try {
-    await updateTag(tag.id, {
-      teamId: appStore.currentTeamId,
-      name: editingTagName.value.trim(),
-      color: editingTagColor.value
-    })
-    ElMessage.success('标签已更新')
-    editingTagId.value = null
-    loadTagList()
-  } catch (e) {
-    // 错误已由拦截器处理
-  }
-}
-
-/** 删除标签 */
-async function handleDeleteTag(tag) {
-  try {
-    await ElMessageBox.confirm(
-      `删除标签「${tag.name}」将移除所有接口上的该标签，确认？`,
-      '删除确认',
-      { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' }
-    )
-    await deleteTag(tag.id)
-    ElMessage.success('标签已删除')
-    loadTagList()
-  } catch (e) {
-    // 取消或错误，不处理
-  }
-}
-
-/** 创建新标签 */
-async function handleCreateTag() {
-  if (!newTagName.value.trim()) return
-  try {
-    await createTag({
-      teamId: appStore.currentTeamId,
-      name: newTagName.value.trim(),
-      color: newTagColor.value
-    })
-    ElMessage.success('标签已创建')
-    newTagName.value = ''
-    // 随机选一个新的默认颜色
-    newTagColor.value = PRESET_COLORS[Math.floor(Math.random() * PRESET_COLORS.length)]
-    loadTagList()
-  } catch (e) {
-    // 错误已由拦截器处理
-  }
-}
-
-// --- 导入相关 ---
-const importDialogVisible = ref(false)
-const importLoading = ref(false)
-const importUploadRef = ref(null)
-const importForm = ref({
-  teamId: '',
-  mode: 'merge'
-})
-const importFile = ref(null)
-
-// --- 数据加载 ---
-
-/** 加载接口列表，组合侧边栏筛选 + 工具栏筛选参数 */
-async function loadApis() {
-  loading.value = true
-  try {
-    const params = {
-      page: currentPage.value,
-      size: pageSize.value
-    }
-    // 侧边栏团队筛选
-    if (appStore.currentTeamId) {
-      params.teamId = appStore.currentTeamId
-    }
-    // 工具栏筛选
-    if (keyword.value) params.keyword = keyword.value
-    if (methodFilter.value) params.method = methodFilter.value
-    if (typeFilter.value) params.type = typeFilter.value
-    if (enabledFilter.value !== null && enabledFilter.value !== undefined && enabledFilter.value !== '') {
-      params.enabled = enabledFilter.value
-    }
-    // 多标签以逗号拼接传给后端(命中任一即返回)
-    if (tagFilter.value && tagFilter.value.length) {
-      params.tagIds = tagFilter.value.join(',')
-    }
-    // 分组筛选：'__none__' 转为空字符串传给后端(后端语义：空串 = 未分组)
-    if (groupFilter.value === '__none__') {
-      params.groupId = ''
-    } else if (groupFilter.value) {
-      params.groupId = groupFilter.value
-    }
-    // 排序参数（后端有白名单兜底，前端传错值不会出错，只会回退默认）
-    if (apiStore.listParams.sortBy) {
-      params.sortBy = apiStore.listParams.sortBy
-    }
-    if (apiStore.listParams.sortDir) {
-      params.sortDir = apiStore.listParams.sortDir
-    }
-
-    const res = await getApis(params)
-    apiList.value = res.items || []
-    total.value = res.total || 0
-  } catch (e) {
-    apiList.value = []
-    total.value = 0
-  } finally {
-    loading.value = false
-  }
-}
-
-/**
- * 加载当前团队的分组列表（用于筛选下拉和表格分组列名映射）
- * 未选团队时清空：跨团队分组语义混乱，前端不做聚合
- */
-async function loadGroups() {
-  if (!appStore.currentTeamId) {
-    availableGroups.value = []
-    return
-  }
-  try {
-    const list = await getGroups(appStore.currentTeamId)
-    availableGroups.value = Array.isArray(list) ? list : []
-  } catch (e) {
-    availableGroups.value = []
-  }
-}
-
-/** 加载可选标签（按当前团队加载，未选团队时加载所有团队标签） */
-async function loadTags() {
-  try {
-    if (appStore.currentTeamId) {
-      availableTags.value = await getTags(appStore.currentTeamId)
-    } else {
-      // 没有选中团队时，加载所有团队标签合集
-      const allTags = []
-      for (const team of appStore.teams) {
-        try {
-          const tags = await getTags(team.id)
-          allTags.push(...tags)
-        } catch (e) {
-          // 单个团队失败不影响其他
-        }
-      }
-      availableTags.value = allTags
-    }
-  } catch (e) {
-    availableTags.value = []
-  }
-}
-
-// --- 筛选条件变化处理 ---
-
-function handleKeywordChange() {
-  apiStore.setParam('keyword', keyword.value)
-  currentPage.value = 1
-  loadApis()
-}
-
-function handleMethodChange(val) {
-  apiStore.setParam('method', val)
-  currentPage.value = 1
-  loadApis()
-}
-
-function handleTypeChange(val) {
-  apiStore.setParam('type', val)
-  currentPage.value = 1
-  loadApis()
-}
-
-function handleEnabledChange(val) {
-  apiStore.setParam('enabled', val)
-  currentPage.value = 1
-  loadApis()
-}
-
-function handleTagChange(val) {
-  // val 为选中的 tagId 数组
-  apiStore.setParam('tagIds', val)
-  currentPage.value = 1
-  loadApis()
-}
-
-/** 分组筛选变化：null=全部，'__none__'=未分组，其余=分组 ID */
-function handleGroupChange(val) {
-  apiStore.setParam('groupId', val || null)
-  currentPage.value = 1
-  loadApis()
-}
-
-/** 打开分组管理弹窗，未选团队时自动取用户所属第一个团队（与标签管理逻辑一致） */
-function handleOpenGroupManager() {
-  if (!appStore.currentTeamId) {
-    if (userStore.userTeamIds.length > 0) {
-      appStore.setFilter(userStore.userTeamIds[0])
-    } else if (appStore.teams.length > 0) {
-      appStore.setFilter(appStore.teams[0].id)
-    } else {
-      ElMessage.warning('请先选择一个团队')
-      return
-    }
-  }
-  groupManagerVisible.value = true
-}
-
-/**
- * 表头排序变化：order = 'ascending' / 'descending' / null（取消排序）。
- * null 时回退到默认排序（updatedAt desc），避免后端无序返回引起列表抖动。
- */
-function handleSortChange({ prop, order }) {
-  if (!order) {
-    apiStore.setParam('sortBy', 'updatedAt')
-    apiStore.setParam('sortDir', 'desc')
-  } else {
-    apiStore.setParam('sortBy', prop)
-    apiStore.setParam('sortDir', order === 'ascending' ? 'asc' : 'desc')
-  }
-  currentPage.value = 1
-  loadApis()
-}
-
-/** 分组弹窗中发生 CRUD 后回调：重新加载分组列表和接口列表 */
-async function handleGroupChanged() {
-  await loadGroups()
-  // 当前分组可能已被删除，校正筛选
-  if (groupFilter.value && groupFilter.value !== '__none__') {
-    const stillExists = availableGroups.value.some(g => g.id === groupFilter.value)
-    if (!stillExists) {
-      groupFilter.value = null
-      apiStore.setParam('groupId', null)
-    }
-  }
-  loadApis()
-}
-
-function handlePageChange(page) {
-  apiStore.setParam('page', page)
-  loadApis()
-}
-
-function handleSizeChange(size) {
-  apiStore.setParam('size', size)
-  pageSize.value = size
-  currentPage.value = 1
-  apiStore.setParam('page', 1)
-  loadApis()
-}
-
-// 监听侧边栏团队筛选变化，自动刷新列表/标签/分组
-// 团队切换后，原选中的分组 ID 已不属于当前团队，需重置避免错误筛选
-watch(
-  () => appStore.currentTeamId,
-  () => {
-    currentPage.value = 1
-    apiStore.setParam('page', 1)
-    if (groupFilter.value) {
-      groupFilter.value = null
-      apiStore.setParam('groupId', null)
-    }
-    loadApis()
-    loadTags()
-    loadGroups()
-  }
-)
-
-// 搜索框防抖：输入时延迟触发
-let keywordTimer = null
-watch(keyword, (val) => {
-  clearTimeout(keywordTimer)
-  keywordTimer = setTimeout(() => {
-    apiStore.setParam('keyword', val)
-    currentPage.value = 1
-    loadApis()
-  }, 300)
-})
-
-// --- 行操作 ---
-
-/** 编辑 */
-function handleEdit(row) {
-  router.push(`/apis/${row.id}/edit`)
-}
-
-/**
- * 复制接口地址到剪贴板。
- * SOAP 接口复制 WSDL 托管地址（`{mockUrl}?wsdl`，方案 A），
- * REST 接口复制普通 Mock 地址（`{mockUrl}`）。
- */
-async function handleCopyUrl(row) {
-  const base = serverAddress.value || window.location.origin
-  const mockUrl = `${base}/mock/${row.teamIdentifier || ''}${row.path || '/'}`
-  const isSoap = row.type === 'SOAP'
-  const url = isSoap ? `${mockUrl}?wsdl` : mockUrl
-  const label = isSoap ? 'WSDL 地址' : 'Mock 地址'
-  try {
-    await navigator.clipboard.writeText(url)
-    ElMessage.success(`${label}已复制`)
-  } catch (err) {
-    // 降级方案：无权限使用 Clipboard API 时改用 textarea + execCommand
-    const textarea = document.createElement('textarea')
-    textarea.value = url
-    textarea.style.position = 'fixed'
-    textarea.style.opacity = '0'
-    document.body.appendChild(textarea)
-    textarea.select()
-    document.execCommand('copy')
-    document.body.removeChild(textarea)
-    ElMessage.success(`${label}已复制`)
-  }
-}
-
-/** 复制接口 */
-async function handleCopy(row) {
-  try {
-    await copyApi(row.id)
-    ElMessage.success('复制成功')
-    loadApis()
-    appStore.loadTeams()
-  } catch (e) {
-    // 错误已由拦截器处理
-  }
-}
-
-/** 删除接口 */
-async function handleDelete(row) {
-  try {
-    await ElMessageBox.confirm(
-      `确认删除接口「${row.name}」(${row.method} ${row.path})？`,
-      '删除确认',
-      { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' }
-    )
-    await deleteApi(row.id)
-    ElMessage.success('删除成功')
-    loadApis()
-    appStore.loadTeams()
-  } catch (e) {
-    // 取消或错误，不处理
-  }
-}
-
-/** 启用/禁用切换 */
-async function handleToggle(row) {
-  try {
-    const res = await toggleApi(row.id)
-    row.enabled = res.enabled
-    ElMessage.success(res.enabled ? '已启用' : '已禁用')
-  } catch (e) {
-    // 错误已由拦截器处理
-  }
-}
-
-// --- 批量操作 ---
-
-/**
- * 提取选中行 ID 数组，无选中时返回 null（调用方负责提示）。
- */
-function getSelectedIds() {
-  if (selectedRows.value.length === 0) {
-    ElMessage.warning('请先选择接口')
-    return null
-  }
-  return selectedRows.value.map(r => r.id)
-}
-
-/** 批量启用 */
-async function handleBatchEnable() {
-  const ids = getSelectedIds()
-  if (!ids) return
-  batchLoading.value = true
-  try {
-    const res = await batchApis({ action: 'enable', ids })
-    ElMessage.success(`已启用 ${res.affected} 个接口`)
-    handleClearSelection()
-    loadApis()
-  } catch (e) {
-    // 错误已由拦截器处理
-  } finally {
-    batchLoading.value = false
-  }
-}
-
-/** 批量禁用 */
-async function handleBatchDisable() {
-  const ids = getSelectedIds()
-  if (!ids) return
-  batchLoading.value = true
-  try {
-    const res = await batchApis({ action: 'disable', ids })
-    ElMessage.success(`已禁用 ${res.affected} 个接口`)
-    handleClearSelection()
-    loadApis()
-  } catch (e) {
-    // 错误已由拦截器处理
-  } finally {
-    batchLoading.value = false
-  }
-}
-
-/** 批量删除（带二次确认） */
-async function handleBatchDelete() {
-  const ids = getSelectedIds()
-  if (!ids) return
-  try {
-    await ElMessageBox.confirm(
-      `确认删除选中的 ${ids.length} 个接口？此操作不可撤销。`,
-      '批量删除确认',
-      { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' }
-    )
-  } catch (e) {
-    return // 取消
-  }
-  batchLoading.value = true
-  try {
-    const res = await batchApis({ action: 'delete', ids })
-    ElMessage.success(`已删除 ${res.affected} 个接口`)
-    handleClearSelection()
-    loadApis()
-    appStore.loadTeams()
-  } catch (e) {
-    // 错误已由拦截器处理
-  } finally {
-    batchLoading.value = false
-  }
-}
-
-/**
- * 批量移动到分组（command 即目标分组 ID，'__none__' 表示未分组）。
- * 跨团队所选时拒绝：分组与团队强绑定，跨团语义混乱。
- */
-async function handleBatchMoveGroup(command) {
-  const ids = getSelectedIds()
-  if (!ids) return
-
-  // 校验所有所选行属于同一团队
-  const teamIds = new Set(selectedRows.value.map(r => r.teamId))
-  if (teamIds.size > 1) {
-    ElMessage.warning('批量移动分组要求所选接口属于同一团队')
-    return
-  }
-
-  const targetGroupId = command === '__none__' ? '' : command
-  const targetName = command === '__none__'
-    ? '未分组'
-    : (availableGroups.value.find(g => g.id === command)?.name || '指定分组')
-
-  batchLoading.value = true
-  try {
-    const res = await batchApis({ action: 'move-group', ids, targetGroupId })
-    ElMessage.success(`已将 ${res.affected} 个接口移动到「${targetName}」`)
-    handleClearSelection()
-    loadApis()
-  } catch (e) {
-    // 错误已由拦截器处理
-  } finally {
-    batchLoading.value = false
-  }
-}
-
-// --- 导入/导出 ---
-
-function handleImportFileChange(uploadFile) {
-  importFile.value = uploadFile.raw
-}
-
-async function handleImport() {
-  if (!importForm.value.teamId) {
-    ElMessage.warning('请选择目标团队')
-    return
-  }
-  if (!importFile.value) {
-    ElMessage.warning('请选择导入文件')
-    return
-  }
-
-  importLoading.value = true
-  try {
-    const formData = new FormData()
-    formData.append('file', importFile.value)
-    formData.append('teamId', importForm.value.teamId)
-    formData.append('mode', importForm.value.mode)
-
-    const res = await importApis(formData)
-    ElMessage.success(`导入完成：新增 ${res.imported} 个，跳过 ${res.skipped} 个，覆盖 ${res.overridden} 个`)
-    importDialogVisible.value = false
-    importFile.value = null
-    loadApis()
-  } catch (e) {
-    // 错误已由拦截器处理
-  } finally {
-    importLoading.value = false
-  }
-}
-
-async function handleExport() {
-  const selectedIds = selectedRows.value.map(row => row.id)
-  const teamId = selectedRows.value.length > 0
-    ? (selectedRows.value[0].teamId || appStore.currentTeamId)
-    : appStore.currentTeamId
-  if (!teamId) {
-    ElMessage.warning('请先选择接口或在左侧选择一个团队再导出')
-    return
-  }
-
-  try {
-    const blob = await exportApis(teamId, selectedIds)
-    const team = appStore.teams.find(t => t.id === teamId)
-    const extension = blob.type && blob.type.includes('zip') ? 'zip' : 'json'
-    const scope = selectedIds.length > 0 ? `selected-${selectedIds.length}` : (team ? team.identifier : 'all')
-    const fileName = `mockhub-export-${scope}-${new Date().toISOString().slice(0, 10)}.${extension}`
-    const url = window.URL.createObjectURL(new Blob([blob]))
-    const link = document.createElement('a')
-    link.href = url
-    link.setAttribute('download', fileName)
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    window.URL.revokeObjectURL(url)
-    ElMessage.success(selectedIds.length > 0 ? `已导出 ${selectedIds.length} 个接口` : '导出完成')
-  } catch (e) {
-    // 错误已由拦截器处理
-  }
-}
-
-// --- 工具函数 ---
-
-function hexToRgba(hex, alpha) {
-  const h = (hex || '#6366F1').replace('#', '')
-  const r = parseInt(h.substring(0, 2), 16)
-  const g = parseInt(h.substring(2, 4), 16)
-  const b = parseInt(h.substring(4, 6), 16)
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`
-}
-
-/** 根据状态码返回颜色 class */
-function responseCodeClass(code) {
-  if (code >= 200 && code < 300) return 'response-code--success'
-  if (code >= 300 && code < 400) return 'response-code--redirect'
-  if (code >= 400 && code < 500) return 'response-code--client-error'
-  if (code >= 500) return 'response-code--server-error'
-  return ''
-}
-
-// --- 初始化 ---
-watch(() => appStore.apiRevision, () => {
-  loadApis()
-})
-
-onMounted(async () => {
-  loadApis()
-  loadTags()
-  loadGroups()
-  // 加载服务器地址用于拼接 Mock URL
-  try {
-    const data = await getServerAddress()
-    serverAddress.value = data.address || ''
-  } catch (e) {
-    // 获取失败时降级使用 window.location.origin
-  }
-})
 </script>
+<style scoped>
+.api-workspace{display:flex;flex-direction:column;gap:16px;min-width:0;padding:6px 4px 0}
+.workspace-heading{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:4px 4px 2px}
+.workspace-title{display:flex;align-items:center;gap:12px}
+.workspace-title h1{font-size:28px;line-height:1.3;letter-spacing:-.6px;margin:0;color:var(--app-text-primary)}
+.workspace-title>span{font-size:12px;color:var(--app-text-secondary);background:var(--app-bg-control);padding:7px 10px;border-radius:9px}
+.workspace-heading>div{min-width:0;max-width:100%}
+.workspace-heading p{overflow-wrap:anywhere;font-size:12px;color:var(--app-text-secondary);margin:8px 0 0;line-height:1.7}
+.workspace-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+.workspace-actions :deep(.el-button+.el-button){margin:0}
+.workspace-table{background:var(--app-bg-surface);border-radius:var(--app-radius-panel);padding:16px;min-width:0;overflow:hidden}
+.api-filters,.api-more-filters{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:0 0 14px}
+.api-filters :deep(.el-input__wrapper),.api-filters :deep(.el-select__wrapper),.api-more-filters :deep(.el-select__wrapper){height:32px;min-height:32px}
+.api-filters :deep(.el-button),.api-more-filters :deep(.el-button){height:32px;min-height:32px;padding-top:0;padding-bottom:0}
+.api-filters .mine-filter{height:32px}
+.api-filters :deep(.el-select){width:116px}
+.api-filters .api-search{width:min(310px,100%);flex:1;min-width:180px}
+.api-more-filters{padding-top:2px}
+.api-more-filters :deep(.el-select){width:145px}
+.api-filters :deep(.el-button){padding-left:6px;padding-right:6px;font-size:12px}
+.api-filters :deep(.el-button .filled-icon){margin-right:4px}
+.filters-spacer{flex:1}
+.mine-filter{display:inline-flex;align-items:center;border:0;background:var(--app-bg-control);color:var(--app-text-regular);border-radius:16px;padding:0 13px;cursor:pointer;font:12px var(--app-font-sans);white-space:nowrap}
+.mine-filter.is-active{background:var(--app-bg-selected);color:var(--app-accent)}
+.workspace-feedback{background:var(--app-bg-control);color:var(--app-text-regular);font-size:12px;line-height:1.9;padding:10px 12px;border-radius:9px;margin:0 0 12px;overflow-wrap:anywhere}
+.workspace-feedback--error{background:var(--el-color-danger-light-9);color:var(--el-color-danger-dark-2)}
+.workspace-feedback--warning{background:var(--el-color-warning-light-9);color:var(--el-color-warning-dark-2)}
+.workspace-feedback :deep(.el-button){font-size:12px}
+.api-selection{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--app-bg-selected);border-radius:10px;padding:8px 12px;margin-bottom:12px;font-size:12px}
+.api-selection :deep(.el-button){font-size:12px;margin:0;padding:7px}
+.api-results{min-height:200px;min-width:0}
+.api-grid-scroll{max-width:100%;overflow:auto;scrollbar-width:thin}
+.api-grid-scroll::-webkit-scrollbar{height:6px}
+.api-grid-scroll::-webkit-scrollbar-thumb{background:var(--app-divider);border-radius:4px}
+.api-grid-scroll::-webkit-scrollbar-track{background:var(--app-bg-control)}
+.api-grid-scroll:focus-visible{outline:2px solid var(--app-focus-color);outline-offset:-2px}
+.api-grid{width:100%;min-width:1452px;border-spacing:0;border-collapse:separate;table-layout:fixed;text-align:left}
+/* 路径列不设固定宽度：由它吸收表格剩余宽度，右侧 sticky 列才能用精确偏移不重叠 */
+.column-select{width:36px}.column-type{width:72px}.column-method{width:76px}.column-name{width:170px}.column-group{width:100px}.column-tags{width:100px}.column-calls{width:80px}.column-called{width:130px}.column-modified{width:144px}.column-creator{width:88px}.column-state{width:64px}.column-actions{width:192px}
+.api-grid th{font-size:12px;font-weight:500;color:var(--app-text-secondary);padding:11px 8px}
+.api-grid td{font-size:12px;color:var(--app-text-regular);padding:8px;vertical-align:middle;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;height:46px;border-top:1px solid var(--app-divider)}
+.api-grid th,.api-grid td{text-align:center}
+.api-grid th:nth-child(4),.api-grid td.cell-path,.api-grid th:nth-child(5),.api-grid td.cell-name{text-align:left}
+.api-grid tbody tr:hover{background:var(--app-bg-control)}
+.api-grid tbody tr.is-selected{background:var(--app-bg-selected)}
+.api-grid .cell-select{width:32px;text-align:center;padding-left:3px;padding-right:3px}
+.api-path{display:flex;align-items:center;min-height:28px;background:transparent;border:0;padding:0;text-align:left;color:var(--app-text-primary);font:13px/1.7 var(--app-font-mono);text-align:left;cursor:pointer;overflow-wrap:anywhere;max-width:100%}
+.api-path:hover{color:var(--app-accent)}
+.type-chip,.group-chip{padding:3px 6px;background:var(--app-bg-control);border-radius:5px;font-size:12px;color:var(--app-text-secondary);white-space:nowrap}.type-chip{display:inline-block;max-width:100%}
+.row-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
+.row-tags>span{max-width:100%;overflow-wrap:anywhere;min-width:0;font-size:12px;color:var(--app-text-secondary);background:var(--app-bg-control);padding:3px 6px;border-radius:5px;display:inline-flex;align-items:center;gap:4px}
+.row-tags i{width:6px;height:6px;border-radius:50%;flex:none}
+.row-actions{display:flex;justify-content:center;align-items:center;gap:2px}
+.row-actions :deep(.el-button){padding:7px 3px;font-size:12px;margin:0;gap:3px}
+.status-chip{font-size:12px;color:var(--app-text-secondary);background:var(--app-bg-control);padding:4px 7px;border-radius:7px;white-space:nowrap}
+.status-chip.enabled{color:var(--el-color-success-dark-2);background:var(--el-color-success-light-9)}
+.workspace-footer{display:flex;justify-content:flex-end;align-items:center;gap:12px;flex-wrap:wrap;margin-top:16px}
+.workspace-footer .page-size{width:92px}
+.workspace-empty{min-height:300px;background:var(--app-bg-surface);border-radius:var(--app-radius-panel);padding:40px 24px;display:flex;align-items:center;justify-content:center;flex-direction:column;text-align:center;gap:14px;color:var(--app-text-secondary)}
+.workspace-empty h2{font-size:18px;color:var(--app-text-primary);margin:0}
+.workspace-empty p{font-size:13px;max-width:440px;line-height:1.9;margin:0}
+.workspace-empty--rows{min-height:340px}
+.delete-copy{font-size:13px;line-height:1.9;color:var(--app-text-regular);overflow-wrap:anywhere}
+.delete-targets{list-style:none;padding:0;max-height:240px;overflow:auto}
+.delete-targets li{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 12px;background:var(--app-bg-control);border-radius:8px;margin-bottom:6px}
+.delete-targets code{font:12px/1.8 var(--app-font-mono);overflow-wrap:anywhere}
+.delete-targets span{font:12px var(--app-font-mono);color:var(--app-text-secondary);flex:none}
+.api-cards{display:none}
+@media(max-width:900px){.api-grid-scroll{display:none}
+.api-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr));gap:12px}
+.api-card{background:var(--app-bg-control);border-radius:12px;padding:16px;min-width:0}
+.api-card.is-selected{background:var(--app-bg-selected)}
+.api-card>header{display:flex;align-items:center;gap:9px;margin-bottom:14px}
+.api-card .api-path{font-size:13px}
+.api-card h3{overflow-wrap:anywhere;font-size:12px;font-weight:500;color:var(--app-text-secondary);margin:6px 0;line-height:1.8}
+.api-card dl{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;margin:18px 0 10px}
+.api-card dt{font-size:12px;color:var(--app-text-secondary);margin-bottom:7px}
+.api-card dd{overflow-wrap:anywhere;min-width:0;font-size:12px;margin:0;color:var(--app-text-regular);line-height:1.9}
+.api-card dd:last-child{font-size:12px;color:var(--app-text-secondary)}
+.api-card>footer{display:flex;align-items:center;gap:14px}
+.api-card footer :deep(.el-button){font-size:12px;margin:0;padding:8px 0}
+.api-card footer :deep(.filled-icon){margin-right:4px}
+.workspace-table{padding:16px}
+.workspace-actions{max-width:100%}
+.api-filters .filters-spacer{display:none}}
+@media(max-width:650px){.api-workspace{gap:12px;padding:2px}
+.workspace-heading{flex-direction:column;gap:14px;padding:4px 0}
+.workspace-title h1{font-size:24px}
+.workspace-title>span{font-size:12px;padding:6px 8px}
+.workspace-heading p{font-size:12px}
+.workspace-actions{justify-content:flex-start;gap:6px;width:100%}
+.workspace-actions :deep(.el-button){font-size:12px;padding:9px 11px}
+.workspace-table{padding:12px;border-radius:13px}
+.api-filters{gap:8px}
+.api-filters .api-search{flex:1 1 100%;width:100%;min-width:0}
+.api-filters :deep(.el-select){flex:1;min-width:95px;width:auto}
+.mine-filter{font-size:12px;padding:9px 10px}
+.api-more-filters{gap:8px}
+.api-more-filters :deep(.el-select){width:calc(50% - 5px);min-width:0}
+.workspace-footer{gap:8px}
+.workspace-footer .page-size{width:80px}
+.workspace-footer :deep(.el-pagination){padding:0}
+.api-selection{gap:5px;padding:9px}
+.api-selection :deep(.el-button){font-size:12px;padding:6px}
+.api-card{padding:13px}
+.api-card dl{gap:8px}
+.workspace-empty{padding:28px 16px}
+.workspace-empty h2{font-size:16px}
+.workspace-empty p{font-size:12px}
+.workspace-footer :deep(.el-pager li){min-width:26px}
+.api-cards{grid-template-columns:minmax(0,1fr)}}
 
-<style lang="scss" scoped>
-.page-api-list {
-}
-
-// 工具栏
-.toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
-
-  &__filters {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-  }
-
-  &__search {
-    width: 240px;
-  }
-
-  &__select {
-    width: 130px;
-  }
-
-  &__actions {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-}
-
-// 标签选项（下拉中带色点）
-.tag-option {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-
-  &__dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    flex-shrink: 0;
-  }
-}
-
-// 批量操作条：选中至少一项时浮现，紧贴表格顶部
-.batch-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
-  background: linear-gradient(90deg, rgba(99, 102, 241, 0.06), rgba(99, 102, 241, 0.02));
-  border-bottom: 1px solid #EBEEF5;
-  border-radius: 16px 16px 0 0;
-  font-size: 13px;
-  color: #4A5568;
-
-  &__count {
-    margin-right: 8px;
-    color: #1B2559;
-
-    strong {
-      color: #6366F1;
-      font-weight: 700;
-      margin: 0 2px;
-    }
-  }
-}
-
-.batch-bar-fade-enter-active,
-.batch-bar-fade-leave-active {
-  transition: all 0.18s ease;
-}
-.batch-bar-fade-enter-from,
-.batch-bar-fade-leave-to {
-  opacity: 0;
-  transform: translateY(-4px);
-}
-
-// 表格卡片
-.table-card {
-  padding: 0;
-
-  :deep(.el-table) {
-    border-radius: 16px;
-  }
-
-  // 防御 EP 已知 bug：横向滚动时 fixed-right 列与左侧普通列表头/单元格叠字
-  // 原因：EP 2.x 用 position: sticky 实现 fixed 列，sticky 单元格本身需有不透明背景
-  // 才能挡住下方滚过来的内容；个别情况（特别是表头）背景被清掉或 z-index 不够，
-  // 导致下层列文字穿透。这里统一加白底 + 高 z-index。
-  :deep(.el-table) {
-    th.el-table-fixed-column--right,
-    td.el-table-fixed-column--right {
-      background-color: #FFFFFF !important;
-      z-index: 3 !important;
-    }
-    // 第一根 fixed-right 列左侧补一条细分隔线，明确边界（避免被相邻列覆盖时分不清）
-    th.el-table-fixed-column--right.is-first-column::before,
-    td.el-table-fixed-column--right.is-first-column::before {
-      content: '';
-      position: absolute;
-      left: 0;
-      top: 0;
-      bottom: -1px;
-      width: 1px;
-      background-color: #EBEEF5;
-    }
-    // 表头排序图标列降级层级，避免它在水平滚动期间漂到 fixed 区上方
-    th.el-table__cell.is-sortable {
-      z-index: 1;
-    }
-  }
-}
-
-// 表格行样式
-.api-row {
-  height: 52px;
-
-  // 确保所有单元格内容垂直居中
-  :deep(td .cell) {
-    display: flex;
-    align-items: center;
-    min-height: 36px;
-  }
-  // 居中列的 cell 也要水平居中
-  :deep(td.is-center .cell) {
-    justify-content: center;
-  }
-
-  // 禁用状态：整行降透明度，hover 恢复以便操作。
-  // 不加色条/灰底，避免与其他状态色（如标签色）冲突。
-  &--disabled {
-    :deep(td) {
-      opacity: 0.55;
-      transition: opacity 0.15s ease;
-    }
-    &:hover :deep(td) {
-      opacity: 1;
-    }
-  }
-}
-
-.api-path {
-  font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
-  font-size: 13px;
-  color: #1B2559;
-}
-
-.group-name {
-  font-size: 13px;
-  color: #4A5568;
-}
-
-.no-group {
-  font-size: 13px;
-  color: #B0B7C3;
-}
-
-// 修改时间列：完整时间显示，等宽数字字体让多行对齐
-.time-cell {
-  font-size: 12px;
-  color: #6B7280;
-  font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
-  white-space: nowrap;
-}
-
-// 命中次数列：等宽数字便于纵向对齐
-.hit-count-cell {
-  font-size: 13px;
-  color: #1B2559;
-  font-weight: 600;
-  font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
-}
-
-// 最近调用列：相对时间常规色；从未调用降饱和度提示僵尸属性
-.last-called-cell {
-  font-size: 13px;
-  color: #4A5568;
-  cursor: help;
-
-  &--never {
-    font-size: 12px;
-    color: #B0B7C3;
-    font-style: italic;
-  }
-}
-
-.no-creator {
-  font-size: 13px;
-  color: #B0B7C3;
-}
-
-// 状态码颜色
-.response-code {
-  font-weight: 600;
-  font-size: 13px;
-
-  &--success { color: #10B981; }
-  &--redirect { color: #F59E0B; }
-  &--client-error { color: #EF4444; }
-  &--server-error { color: #DC2626; }
-}
-
-.delay-text {
-  font-size: 13px;
-  color: #A3AED0;
-}
-
-// 标签列
-.tag-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.tag-cell {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.api-tag {
-  border: none;
-  font-size: 12px;
-  color: #fff;
-}
-
-.no-tags {
-  color: #A3AED0;
-}
-
-// 操作按钮
-.action-buttons {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding-right: 8px;
-  white-space: nowrap;
-}
-
-// 操作列 cell 不裁切
-:deep(.action-col .cell) {
-  overflow: visible !important;
-}
-
-// 分页
-.pagination-wrapper {
-  display: flex;
-  justify-content: flex-end;
-  padding: 16px 20px;
-}
-
-// 标签管理抽屉 Soft UI 风格
-.tag-manager {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-
-  &__empty {
-    text-align: center;
-    color: #A3AED0;
-    padding: 40px 0;
-    font-size: 14px;
-  }
-
-  &__list {
-    flex: 1;
-    overflow-y: auto;
-  }
-
-  &__item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 12px;
-    border-radius: 10px;
-    transition: background 0.2s;
-
-    &:hover {
-      background: #F7F8FA;
-    }
-  }
-
-  &__dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    flex-shrink: 0;
-  }
-
-  &__name {
-    font-size: 14px;
-    color: #1B2559;
-  }
-
-  &__spacer {
-    flex: 1;
-  }
-
-  &__edit-input {
-    flex: 1;
-  }
-
-  // 新建标签区域固定在底部
-  &__create {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 16px 0 0;
-    margin-top: 12px;
-    border-top: 1px solid #F1F5F9;
-  }
-
-  &__create-input {
-    flex: 1;
-  }
-}
-
-// 空状态
-.empty-state {
-  padding: 40px 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-
-  &__icon {
-    font-size: 48px;
-    color: #A3AED0;
-  }
-
-  &__text {
-    font-size: 14px;
-    color: #A3AED0;
-  }
-}
-</style>
-
-<!-- 标签管理抽屉全局样式覆盖：大圆角 Soft UI -->
-<style lang="scss">
-.tag-drawer {
-  .el-drawer__header {
-    margin-bottom: 0;
-    padding-bottom: 16px;
-    border-bottom: 1px solid #F1F5F9;
-  }
-
-  .el-drawer__body {
-    padding: 16px 20px;
-  }
-
-  &.el-drawer {
-    border-radius: 16px 0 0 16px;
-  }
-}
+.readonly-badge{font-size:12px;color:var(--app-text-secondary);padding:5px 8px;background:var(--app-bg-control);border-radius:6px}
+.api-grid .api-path{display:block;width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px}
+.api-grid .row-tags{margin:0;flex-wrap:nowrap;overflow:hidden;max-height:28px;justify-content:center}
+.api-grid .row-tags>span{max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0;display:inline-block;vertical-align:middle}
+.api-grid .row-tags i{display:inline-block;margin-right:4px;vertical-align:middle}
+.api-grid .cell-state,.api-grid .cell-actions{position:sticky;background:var(--app-bg-surface);z-index:1;overflow:visible}
+.api-grid .cell-state{right:192px;text-align:center}.api-grid .cell-actions{right:0;text-align:center}
+.api-grid thead .cell-state,.api-grid thead .cell-actions{z-index:2}
+.api-grid tr:hover .cell-state,.api-grid tr:hover .cell-actions{background:var(--app-bg-control)}
+.api-grid tr.is-selected .cell-state,.api-grid tr.is-selected .cell-actions{background:var(--app-bg-selected)}
 </style>

@@ -33,6 +33,16 @@ public class ImportExportData {
 
     /** 接口返回体列表 */
     private List<ApiResponse> apiResponses;
+    private java.util.Map<String,java.util.List<String>> apiTags;
+    public java.util.Map<String,java.util.List<String>> getApiTags() { return apiTags; }
+    public void setApiTags(java.util.Map<String,java.util.List<String>> value) { apiTags=value; }
+
+    /** Optional complete-bundle manifest: source API id -> ZIP file-map key (without files/). */
+    @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_EMPTY)
+    private java.util.Map<String, String> apiWsdlFiles;
+
+    public java.util.Map<String, String> getApiWsdlFiles() { return apiWsdlFiles; }
+    public void setApiWsdlFiles(java.util.Map<String, String> value) { apiWsdlFiles = value; }
 
     /** 全局响应头列表 */
     private List<GlobalHeader> globalHeaders;

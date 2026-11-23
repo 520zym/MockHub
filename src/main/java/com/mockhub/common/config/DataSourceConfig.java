@@ -44,6 +44,7 @@ import java.util.UUID;
 public class DataSourceConfig {
 
     private static final Logger log = LoggerFactory.getLogger(DataSourceConfig.class);
+    private static final int CURRENT_SCHEMA_VERSION = 12;
 
     @Autowired
     private DataProperties dataProperties;
@@ -52,9 +53,8 @@ public class DataSourceConfig {
      * 自定义 DataSource bean：
      * 1. 先创建数据目录
      * 2. 创建连接池
-     * 3. 启用 WAL 模式
-     * 4. 执行 schema.sql 建表
-     * 5. 按 schema_version 执行迁移
+     * 3. 同一事务内验证旧库、执行 schema.sql 建表及版本迁移
+     * 4. 迁移成功后启用 WAL 模式
      */
     @Bean
     public DataSource dataSource(DataSourceProperties properties) {
@@ -62,13 +62,10 @@ public class DataSourceConfig {
 
         DataSource ds = properties.initializeDataSourceBuilder().build();
 
-        JdbcTemplate jdbcTemplate = new JdbcTemplate(ds);
-        enableWalMode(jdbcTemplate);
-        executeSchemaSql(jdbcTemplate);
+        // 建表、补列、数据迁移及补索引必须使用同一事务；失败不能留下半升级的 schema。
         executeMigrations(ds);
-        // 老库第一次执行 schema.sql 时，部分索引依赖的列还不存在，
-        // 迁移/兼容补列完成后再执行一次，补建这些索引。
-        executeSchemaSql(jdbcTemplate);
+        // 未知未来版本或无效角色拒绝启动时，连 journal_mode 也不要改动。
+        enableWalMode(new JdbcTemplate(ds));
 
         return ds;
     }
@@ -107,7 +104,7 @@ public class DataSourceConfig {
     /**
      * 读取 classpath:schema.sql 并执行建表语句
      */
-    private void executeSchemaSql(JdbcTemplate jdbcTemplate) {
+    private void executeSchemaSql(Connection conn, boolean deferMissingColumnIndexes) throws SQLException {
         try {
             ClassPathResource resource = new ClassPathResource("schema.sql");
             InputStream inputStream = resource.getInputStream();
@@ -129,10 +126,14 @@ public class DataSourceConfig {
                     continue;
                 }
                 try {
-                    jdbcTemplate.execute(trimmed);
-                } catch (org.springframework.dao.DataAccessException e) {
-                    String upper = trimmed.toUpperCase();
-                    if (upper.startsWith("CREATE INDEX") || upper.startsWith("CREATE UNIQUE INDEX")) {
+                    try (Statement st = conn.createStatement()) {
+                        st.execute(trimmed);
+                    }
+                } catch (SQLException e) {
+                    String upper = trimmed.toUpperCase(java.util.Locale.ROOT);
+                    if (deferMissingColumnIndexes && e.getMessage() != null
+                            && e.getMessage().contains("no such column")
+                            && (upper.startsWith("CREATE INDEX") || upper.startsWith("CREATE UNIQUE INDEX"))) {
                         // 极老版本的 api_definition 可能还没有 group_id 等列，先跳过索引，
                         // 等 migrate/ensureCompatibilityColumns 补列后由第二次 schema.sql 补建。
                         log.warn("schema.sql 暂跳过索引（列尚未补齐）：{}", trimmed);
@@ -158,7 +159,7 @@ public class DataSourceConfig {
      *   <li>整个迁移过程包在事务中，任一环节失败全部回滚</li>
      * </ol>
      *
-     * <p>迁移失败不会阻止应用启动，但会打 ERROR 日志。老库升级路径：
+     * <p>迁移失败必须阻止启动，避免在缺少认证状态/会话结构时继续服务。老库升级路径：
      * <ul>
      *   <li>v1.4.3 发版用户：schema_version 表初始为空（current=0）→ 执行 migrateV1 真实建列/迁移 → 记录 version=1</li>
      *   <li>已在 main 跑过 soap-mock-enhancement 的开发者本地库：列/表已存在，migrateV1 幂等跳过 → 记录 version=1</li>
@@ -169,8 +170,16 @@ public class DataSourceConfig {
         try (Connection conn = dataSource.getConnection()) {
             conn.setAutoCommit(false);
             try {
-                int current = getCurrentSchemaVersion(conn);
+                long current = getCurrentSchemaVersion(conn);
                 log.info("DB 当前 schema 版本：v{}", current);
+                if (current > CURRENT_SCHEMA_VERSION) {
+                    throw new IllegalStateException("数据库 schema v" + current + " 高于本程序支持的 v"
+                            + CURRENT_SCHEMA_VERSION + "；请使用匹配的新版本程序，禁止降级或修改版本记录");
+                }
+                validateLegacyRoles(conn);
+                executeSchemaSql(conn, true);
+                // 在 V1 查询/迁入响应前补齐已知旧库可缺少的兼容列；不覆盖任何正文。
+                ensureCompatibilityColumns(conn);
 
                 if (current < 1) {
                     migrateV1(conn);
@@ -207,18 +216,36 @@ public class DataSourceConfig {
                     recordSchemaVersion(conn, 7,
                             "MCP 工具：mcp_settings 增加 tool_update_api_draft 开关");
                 }
-                // 后续版本追加：
-                // if (current < 8) { migrateV8(conn); recordSchemaVersion(conn, 8, "..."); }
-
-                ensureCompatibilityColumns(conn);
+                if (current < 8) {
+                    migrateV8(conn);
+                    recordSchemaVersion(conn, 8, "账号状态、认证版本与网页认证会话");
+                }
+                if (current < 9) {
+                    migrateV9(conn);
+                    recordSchemaVersion(conn, 9, "团队角色、归档状态与管理员安全写锁");
+                }
+                migrateV3(conn); // 已知高版本缺列形态也必须补回统计索引。
+                ensureLifecycleSchema(conn);
+                if (current < 10) {
+                    migrateV10(conn);
+                    recordSchemaVersion(conn, 10, "接口聚合版本、并发校验与30天回收站");
+                }
+                migrateV11(conn);
+                if (current < 11) recordSchemaVersion(conn, 11, "MCP个人凭证显式团队能力范围与草稿来源");
+                if (current < 12) {
+                    migrateV12(conn);
+                    recordSchemaVersion(conn, 12, "文件标签并入团队共享标签；文件下载计入请求日志");
+                }
+                executeSchemaSql(conn, false);
                 conn.commit();
                 log.info("DB 迁移完成");
             } catch (Exception e) {
                 safeRollback(conn);
-                log.error("DB 迁移失败，已回滚。应用继续启动，但请尽快排查。", e);
+                String detail = e instanceof IllegalStateException ? "：" + e.getMessage() : "";
+                throw new IllegalStateException("DB 迁移失败，已回滚，拒绝启动" + detail, e);
             }
         } catch (SQLException e) {
-            log.error("获取数据库连接失败，跳过迁移", e);
+            throw new IllegalStateException("获取数据库连接失败，拒绝跳过迁移", e);
         }
     }
 
@@ -226,9 +253,8 @@ public class DataSourceConfig {
      * 查询当前已应用的最大 schema 版本号。
      * 表不存在或为空时返回 0，代表尚未进入版本化体系。
      */
-    private int getCurrentSchemaVersion(Connection conn) throws SQLException {
-        // 兜底检查表存在性：正常情况下 schema.sql 刚执行过 CREATE TABLE IF NOT EXISTS schema_version，
-        // 表一定存在。这里兜底为单元测试/异常场景保留。
+    private long getCurrentSchemaVersion(Connection conn) throws SQLException {
+        // 必须在执行当前 schema.sql 前读取，才能无写入地拒绝未知未来版本。
         try (PreparedStatement ps = conn.prepareStatement(
                 "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'schema_version'");
              ResultSet rs = ps.executeQuery()) {
@@ -240,7 +266,7 @@ public class DataSourceConfig {
                 "SELECT COALESCE(MAX(version), 0) FROM schema_version");
              ResultSet rs = ps.executeQuery()) {
             rs.next();
-            return rs.getInt(1);
+            return rs.getLong(1);
         }
     }
 
@@ -357,7 +383,12 @@ public class DataSourceConfig {
                     + "WHEN lower(base_url) LIKE '%moonshot%' THEN 'kimi' "
                     + "WHEN lower(base_url) LIKE '%minimax%' THEN 'minimax' "
                     + "WHEN lower(base_url) LIKE '%bigmodel%' THEN 'glm' "
-                    + "WHEN lower(base_url) LIKE '%dashscope%' THEN 'qwen' "
+                    + "WHEN lower(base_url) LIKE '%token-plan%qianwenaiapi%' THEN 'qwen-token-plan' "
+                    + "WHEN lower(base_url) LIKE '%qianwenaiapi%' OR lower(base_url) LIKE '%dashscope%' THEN 'qwen' "
+                    + "WHEN lower(base_url) LIKE '%volces.com%' THEN 'volcengine' "
+                    + "WHEN lower(base_url) LIKE '%qianfan.baidubce.com%' THEN 'qianfan' "
+                    + "WHEN lower(base_url) LIKE '%hunyuan.cloud.tencent.com%' OR lower(base_url) LIKE '%tokenhub%' THEN 'hunyuan' "
+                    + "WHEN lower(base_url) LIKE '%siliconflow%' THEN 'siliconflow' "
                     + "WHEN lower(base_url) LIKE '%api.openai.com%' THEN 'openai' "
                     + "WHEN lower(base_url) LIKE '%11434%' THEN 'ollama' "
                     + "ELSE 'custom' END "
@@ -374,13 +405,203 @@ public class DataSourceConfig {
         addColumnIfNotExists(conn, "mcp_settings", "tool_update_api_draft", "INTEGER NOT NULL DEFAULT 1");
     }
 
+    /** V8 在旧库先补列，新库同样幂等。任何 DDL 错误均由迁移事务回滚并拒绝启动。 */
+    private void migrateV8(Connection conn) throws SQLException {
+        addColumnIfNotExists(conn, "user", "status",
+                "TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'DISABLED'))");
+        addColumnIfNotExists(conn, "user", "auth_version",
+                "INTEGER NOT NULL DEFAULT 0 CHECK (auth_version >= 0)");
+        try (Statement st = conn.createStatement()) {
+            st.execute("CREATE TABLE IF NOT EXISTS auth_session ("
+                    + "id TEXT PRIMARY KEY, user_id TEXT NOT NULL, auth_version INTEGER NOT NULL, "
+                    + "created_at TEXT NOT NULL, expires_at INTEGER NOT NULL, revoked_at TEXT, "
+                    + "user_agent TEXT, ip_address TEXT, "
+                    + "FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE)");
+            st.execute("CREATE INDEX IF NOT EXISTS idx_auth_session_user ON auth_session(user_id)");
+            // 即使有人误写高版本号，也不能跳过安全结构检查。
+            st.executeQuery("SELECT status, auth_version FROM user LIMIT 0").close();
+            st.executeQuery("SELECT id, user_id, auth_version, created_at, expires_at, revoked_at, "
+                    + "user_agent, ip_address FROM auth_session LIMIT 0").close();
+        }
+    }
+
+    /** Only documented historical aliases are accepted. Never infer an editable role from unknown data. */
+    private void validateLegacyRoles(Connection conn) throws SQLException {
+        List<String> problems = new ArrayList<>();
+        validateRoleColumn(conn, "user", "global_role", "id", null,
+                new String[]{"SUPER_ADMIN", "USER", "MEMBER", "TEAM_ADMIN"}, problems);
+        validateRoleColumn(conn, "user_team", "role", "user_id", "team_id",
+                new String[]{"TEAM_ADMIN", "EDITOR", "VIEWER", "MEMBER"}, problems);
+        if (!problems.isEmpty()) {
+            throw new IllegalStateException("角色兼容检查失败；未修改数据库。请备份数据库，根据账号/团队的真实权限人工修复以下记录后重启；"
+                    + "不要将未知值默认设为 EDITOR/管理员。合法全局角色 SUPER_ADMIN/USER（旧 MEMBER/TEAM_ADMIN→USER），"
+                    + "团队角色 TEAM_ADMIN/EDITOR/VIEWER（旧 MEMBER→EDITOR）：" + String.join("; ", problems));
+        }
+    }
+
+    private void validateRoleColumn(Connection conn, String table, String column, String idColumn,
+                                    String secondIdColumn, String[] allowed, List<String> problems) throws SQLException {
+        if (!tableExists(conn, table)) return;
+        boolean hasRole = false;
+        try (Statement st = conn.createStatement(); ResultSet rs = st.executeQuery("PRAGMA table_info(" + table + ")")) {
+            while (rs.next()) if (column.equals(rs.getString("name"))) hasRole = true;
+        }
+        if (!hasRole) {
+            problems.add(table + "." + column + " 缺列（不能推断权限，请恢复历史角色列）");
+            return;
+        }
+        String ids = idColumn + (secondIdColumn == null ? "" : "," + secondIdColumn);
+        try (Statement st = conn.createStatement();
+             ResultSet rs = st.executeQuery("SELECT " + ids + "," + column + " FROM " + table)) {
+            while (rs.next()) {
+                String role = rs.getString(column);
+                boolean known = false;
+                for (String value : allowed) if (value.equals(role)) known = true;
+                if (!known) {
+                    problems.add(table + "[" + idColumn + "=" + reportValue(rs.getString(idColumn))
+                            + (secondIdColumn == null ? "" : "," + secondIdColumn + "=" + reportValue(rs.getString(secondIdColumn)))
+                            + "]." + column + "=" + reportValue(role));
+                }
+            }
+        }
+    }
+
+    /** Report only identifiers/roles, not complete rows (password hashes, API keys or token hashes). */
+    private String reportValue(String value) {
+        if (value == null) return "NULL";
+        return "'" + value.replace("\\", "\\\\").replace("'", "''")
+                .replace("\r", "\\r").replace("\n", "\\n").replace("\t", "\\t") + "'";
+    }
+
+    /** V9 不随机修复孤儿团队；保留全部成员关系，由超管明确指派管理员。 */
+    private void migrateV9(Connection conn) throws SQLException {
+        try (Statement st = conn.createStatement()) {
+            st.execute("CREATE TABLE IF NOT EXISTS security_guard (id INTEGER PRIMARY KEY CHECK(id = 1), revision INTEGER NOT NULL DEFAULT 0)");
+            st.execute("INSERT OR IGNORE INTO security_guard(id, revision) VALUES(1, 0)");
+        }
+        if (tableExists(conn, "team")) {
+            addColumnIfNotExists(conn, "team", "status", "TEXT NOT NULL DEFAULT 'ACTIVE' CHECK(status IN ('ACTIVE', 'ARCHIVED'))");
+            addColumnIfNotExists(conn, "team", "description", "TEXT");
+            addColumnIfNotExists(conn, "team", "created_by", "TEXT");
+        }
+        if (tableExists(conn, "user_team")) {
+            try (Statement st = conn.createStatement()) {
+                st.execute("UPDATE user_team SET role = 'EDITOR' WHERE role = 'MEMBER'");
+            }
+        }
+        // 已在事务入口验证真实历史枚举；只转换有依据的旧别名。
+        if (tableExists(conn, "user")) {
+            try (Statement st = conn.createStatement()) {
+                st.execute("UPDATE user SET global_role = 'USER' WHERE global_role IN ('MEMBER', 'TEAM_ADMIN')");
+            }
+        }
+    }
+
     /**
      * 老版本兼容兜底：不依赖 schema_version，逐列补齐当前代码会读取的字段。
      * <p>
      * 老用户可能来自任意历史版本，甚至没有完整的版本记录；这里只做幂等补列，
      * 不修改已有数据，保证升级后不用手工改库。
      */
+    /** Fail closed: no implicit full-team upgrade for old credentials or unbound pending actions. */
+    private void migrateV11(Connection conn) throws SQLException {
+        if (tableExists(conn, "mcp_token")) {
+            addColumnIfNotExists(conn, "mcp_token", "scope_version", "INTEGER NOT NULL DEFAULT 0");
+            addColumnIfNotExists(conn, "mcp_token", "team_ids", "TEXT");
+            addColumnIfNotExists(conn, "mcp_token", "scopes", "TEXT");
+            try (Statement st = conn.createStatement()) {
+                st.execute("UPDATE mcp_token SET revoked_at=COALESCE(revoked_at, datetime('now')) WHERE scope_version<>1 OR team_ids IS NULL OR scopes IS NULL");
+            }
+        }
+        if (tableExists(conn, "ai_pending_action")) {
+            addColumnIfNotExists(conn, "ai_pending_action", "source_type", "TEXT NOT NULL DEFAULT 'LEGACY'");
+            addColumnIfNotExists(conn, "ai_pending_action", "source_token_id", "TEXT");
+            addColumnIfNotExists(conn, "ai_pending_action", "source_scope_json", "TEXT");
+        }
+    }
+
+    /**
+     * v12：
+     * 1) 文件服务器标签由自由文本并入团队共享标签表 tag（与接口标签同一套）；
+     * 2) request_log 增加 target_type，区分 Mock 接口调用与文件下载。
+     * 迁移只搬运已存在的文本标签，不改写任何文件名、别名或下载计数。
+     */
+    private void migrateV12(Connection conn) throws SQLException {
+        if (tableExists(conn, "request_log")) {
+            addColumnIfNotExists(conn, "request_log", "target_type", "TEXT NOT NULL DEFAULT 'API'");
+        }
+        if (!tableExists(conn, "file_server_tag") || !hasColumn(conn, "file_server_tag", "tag")) {
+            return;
+        }
+        java.util.Map<String, String> teamByFile = new java.util.HashMap<>();
+        if (tableExists(conn, "file_server_file")) {
+            try (Statement st = conn.createStatement();
+                 ResultSet rs = st.executeQuery("SELECT file_id, team_id FROM file_server_file")) {
+                while (rs.next()) {
+                    teamByFile.put(rs.getString(1), rs.getString(2));
+                }
+            }
+        }
+        try (Statement st = conn.createStatement()) {
+            st.execute("CREATE TABLE IF NOT EXISTS file_server_tag_shared (file_id TEXT NOT NULL, tag_id TEXT NOT NULL, PRIMARY KEY (file_id, tag_id))");
+        }
+        int migrated = 0;
+        try (Statement st = conn.createStatement();
+             ResultSet rs = st.executeQuery("SELECT file_id, tag FROM file_server_tag")) {
+            while (rs.next()) {
+                String fileId = rs.getString(1);
+                String name = rs.getString(2);
+                String teamId = teamByFile.get(fileId);
+                if (teamId == null || name == null || name.trim().isEmpty()) {
+                    continue;
+                }
+                String tagId = findOrCreateSharedTag(conn, teamId, name.trim());
+                try (PreparedStatement ps = conn.prepareStatement(
+                        "INSERT OR IGNORE INTO file_server_tag_shared(file_id, tag_id) VALUES(?, ?)")) {
+                    ps.setString(1, fileId);
+                    ps.setString(2, tagId);
+                    ps.executeUpdate();
+                }
+                migrated++;
+            }
+        }
+        try (Statement st = conn.createStatement()) {
+            st.execute("DROP TABLE file_server_tag");
+            st.execute("ALTER TABLE file_server_tag_shared RENAME TO file_server_tag");
+            st.execute("CREATE INDEX IF NOT EXISTS idx_file_server_tag_tag_id ON file_server_tag(tag_id)");
+        }
+        log.info("数据库迁移：{} 条文件标签并入团队共享标签", migrated);
+    }
+
+    /** 在团队内按名称复用共享标签；不存在时按名称哈希取一个稳定颜色新建。 */
+    private String findOrCreateSharedTag(Connection conn, String teamId, String name) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(
+                "SELECT id FROM tag WHERE team_id = ? AND lower(name) = lower(?) LIMIT 1")) {
+            ps.setString(1, teamId);
+            ps.setString(2, name);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getString(1);
+                }
+            }
+        }
+        String id = java.util.UUID.randomUUID().toString();
+        String[] palette = {"#3B6D11", "#3568D4", "#B45309", "#933B36", "#6D28D9", "#0F766E"};
+        String color = palette[Math.abs(name.hashCode()) % palette.length];
+        try (PreparedStatement ps = conn.prepareStatement(
+                "INSERT INTO tag(id, team_id, name, color) VALUES(?, ?, ?, ?)")) {
+            ps.setString(1, id);
+            ps.setString(2, teamId);
+            ps.setString(3, name);
+            ps.setString(4, color);
+            ps.executeUpdate();
+        }
+        return id;
+    }
+
     private void ensureCompatibilityColumns(Connection conn) throws SQLException {
+        migrateV8(conn);
+        migrateV9(conn);
         ensureColumns(conn, "api_definition", new String[][]{
                 {"description", "TEXT"}, {"group_id", "TEXT"}, {"scenarios", "TEXT"},
                 {"response_mode", "TEXT NOT NULL DEFAULT 'CONDITION'"},
@@ -426,6 +647,75 @@ public class DataSourceConfig {
         });
     }
 
+    private void ensureLifecycleSchema(Connection conn) throws SQLException {
+        addColumnIfNotExists(conn, "api_definition", "revision", "INTEGER NOT NULL DEFAULT 1 CHECK(revision >= 1)");
+        addColumnIfNotExists(conn, "api_definition", "deleted_at", "TEXT");
+        addColumnIfNotExists(conn, "api_definition", "deleted_by", "TEXT");
+        addColumnIfNotExists(conn, "api_definition", "purge_after", "TEXT");
+        if (tableExists(conn, "ai_pending_action")) {
+            addColumnIfNotExists(conn,"ai_pending_action","base_revision","INTEGER");
+            addColumnIfNotExists(conn,"ai_pending_action","target_api_id","TEXT");
+        }
+        try (Statement st=conn.createStatement()) {
+            st.execute("CREATE TABLE IF NOT EXISTS api_revision (\n    id TEXT PRIMARY KEY, api_id TEXT NOT NULL, team_id TEXT NOT NULL, revision INTEGER NOT NULL,\n    action TEXT NOT NULL, actor_id TEXT, actor_name_snapshot TEXT NOT NULL, created_at TEXT NOT NULL,\n    source TEXT NOT NULL, snapshot_json TEXT NOT NULL, snapshot_schema_version INTEGER NOT NULL DEFAULT 1,\n    restored_from_revision_id TEXT, UNIQUE(api_id, revision)\n)");
+            st.execute("CREATE TABLE IF NOT EXISTS api_tombstone (api_id TEXT PRIMARY KEY, team_id TEXT NOT NULL, name TEXT, method TEXT, path TEXT, revision INTEGER NOT NULL, deleted_at TEXT, deleted_by TEXT, purged_at TEXT NOT NULL, purged_by TEXT)");
+            st.execute("CREATE INDEX IF NOT EXISTS idx_api_revision_api ON api_revision(api_id, revision DESC)");
+            st.execute("CREATE TABLE IF NOT EXISTS api_lifecycle_lock (id INTEGER PRIMARY KEY CHECK(id=1), marker INTEGER NOT NULL DEFAULT 0, history_delete_allowed INTEGER NOT NULL DEFAULT 0)");
+            st.execute("INSERT OR IGNORE INTO api_lifecycle_lock(id,marker) VALUES(1,0)");
+            st.execute("CREATE TABLE IF NOT EXISTS mock_blob (file_path TEXT PRIMARY KEY, team_id TEXT NOT NULL, lease_expires_at INTEGER NOT NULL DEFAULT 0)");
+            st.execute("CREATE TABLE IF NOT EXISTS mock_blob_ref (file_path TEXT NOT NULL, owner_type TEXT NOT NULL, owner_id TEXT NOT NULL,\n    expires_at INTEGER, PRIMARY KEY(file_path,owner_type,owner_id))");
+            st.execute("CREATE INDEX IF NOT EXISTS idx_mock_blob_ref_owner ON mock_blob_ref(owner_type,owner_id)");
+            addColumnIfNotExists(conn,"api_lifecycle_lock","history_delete_allowed","INTEGER NOT NULL DEFAULT 0");
+            st.execute("DROP TRIGGER IF EXISTS api_revision_protected_delete");
+            st.execute("CREATE TRIGGER IF NOT EXISTS api_revision_protected_delete BEFORE DELETE ON api_revision "
+                    + "WHEN COALESCE((SELECT history_delete_allowed FROM api_lifecycle_lock WHERE id=1),0)=0 "
+                    + "BEGIN SELECT RAISE(ABORT,'Revision deletion requires audited retention or purge'); END");
+            st.execute("CREATE TRIGGER IF NOT EXISTS api_revision_immutable BEFORE UPDATE ON api_revision "
+                    + "BEGIN SELECT RAISE(ABORT,'Published API revisions are immutable'); END");
+            st.execute("SELECT id,api_id,team_id,revision,action,actor_id,actor_name_snapshot,created_at,source,snapshot_json,"
+                    + "snapshot_schema_version,restored_from_revision_id FROM api_revision LIMIT 0");
+            st.execute("DROP INDEX IF EXISTS idx_api_definition_team_path_method");
+            st.execute("CREATE UNIQUE INDEX idx_api_definition_team_path_method ON api_definition(team_id,path,method) WHERE deleted_at IS NULL");
+        }
+    }
+
+    private void migrateV10(Connection conn) throws SQLException {
+        backfillLegacyDraftTargets(conn);
+        java.util.List<java.util.Map<String,Object>> apis = com.mockhub.mock.lifecycle.ApiSnapshot.query(conn,
+                "SELECT id,team_id,revision FROM api_definition");
+        for (java.util.Map<String,Object> api : apis) {
+            String id = api.get("id").toString();
+            String snapshot = com.mockhub.mock.lifecycle.ApiSnapshot.capture(conn,id);
+            String revisionId=UUID.randomUUID().toString();
+            try (PreparedStatement ps=conn.prepareStatement("INSERT OR IGNORE INTO api_revision "
+                    + "(id,api_id,team_id,revision,action,actor_name_snapshot,created_at,source,snapshot_json) "
+                    + "VALUES(?,?,?,?, 'MIGRATION_BASELINE','系统迁移',?,'MIGRATION',?)")) {
+                ps.setString(1,revisionId); ps.setString(2,id);
+                ps.setObject(3,api.get("team_id")); ps.setObject(4,api.get("revision"));
+                ps.setString(5,java.time.Instant.now().toString()); ps.setString(6,snapshot); ps.executeUpdate();
+                com.mockhub.mock.lifecycle.ApiSnapshot.protectBlobs(conn,api.get("team_id").toString(),id,revisionId,snapshot);
+            }
+        }
+    }
+
+    private void backfillLegacyDraftTargets(Connection conn) throws SQLException {
+        if(!tableExists(conn,"ai_pending_action")) return;
+        for(Map<String,Object> row:com.mockhub.mock.lifecycle.ApiSnapshot.query(conn,
+                "SELECT id,payload FROM ai_pending_action WHERE action_type IN ('UPDATE_API','UPDATE_API_FULL') AND target_api_id IS NULL")) {
+            try {
+                String target=new ObjectMapper().readTree(row.get("payload").toString()).path("apiId").asText(null);
+                if(target!=null) try(PreparedStatement ps=conn.prepareStatement("UPDATE ai_pending_action SET target_api_id=? WHERE id=?")) {
+                    ps.setString(1,target);ps.setObject(2,row.get("id"));ps.executeUpdate();
+                }
+            } catch(com.fasterxml.jackson.core.JsonProcessingException invalid) {
+                log.warn("旧AI草稿 {} 内容损坏，取消并清除不可解析正文",row.get("id"));
+                try(PreparedStatement ps=conn.prepareStatement("UPDATE ai_pending_action SET status='CANCELLED',payload='{}' WHERE id=?")) {
+                    ps.setObject(1,row.get("id"));ps.executeUpdate();
+                }
+            }
+        }
+    }
+
     private void ensureColumns(Connection conn, String table, String[][] columns) throws SQLException {
         if (!tableExists(conn, table)) {
             log.info("兼容检查：{} 表不存在，跳过补列", table);
@@ -434,6 +724,18 @@ public class DataSourceConfig {
         for (String[] column : columns) {
             addColumnIfNotExists(conn, table, column[0], column[1]);
         }
+    }
+
+    private boolean hasColumn(Connection conn, String table, String column) throws SQLException {
+        try (Statement st = conn.createStatement();
+             ResultSet rs = st.executeQuery("PRAGMA table_info(" + table + ")")) {
+            while (rs.next()) {
+                if (column.equalsIgnoreCase(rs.getString("name"))) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private boolean tableExists(Connection conn, String table) throws SQLException {

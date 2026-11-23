@@ -76,7 +76,7 @@ public class AiService {
         }
 
         boolean xml = isXml(req);
-        String raw = provider.complete(settings, responseSystemPrompt(xml), responseUserPrompt(req, xml));
+        String raw = provider.complete(settings, com.mockhub.log.service.LogPrivacySanitizer.redactPrompt(responseSystemPrompt(xml)), com.mockhub.log.service.LogPrivacySanitizer.redactPrompt(responseUserPrompt(req, xml)));
         String content = extractContent(raw, xml);
         validateContent(content, xml);
         if (!xml) {
@@ -102,7 +102,7 @@ public class AiService {
             return mockGenerator.conditions(req);
         }
 
-        String raw = provider.complete(settings, conditionsSystemPrompt(), conditionsUserPrompt(req));
+        String raw = provider.complete(settings, com.mockhub.log.service.LogPrivacySanitizer.redactPrompt(conditionsSystemPrompt()), com.mockhub.log.service.LogPrivacySanitizer.redactPrompt(conditionsUserPrompt(req)));
         String json = extractJson(raw);
         JsonNode root;
         try {

@@ -37,4 +37,16 @@ public interface TeamService {
      * @return 团队对象
      */
     Team getById(String teamId);
+
+    List<Team> listAll();
+    Team create(com.mockhub.system.model.dto.CreateTeamRequest request);
+    Team update(String id, com.mockhub.system.model.dto.UpdateTeamRequest request);
+    void delete(String id);
+    Team updateStatus(String id, com.mockhub.system.model.dto.UpdateTeamStatusRequest request);
+    List<com.mockhub.system.model.dto.TeamMemberVO> listMembers(String teamId);
+    List<com.mockhub.system.model.dto.MemberCandidateVO> memberCandidates(String teamId, String username);
+    void addMember(String teamId, com.mockhub.system.model.dto.AddMemberRequest request);
+    void removeMember(String teamId, String userId);
+    void updateMemberRole(String teamId, String userId, com.mockhub.system.model.dto.UpdateMemberRoleRequest request);
+    void leave(String teamId);
 }

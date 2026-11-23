@@ -4,6 +4,9 @@ package com.mockhub.mock.model.dto;
  * 接口导入结果
  */
 public class ImportResult {
+    private java.util.List<String> warnings=new java.util.ArrayList<String>();
+    public java.util.List<String> getWarnings() { return warnings; }
+    public void setWarnings(java.util.List<String> value) { warnings=value; }
 
     /** 新导入的接口数量 */
     private int imported;

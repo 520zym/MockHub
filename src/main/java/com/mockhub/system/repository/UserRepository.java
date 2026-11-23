@@ -38,6 +38,8 @@ public class UserRepository {
             user.setDisplayName(rs.getString("display_name"));
             user.setGlobalRole(rs.getString("global_role"));
             user.setFirstLogin(rs.getInt("first_login") == 1);
+            user.setStatus(rs.getString("status"));
+            user.setAuthVersion(rs.getLong("auth_version"));
             user.setCreatedAt(rs.getString("created_at"));
             user.setUpdatedAt(rs.getString("updated_at"));
             return user;
@@ -109,13 +111,15 @@ public class UserRepository {
     public void insert(User user) {
         log.debug("插入用户：username={}", user.getUsername());
         jdbcTemplate.update(
-                "INSERT INTO user (id, username, password_hash, display_name, global_role, first_login, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO user (id, username, password_hash, display_name, global_role, first_login, status, auth_version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 user.getId(),
                 user.getUsername(),
                 user.getPasswordHash(),
                 user.getDisplayName(),
                 user.getGlobalRole(),
                 user.isFirstLogin() ? 1 : 0,
+                user.getStatus(),
+                user.getAuthVersion(),
                 user.getCreatedAt(),
                 user.getUpdatedAt()
         );
@@ -152,6 +156,25 @@ public class UserRepository {
                 updatedAt,
                 userId
         );
+    }
+
+    /** 原语：调用方须将状态改变与 CredentialRevocationService.revokeSecurityCredentials 放在同一事务。 */
+    public int updateStatus(String userId, String status, String updatedAt) {
+        if (!("ACTIVE".equals(status) || "DISABLED".equals(status))) {
+            throw new IllegalArgumentException("Invalid user status");
+        }
+        return jdbcTemplate.update("UPDATE user SET status = ?, updated_at = ? WHERE id = ?",
+                status, updatedAt, userId);
+    }
+
+    public int incrementAuthVersion(String userId, String updatedAt) {
+        return jdbcTemplate.update("UPDATE user SET auth_version = auth_version + 1, updated_at = ? WHERE id = ?",
+                updatedAt, userId);
+    }
+
+    public int updateDisplayName(String userId, String displayName, String updatedAt) {
+        return jdbcTemplate.update("UPDATE user SET display_name = ?, updated_at = ? WHERE id = ?",
+                displayName, updatedAt, userId);
     }
 
     /**

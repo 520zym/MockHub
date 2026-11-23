@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440, initial-scale=1">
+<title>Liquid Glass · MockHub 设计稿</title>
+<link rel="stylesheet" href="assets/glass.css">
+<style>
+html,body{height:auto;overflow:auto;min-height:100vh}
+.doc{padding:14px;min-height:100vh}
+.docbar{height:52px;border-radius:18px;display:flex;align-items:center;gap:8px;padding:0 14px;font-size:10px;color:var(--muted);position:sticky;top:14px;z-index:20}
+.docbar b{font-size:12px;color:var(--ink);font-weight:600}
+.docbar .sep{color:rgba(19,34,29,.2)}
+.docbar__right{margin-left:auto;display:flex;gap:16px;font:9px var(--mono);color:var(--faint)}
+.docwrap{max-width:1240px;margin:0 auto;padding:0 18px 26px}
+.hero{display:grid;grid-template-columns:minmax(0,1fr) 470px;gap:56px;align-items:center;padding:46px 10px 44px}
+.doc__eyebrow{font:9px var(--mono);letter-spacing:.14em;color:var(--muted);margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.doc__eyebrow::before{content:"";width:20px;height:1px;background:var(--coral)}
+.hero h1{font-size:62px;line-height:1.04;letter-spacing:-.055em;font-weight:600;margin:0 0 18px}
+.hero h1 em{font-style:normal;color:rgba(19,34,29,.40)}
+.doc__lede{font-size:12.5px;line-height:1.8;color:var(--muted);max-width:470px;margin:0 0 22px}
+.doc__chips{display:flex;gap:6px;flex-wrap:wrap}
+.stage{position:relative;height:380px}
+.halo{position:absolute;width:330px;height:330px;right:20px;top:28px;border-radius:50%;background:radial-gradient(circle,rgba(192,215,207,.55),rgba(192,215,207,0) 68%);filter:blur(16px)}
+.pane{position:absolute;border-radius:26px;box-shadow:0 30px 70px -34px rgba(20,54,43,.45),var(--rim);-webkit-backdrop-filter:blur(28px) saturate(170%);backdrop-filter:blur(28px) saturate(170%)}
+.pane--back{left:0;top:8px;width:290px;height:196px;background:linear-gradient(150deg,rgba(255,255,255,.40),rgba(255,255,255,.18));transform:rotate(-7deg)}
+.pane--mid{right:0;top:66px;width:300px;height:210px;background:linear-gradient(150deg,rgba(255,255,255,.58),rgba(255,255,255,.30));transform:rotate(5deg)}
+.pane--back span,.pane--mid span{position:absolute;left:20px;top:18px;font:8px var(--mono);letter-spacing:.12em;color:var(--faint)}
+.pane--back b,.pane--mid b{display:none}
+.pane--front{left:56px;top:100px;width:338px;height:236px;background:linear-gradient(150deg,rgba(255,255,255,.70),rgba(255,255,255,.40));padding:14px 15px;transform:rotate(-1.5deg);z-index:3}
+.minihead{display:flex;align-items:center;gap:6px;font-size:9px;color:var(--muted);padding-bottom:8px}
+.minihead__dot{width:5px;height:5px;border-radius:50%;background:var(--mint)}
+.minihead__count{margin-left:auto;font:8.5px var(--mono);color:var(--faint)}
+.minitable{display:flex;flex-direction:column;gap:5px}
+.minitable__row{height:36px;border-radius:12px;display:flex;align-items:center;gap:8px;padding:0 8px;background:rgba(255,255,255,.30)}
+.minipath{font:9.5px var(--mono);color:var(--ink-soft);flex:1;overflow:hidden;white-space:nowrap}
+.minifoot{display:flex;align-items:center;gap:10px;margin-top:9px;font:8px var(--mono);color:var(--faint)}
+.floatpill{position:absolute;right:6px;top:2px;height:32px;display:flex;align-items:center;gap:6px;padding:0 12px;border-radius:999px;background:rgba(255,255,255,.50);box-shadow:0 12px 26px -18px rgba(20,54,43,.5),inset 0 1px 0 rgba(255,255,255,.9);font:9px var(--mono);color:var(--muted);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px)}
+.floatpill__d{width:5px;height:5px;border-radius:50%;background:var(--mint)}
+
+.docsec{padding:36px 0}
+.sechead{display:flex;align-items:baseline;gap:9px;margin-bottom:16px}
+.secnum{font:9px var(--mono);color:var(--coral);letter-spacing:.08em}
+.sechead h2{font-size:15px;font-weight:600;letter-spacing:-.01em;margin:0}
+.secnote{margin-left:auto;font-size:9.5px;color:var(--faint)}
+.rulesgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.rulecard{border-radius:24px;padding:16px 16px 14px;min-height:196px;display:flex;flex-direction:column}
+.rulecard__n{font:9px var(--mono);color:var(--coral);margin-bottom:7px}
+.rulecard h3{font-size:12px;margin:0 0 6px;font-weight:600}
+.rulecard p{font-size:10px;line-height:1.7;color:var(--muted);margin:0}
+.rulecard:nth-child(1){background:radial-gradient(120% 80% at 10% 0%,rgba(255,255,255,.80),rgba(255,255,255,0) 46%),linear-gradient(150deg,rgba(255,255,255,.56),rgba(225,235,230,.16))}
+.rulecard:nth-child(2){background:radial-gradient(120% 80% at 10% 0%,rgba(255,255,255,.80),rgba(255,255,255,0) 46%),linear-gradient(150deg,rgba(255,255,255,.56),rgba(224,231,238,.14))}
+.rulecard:nth-child(3){background:radial-gradient(120% 80% at 10% 0%,rgba(255,255,255,.80),rgba(255,255,255,0) 46%),linear-gradient(150deg,rgba(255,255,255,.56),rgba(233,232,226,.14))}
+.rulecard__art{margin-top:auto;height:40px;display:flex;align-items:center;gap:6px;position:relative}
+.blob{width:22px;height:22px;border-radius:50%;filter:blur(1px)}
+.blob--mint{background:rgba(203,214,227,.9)}
+.blob--sky{background:rgba(224,229,235,.9)}
+.blob--peach{background:rgba(185,199,216,.9)}
+.rulecard__art--stack .thick{width:62px;height:26px;border-radius:9px;background:rgba(255,255,255,.7);box-shadow:inset 0 1px 0 #fff,0 8px 16px -12px rgba(20,54,43,.4)}
+.rulecard__art--stack .thin{width:44px;height:26px;border-radius:9px;background:rgba(255,255,255,.32);margin-left:-12px;box-shadow:inset 0 1px 0 rgba(255,255,255,.8)}
+.rulecard__art--edge .edgebox{width:100%;height:30px;border-radius:10px;background:rgba(255,255,255,.4);box-shadow:inset 0 1px 0 rgba(255,255,255,.95),0 12px 22px -18px rgba(20,54,43,.6)}
+.materials{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.material{border-radius:24px;padding:14px 15px;min-height:184px}
+.material__top{display:flex;align-items:center;justify-content:space-between;font:8px var(--mono);letter-spacing:.08em;color:var(--faint);margin-bottom:12px}
+.material__sample{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.sampleline{height:8px;border-radius:999px;background:rgba(255,255,255,.56);display:block;box-shadow:inset 0 1px 0 rgba(255,255,255,.8)}
+.material h3{font-size:11.5px;margin:0 0 3px;font-weight:600}
+.material p{font-size:9.5px;color:var(--muted);margin:0;line-height:1.6}
+
+.specimen-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.specimen{border-radius:24px;padding:16px 16px 14px}
+.speclabel{font:8px var(--mono);letter-spacing:.12em;color:var(--faint);margin-bottom:12px}
+.palette{display:grid;grid-template-columns:repeat(4,1fr);gap:9px 10px}
+.swatch{display:flex;flex-direction:column;gap:5px}
+.swatch span{display:block;height:34px;border-radius:10px;box-shadow:inset 0 1px 0 rgba(255,255,255,.55)}
+.swatch b{font:8px var(--mono);color:var(--ink-soft);font-weight:500}
+.swatch em{font-style:normal;font-size:8px;color:var(--faint)}
+.typerow{display:flex;align-items:baseline;gap:10px;padding:9px 0}
+.typelabel{width:32px;font:8px var(--mono);color:var(--faint)}
+.typebig{font-size:20px;letter-spacing:-.03em;font-weight:600}
+.typebody{font-size:11.5px}
+.typesmall{font-size:9.5px;color:var(--muted)}
+.typemono{font:9.5px var(--mono);color:var(--ink-soft)}
+.typepx{margin-left:auto;font:8px var(--mono);color:var(--faint)}
+.radiusrow{display:flex;align-items:center;gap:6px;margin-top:12px}
+.radius{width:32px;height:32px;display:grid;place-items:center;font:8px var(--mono);color:var(--muted);background:rgba(255,255,255,.34);box-shadow:inset 0 1px 0 rgba(255,255,255,.85)}
+.radius--xl{border-radius:16px}.radius--lg{border-radius:12px}.radius--md{border-radius:9px}.radius--sm{border-radius:7px}
+.radiusnote{font-size:8px;color:var(--faint);margin-left:4px}
+
+.comps{border-radius:24px;padding:14px 16px;display:grid;grid-template-columns:1.2fr 1fr .9fr 1fr;gap:18px;align-items:center}
+.comlabel{font:8px var(--mono);letter-spacing:.1em;color:var(--faint);margin-bottom:8px}
+.comrow{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.comps .btn{height:32px;font-size:10px;padding:0 12px}
+.comps .method{height:21px;padding:0 8px}
+.comps .field{height:32px;font-size:10px;border-radius:11px}
+.comps .cb{width:15px;height:15px}
+
+.pagegrid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+.pagecard{border-radius:20px;padding:14px;display:flex;flex-direction:column;min-height:170px}
+.pagenum{font:8.5px var(--mono);color:var(--coral);margin-bottom:8px}
+.pagecard h3{font-size:11.5px;margin:0 0 4px;font-weight:600}
+.pagecard p{font-size:9.2px;line-height:1.65;color:var(--muted);margin:0 0 10px}
+.pagelink{font:8px var(--mono);color:var(--coral-deep);margin-top:auto}
+.dontgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.docard{border-radius:22px;padding:15px 17px}
+.docard__label{font:8.5px var(--mono);letter-spacing:.1em;margin-bottom:8px}
+.docard__label--ok{color:var(--green)}
+.docard__label--no{color:var(--coral-deep)}
+.docard ul{margin:0;padding:0;list-style:none;display:grid;grid-template-columns:1fr 1fr;gap:6px 18px}
+.docard li{font-size:9.5px;line-height:1.6;color:var(--ink-soft);padding-left:11px;position:relative}
+.docard li::before{content:"";position:absolute;left:0;top:6px;width:4px;height:4px;border-radius:50%;background:var(--faint)}
+.docfoot{display:flex;align-items:center;gap:8px;padding:22px 2px 10px;font:8.5px var(--mono);color:var(--faint)}
+.docfoot .right{margin-left:auto}
+</style>
+</head>
+<body>
+<div class="doc">
+  <header class="docbar glass">
+    <span class="brand__mark" style="width:26px;height:26px;font-size:10px;border-radius:8px">M</span>
+    <b>MockHub</b><span class="sep">/</span><span>Visual system</span><span class="sep">/</span><span>Liquid Glass</span>
+    <div class="docbar__right"><span>2026.10.22</span><span>Direction 02</span><span>5 pages</span></div>
+  </header>
+
+  <main class="docwrap">
+    <section class="hero">
+      <div class="hero__copy">
+        <div class="doc__eyebrow">MOCKHUB · VISUAL DIRECTION 02</div>
+        <h1>让玻璃<br><em>只做分层。</em></h1>
+        <p class="doc__lede">雾面灰的背景负责明暗，半透明的面板负责秩序。没有彩色光斑，没有描边，也没有第二种强调色。玻璃是容器，内容仍然是内容。</p>
+        <div class="doc__chips"><span class="chipglass"><span class="d"></span>Liquid Glass</span><span class="chipglass">1440 × 900</span><span class="chipglass">5 pages</span><span class="chipglass">2× assets</span></div>
+      </div>
+
+      <div class="stage">
+        <div class="halo"></div>
+        <div class="pane pane--back"><span>BACKGROUND</span><b>颜色在后</b></div>
+        <div class="pane pane--mid"><span>GLASS</span><b>模糊 30px</b></div>
+        <div class="pane pane--front">
+          <div class="minihead"><span class="minihead__dot"></span><span>接口</span><span class="minihead__count">143</span><span class="kbd">⌘K</span></div>
+          <div class="minitable">
+            <div class="minitable__row"><span class="method m-GET" style="height:20px;padding:0 7px">GET</span><span class="minipath">/api/pay/order</span><span class="sw sw--on" style="transform:scale(.85);transform-origin:right"></span></div>
+            <div class="minitable__row"><span class="method m-POST" style="height:20px;padding:0 7px">POST</span><span class="minipath">/api/pay/refund</span><span class="sw sw--on" style="transform:scale(.85);transform-origin:right"></span></div>
+            <div class="minitable__row"><span class="method m-GET" style="height:20px;padding:0 7px">GET</span><span class="minipath">/api/user/{id}</span><span class="sw sw--on" style="transform:scale(.85);transform-origin:right"></span></div>
+          </div>
+          <div class="minifoot"><span>全部 143</span><span>今日 12,840</span></div>
+        </div>
+        <div class="floatpill"><span class="floatpill__d"></span>服务正常</div>
+      </div>
+    </section>
+
+    <section class="docsec">
+      <div class="sechead"><span class="secnum">01</span><h2>三条规则</h2><span class="secnote">先把边界说清楚</span></div>
+      <div class="rulesgrid">
+        <article class="rulecard glass">
+          <div class="rulecard__n">01</div>
+          <h3>背景有层次，玻璃只分层</h3>
+          <p>页面底色只有明暗和极轻的冷调。玻璃内部不再叠渐变，否则看起来像一张半透明的贴纸。</p>
+          <div class="rulecard__art"><span class="blob blob--mint"></span><span class="blob blob--sky"></span><span class="blob blob--peach"></span></div>
+        </article>
+        <article class="rulecard glass">
+          <div class="rulecard__n">02</div>
+          <h3>厚玻璃装数据，薄玻璃装操作</h3>
+          <p>表格和表单落在 56–68% 白的面板上；工具栏、按钮和浮层用 30–40%。文字永远在最不透明的一层。</p>
+          <div class="rulecard__art rulecard__art--stack"><span class="thick"></span><span class="thin"></span></div>
+        </article>
+        <article class="rulecard glass">
+          <div class="rulecard__n">03</div>
+          <h3>无描边，用高光切边</h3>
+          <p>1px 内高光加一层有色投影，取代灰色 border。远看没有线，近看有厚度。</p>
+          <div class="rulecard__art rulecard__art--edge"><span class="edgebox"></span></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="docsec">
+      <div class="sechead"><span class="secnum">02</span><h2>三种厚度</h2><span class="secnote">透明度是层级，不是装饰</span></div>
+      <div class="materials">
+        <article class="material glass" style="background:linear-gradient(150deg,rgba(255,255,255,.72),rgba(255,255,255,.50))">
+          <div class="material__top"><span>THICK · 68%</span><span class="mono">blur 34</span></div>
+          <div class="material__sample"><span class="sampleline" style="width:72%"></span><span class="sampleline" style="width:46%"></span><span class="sampleline" style="width:58%"></span></div>
+          <h3>数据面板</h3><p>表格、表单、编辑器。对比度优先。</p>
+        </article>
+        <article class="material glass" style="background:linear-gradient(150deg,rgba(255,255,255,.56),rgba(255,255,255,.32))">
+          <div class="material__top"><span>STANDARD · 52%</span><span class="mono">blur 30</span></div>
+          <div class="material__sample"><span class="sampleline" style="width:64%"></span><span class="sampleline" style="width:80%"></span><span class="sampleline" style="width:40%"></span></div>
+          <h3>页面与侧栏</h3><p>承载结构，允许背景颜色透出来。</p>
+        </article>
+        <article class="material glass" style="background:linear-gradient(150deg,rgba(255,255,255,.42),rgba(255,255,255,.18))">
+          <div class="material__top"><span>THIN · 36%</span><span class="mono">blur 24</span></div>
+          <div class="material__sample"><span class="sampleline" style="width:44%"></span><span class="sampleline" style="width:66%"></span><span class="sampleline" style="width:52%"></span></div>
+          <h3>工具栏与浮层</h3><p>按钮、分段控件、提示。可以更透。</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="docsec">
+      <div class="sechead"><span class="secnum">03</span><h2>颜色与字</h2><span class="secnote">中性灰，不是糖果</span></div>
+      <div class="specimen-grid">
+        <div class="specimen glass">
+          <div class="speclabel">PALETTE</div>
+          <div class="palette">
+            <div class="swatch"><span style="background:#17191d"></span><b>#17191D</b><em>墨 · 文字</em></div>
+            <div class="swatch"><span style="background:#eceff3"></span><b>#ECEFF3</b><em>雾 · 底色</em></div>
+            <div class="swatch"><span style="background:#ffffff"></span><b>#FFFFFF</b><em>面 · 玻璃</em></div>
+            <div class="swatch"><span style="background:#3568d4"></span><b>#3568D4</b><em>信号 · 选中</em></div>
+            <div class="swatch"><span style="background:#2e8b6a"></span><b>#2E8B6A</b><em>绿 · 成功</em></div>
+            <div class="swatch"><span style="background:#6e62b5"></span><b>#6E62B5</b><em>紫 · PATCH</em></div>
+            <div class="swatch"><span style="background:#a5782d"></span><b>#A5782D</b><em>琥珀 · 警告</em></div>
+            <div class="swatch"><span style="background:#b84a44"></span><b>#B84A44</b><em>红 · 错误</em></div>
+          </div>
+        </div>
+        <div class="specimen glass">
+          <div class="speclabel">TYPE & SHAPE</div>
+          <div class="typerow"><span class="typelabel">标题</span><span class="typebig">接口管理</span><span class="typepx">26 / 600</span></div>
+          <div class="typerow"><span class="typelabel">正文</span><span class="typebody">支付成功回跳后查询订单状态。</span><span class="typepx">12 / 400</span></div>
+          <div class="typerow"><span class="typelabel">辅助</span><span class="typesmall">按修改时间排序 · 负责人 张一鸣</span><span class="typepx">10 / 400</span></div>
+          <div class="typerow"><span class="typelabel">数据</span><span class="typemono">GET /api/pay/order · 8 ms · 4,218</span><span class="typepx">10 / mono</span></div>
+          <div class="radiusrow">
+            <span class="radius radius--xl">30</span><span class="radius radius--lg">24</span><span class="radius radius--md">18</span><span class="radius radius--sm">14</span>
+            <span class="radiusnote">圆角只有四档，卡片 24，控件 14，标签 999</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="docsec">
+      <div class="sechead"><span class="secnum">04</span><h2>组件</h2><span class="secnote">同一束光落在所有东西上</span></div>
+      <div class="comps glass">
+        <div class="compgroup"><div class="comlabel">ACTION</div><div class="comrow"><button class="btn">导入</button><button class="btn btn--primary">新建接口</button><button class="btn btn--ghost">取消</button></div></div>
+        <div class="compgroup"><div class="comlabel">METHOD</div><div class="comrow"><span class="method m-GET">GET</span><span class="method m-POST">POST</span><span class="method m-PUT">PUT</span><span class="method m-DELETE">DELETE</span></div></div>
+        <div class="compgroup"><div class="comlabel">STATE</div><div class="comrow"><span class="sw sw--on"></span><span class="sw"></span><span class="cb cb--on"><svg class="i" viewBox="0 0 24 24"><path d="m20 6-11 11-5-5"/></svg></span><span class="tag">交易</span><span class="tag tag--add">+ 添加</span></div></div>
+        <div class="compgroup"><div class="comlabel">INPUT</div><div class="comrow"><div class="field" style="width:150px">订单详情</div><span class="kbd">⌘K</span></div></div>
+      </div>
+    </section>
+
+    <section class="docsec">
+      <div class="sechead"><span class="secnum">05</span><h2>页面</h2><span class="secnote">同一个系统，不同的信息密度</span></div>
+      <div class="pagegrid">
+        <a class="pagecard glass" href="01-api-list.html"><span class="pagenum">01</span><h3>接口列表</h3><p>12 行贴边表格，路径等宽，选中只留一层信号蓝。</p><span class="pagelink">打开 →</span></a>
+        <a class="pagecard glass" href="02-api-edit.html"><span class="pagenum">02</span><h3>接口编辑</h3><p>左侧表单、右侧编辑器与规则；未保存状态贯穿页头。</p><span class="pagelink">打开 →</span></a>
+        <a class="pagecard glass" href="03-logs.html"><span class="pagenum">03</span><h3>请求日志</h3><p>列表与检查器并排，命中链路拆成四步。</p><span class="pagelink">打开 →</span></a>
+        <a class="pagecard glass" href="04-assistant.html"><span class="pagenum">04</span><h3>对话助手</h3><p>停靠右侧，产出是带 diff 的待确认草稿。</p><span class="pagelink">打开 →</span></a>
+        <a class="pagecard glass" href="05-login.html"><span class="pagenum">05</span><h3>登录</h3><p>一块浮在背景上的玻璃，一句真话。</p><span class="pagelink">打开 →</span></a>
+      </div>
+    </section>
+
+    <section class="docsec docsec--last">
+      <div class="sechead"><span class="secnum">06</span><h2>边界</h2><span class="secnote">玻璃不是万能</span></div>
+      <div class="dontgrid">
+        <div class="docard glass"><div class="docard__label docard__label--ok">DO</div><ul><li>背景有明暗，玻璃才有东西可透。</li><li>数据面板至少 56% 白，正文对比度优先。</li><li>圆角 30 / 24 / 18 / 14，只此四档。</li><li>信号蓝只给选中、未保存、待确认。</li></ul></div>
+        <div class="docard glass"><div class="docard__label docard__label--no">DON'T</div><ul><li>纯白背景 + 半透明白卡，看起来只是脏。</li><li>在玻璃上再叠紫色渐变。</li><li>给每个元素都加 1px 灰色描边。</li><li>所有东西都发光，等于没有重点。</li></ul></div>
+      </div>
+    </section>
+
+    <footer class="docfoot"><span>MOCKHUB / LIQUID GLASS</span><span>·</span><span>5 PAGES · 1 SYSTEM</span><span class="right">静态设计稿 · 数据为演示</span></footer>
+  </main>
+</div>
+</body>
+</html>

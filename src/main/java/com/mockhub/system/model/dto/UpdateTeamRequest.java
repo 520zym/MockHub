@@ -5,6 +5,10 @@ package com.mockhub.system.model.dto;
  */
 public class UpdateTeamRequest {
 
+    private String description;
+    public String getDescription() { return description; }
+    public void setDescription(String description) { this.description=description; }
+
     /** 团队名称 */
     private String name;
 

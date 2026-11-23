@@ -17,15 +17,22 @@ public class AiProviderPreset {
     private final String defaultModel;
     private final List<String> models;
     private final boolean local;
+    private final String consoleUrl;
 
     public AiProviderPreset(String key, String name, String baseUrl, String defaultModel,
                             List<String> models, boolean local) {
+        this(key, name, baseUrl, defaultModel, models, local, "");
+    }
+
+    public AiProviderPreset(String key, String name, String baseUrl, String defaultModel,
+                            List<String> models, boolean local, String consoleUrl) {
         this.key = key;
         this.name = name;
         this.baseUrl = baseUrl;
         this.defaultModel = defaultModel;
         this.models = Collections.unmodifiableList(new ArrayList<String>(models));
         this.local = local;
+        this.consoleUrl = consoleUrl == null ? "" : consoleUrl;
     }
 
     public String getKey() {
@@ -50,5 +57,9 @@ public class AiProviderPreset {
 
     public boolean isLocal() {
         return local;
+    }
+
+    public String getConsoleUrl() {
+        return consoleUrl;
     }
 }

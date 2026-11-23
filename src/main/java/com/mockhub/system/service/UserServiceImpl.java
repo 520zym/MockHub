@@ -1,7 +1,7 @@
 package com.mockhub.system.service;
 
 import com.mockhub.common.model.BizException;
-import com.mockhub.common.model.enums.UserRole;
+import com.mockhub.auth.service.CredentialRevocationService;
 import com.mockhub.common.util.PasswordUtil;
 import com.mockhub.common.util.SecurityContextUtil;
 import com.mockhub.system.model.dto.AssignTeamsRequest;
@@ -14,9 +14,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -26,7 +26,7 @@ import java.util.UUID;
  * 负责用户 CRUD 业务逻辑，包括：
  * - 创建用户（密码 BCrypt 加密，firstLogin=true）
  * - 修改用户信息
- * - 删除用户（不能删除超管）
+ * - 停用、恢复及物理删除用户（末位有效管理员保护）
  * - 分配团队角色
  * - 提供认证模块所需的查询方法
  */
@@ -37,6 +37,12 @@ public class UserServiceImpl implements UserService {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private CredentialRevocationService credentialRevocationService;
+
+    @Autowired private AdminSafetyService adminSafetyService;
+    @Autowired private com.mockhub.system.repository.TeamRepository teamRepository;
 
     @Override
     public User findByUsername(String username) {
@@ -55,9 +61,32 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    @Transactional
     public void updatePassword(String userId, String newPasswordHash) {
         log.info("更新用户密码：userId={}", userId);
         userRepository.updatePassword(userId, newPasswordHash, LocalDateTime.now().toString());
+        credentialRevocationService.revokeSecurityCredentials(userId);
+    }
+
+    @Override
+    @Transactional
+    public void resetPassword(String userId, String newPassword) {
+        checkSuperAdmin();
+
+        if (newPassword == null || newPassword.length() < 6) {
+            throw new BizException(40000, "新密码长度不能少于6位");
+        }
+        User user = userRepository.findById(userId);
+        if (user == null) {
+            throw new BizException(40401, "用户不存在");
+        }
+
+        String newHash = PasswordUtil.hash(newPassword);
+        String now = LocalDateTime.now().toString();
+        userRepository.updatePassword(userId, newHash, now);
+        userRepository.updateFirstLogin(userId, true, now);
+        credentialRevocationService.revokeSecurityCredentials(userId);
+        log.info("超管重置用户密码：userId={}, username={}", userId, user.getUsername());
     }
 
     /**
@@ -83,118 +112,126 @@ public class UserServiceImpl implements UserService {
         return userRepository.findTeamRolesByUserId(userId);
     }
 
-    /**
-     * 创建新用户
-     * <p>
-     * 密码使用 BCrypt 加密，首次登录标志设为 true。
-     *
-     * @param request 创建用户请求
-     * @return 创建后的用户对象
-     * @throws BizException 40201 用户名已存在
-     */
+    /** Platform account creation is never delegated to team administrators. */
+    @Transactional
     public User create(CreateUserRequest request) {
+        adminSafetyService.acquireWriteLock();
         checkSuperAdmin();
-
-        // 检查用户名唯一性
-        User existing = userRepository.findByUsername(request.getUsername());
-        if (existing != null) {
-            throw new BizException(40201, "用户名已存在");
-        }
-
+        if (request == null || request.getUsername() == null || request.getUsername().trim().isEmpty())
+            throw new BizException(40000, "用户名不能为空");
+        if (request.getPassword() == null || request.getPassword().length() < 6)
+            throw new BizException(40000, "密码长度不能少于6位");
+        String role = RoleInputs.globalRole(request.getGlobalRole() == null ? "USER" : request.getGlobalRole());
+        if (userRepository.findByUsername(request.getUsername()) != null) throw new BizException(40201, "用户名已存在");
         String now = LocalDateTime.now().toString();
         User user = new User();
-        user.setId(UUID.randomUUID().toString());
-        user.setUsername(request.getUsername());
+        user.setId(UUID.randomUUID().toString()); user.setUsername(request.getUsername());
         user.setPasswordHash(PasswordUtil.hash(request.getPassword()));
-        user.setDisplayName(request.getDisplayName());
-        user.setGlobalRole(request.getGlobalRole());
-        user.setFirstLogin(true);
-        user.setCreatedAt(now);
-        user.setUpdatedAt(now);
-
+        user.setDisplayName(request.getDisplayName() == null ? request.getUsername() : request.getDisplayName());
+        user.setGlobalRole(role); user.setFirstLogin(true); user.setStatus("ACTIVE");
+        user.setCreatedAt(now); user.setUpdatedAt(now);
         userRepository.insert(user);
-        log.info("创建用户成功：username={}, globalRole={}", user.getUsername(), user.getGlobalRole());
         return user;
     }
 
-    /**
-     * 修改用户信息（不含密码和团队分配）
-     *
-     * @param id      用户 ID
-     * @param request 修改请求
-     * @return 修改后的用户对象
-     * @throws BizException 40203 不能降级超级管理员
-     */
+    @Transactional
     public User update(String id, UpdateUserRequest request) {
+        adminSafetyService.acquireWriteLock();
         checkSuperAdmin();
-
-        User user = userRepository.findById(id);
-        if (user == null) {
-            throw new BizException(40201, "用户不存在");
-        }
-
-        // 不能降级超级管理员
-        if (UserRole.SUPER_ADMIN.name().equals(user.getGlobalRole())
-                && !UserRole.SUPER_ADMIN.name().equals(request.getGlobalRole())) {
-            throw new BizException(40203, "不能降级超级管理员");
-        }
-
-        user.setDisplayName(request.getDisplayName());
-        user.setGlobalRole(request.getGlobalRole());
+        User user = requireUser(id);
+        if (request == null) throw new BizException(40000, "请求不能为空");
+        String oldRole = user.getGlobalRole();
+        if (request.getDisplayName() != null) user.setDisplayName(request.getDisplayName());
+        if (request.getGlobalRole() != null) user.setGlobalRole(RoleInputs.globalRole(request.getGlobalRole()));
         user.setUpdatedAt(LocalDateTime.now().toString());
-
         userRepository.update(user);
-        log.info("修改用户成功：id={}, displayName={}, globalRole={}", id, request.getDisplayName(), request.getGlobalRole());
-        return user;
+        if ("SUPER_ADMIN".equals(oldRole)) adminSafetyService.validateSuperAdmins();
+        if (!oldRole.equals(user.getGlobalRole())) credentialRevocationService.revokeSecurityCredentials(id);
+        return userRepository.findById(id);
     }
 
-    /**
-     * 删除用户
-     *
-     * @param id 用户 ID
-     * @throws BizException 40202 不能删除超级管理员
-     */
+    /** Prefer DISABLED. Physical deletion explicitly detaches FK references and preserves resources/audits. */
+    @Transactional
     public void delete(String id) {
+        adminSafetyService.acquireWriteLock();
         checkSuperAdmin();
-
-        User user = userRepository.findById(id);
-        if (user == null) {
-            throw new BizException(40201, "用户不存在");
-        }
-
-        // 不能删除超级管理员
-        if (UserRole.SUPER_ADMIN.name().equals(user.getGlobalRole())) {
-            throw new BizException(40202, "不能删除超级管理员");
-        }
-
+        User user = requireUser(id);
+        List<String> affectedTeams = adminSafetyService.effectiveAdminTeams(id);
+        // Revoke before deletion so failure rolls everything back and no usable credential survives.
+        credentialRevocationService.revokeSecurityCredentials(id);
+        adminSafetyService.detachDeletedUser(id);
         userRepository.deleteById(id);
-        log.info("删除用户成功：id={}, username={}", id, user.getUsername());
+        adminSafetyService.validateTeams(affectedTeams);
+        if ("SUPER_ADMIN".equals(user.getGlobalRole())) adminSafetyService.validateSuperAdmins();
     }
 
-    /**
-     * 为用户分配团队角色（整体替换）
-     *
-     * @param userId  用户 ID
-     * @param request 团队角色分配请求
-     * @throws BizException 40201 用户不存在
-     */
-    public void assignTeams(String userId, AssignTeamsRequest request) {
+    @Override
+    @Transactional
+    public User updateStatus(String id, com.mockhub.system.model.dto.UpdateUserStatusRequest request) {
+        adminSafetyService.acquireWriteLock();
         checkSuperAdmin();
+        User user = requireUser(id);
+        String status = request == null ? null : request.getStatus();
+        if (!("ACTIVE".equals(status) || "DISABLED".equals(status))) throw new BizException(40000, "未知账号状态");
+        List<String> affectedTeams = adminSafetyService.effectiveAdminTeams(id);
+        userRepository.updateStatus(id, status, LocalDateTime.now().toString());
+        adminSafetyService.validateTeams(affectedTeams);
+        if ("SUPER_ADMIN".equals(user.getGlobalRole())) adminSafetyService.validateSuperAdmins();
+        // Reactivation is also a security event. It must never resurrect a previous session or MCP token.
+        credentialRevocationService.revokeSecurityCredentials(id);
+        return userRepository.findById(id);
+    }
 
-        User user = userRepository.findById(userId);
-        if (user == null) {
-            throw new BizException(40201, "用户不存在");
+    /** Whole-request validation precedes mutation, final administrator validation follows mutation. */
+    @Transactional
+    public void assignTeams(String userId, AssignTeamsRequest request) {
+        adminSafetyService.acquireWriteLock();
+        checkSuperAdmin();
+        User user = requireUser(userId);
+        if (request == null || request.getTeamRoles() == null) throw new BizException(40000, "必须提供团队角色列表（清空请传空数组）");
+        java.util.Map<String,String> desired = new java.util.LinkedHashMap<String,String>();
+        for (AssignTeamsRequest.TeamRoleItem item : request.getTeamRoles()) {
+            if (item == null || item.getTeamId() == null || item.getTeamId().trim().isEmpty()) throw new BizException(40000, "团队ID不能为空");
+            if (desired.containsKey(item.getTeamId())) throw new BizException(40000, "团队ID不能重复");
+            String role = RoleInputs.teamRole(item.getRole());
+            desired.put(item.getTeamId(), role);
         }
-
-        List<UserTeam> teamRoles = new ArrayList<UserTeam>();
-        if (request.getTeamRoles() != null) {
-            for (AssignTeamsRequest.TeamRoleItem item : request.getTeamRoles()) {
-                teamRoles.add(new UserTeam(userId, item.getTeamId(), item.getRole()));
+        java.util.Map<String,String> previous = new java.util.LinkedHashMap<String,String>();
+        for (UserTeam old : userRepository.findTeamRolesByUserId(userId)) previous.put(old.getTeamId(), old.getRole());
+        if (!user.isActive()) {
+            // A status change retains memberships for later reactivation. Keeping that same admin
+            // relationship is not a new grant, including when its team has since been archived.
+            for (java.util.Map.Entry<String,String> item : desired.entrySet()) {
+                if ("TEAM_ADMIN".equals(item.getValue()) && !"TEAM_ADMIN".equals(previous.get(item.getKey()))) {
+                    throw new BizException(40000, "不能为停用账号新增或提升团队管理员角色");
+                }
             }
         }
+        java.util.Set<String> changed = new java.util.LinkedHashSet<String>();
+        changed.addAll(previous.keySet()); changed.addAll(desired.keySet());
+        for (String teamId : desired.keySet()) {
+            if (teamRepository.findById(teamId) == null) throw new BizException(40403, "团队不存在");
+        }
+        for (String teamId : changed) {
+            if (java.util.Objects.equals(previous.get(teamId), desired.get(teamId))) continue;
+            com.mockhub.system.model.entity.Team team = teamRepository.findById(teamId);
+            if (team != null && team.isArchived()) throw new BizException(40906, "团队已归档，不能修改成员分配");
+        }
+        List<String> affectedTeams = adminSafetyService.effectiveAdminTeams(userId);
+        for (String teamId : changed) {
+            String old = previous.get(teamId), role = desired.get(teamId);
+            if (java.util.Objects.equals(old, role)) continue;
+            if (role == null) teamRepository.removeMember(teamId, userId);
+            else if (old == null) teamRepository.addMember(teamId, userId, role);
+            else teamRepository.updateMemberRole(teamId, userId, role);
+        }
+        adminSafetyService.validateTeams(affectedTeams);
+    }
 
-        userRepository.replaceTeamRoles(userId, teamRoles);
-        log.info("用户团队分配成功：userId={}, teamCount={}", userId, teamRoles.size());
+    private User requireUser(String id) {
+        User user = userRepository.findById(id);
+        if (user == null) throw new BizException(40401, "用户不存在");
+        return user;
     }
 
     /**

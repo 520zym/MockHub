@@ -7,6 +7,9 @@ package com.mockhub.ai.model.dto;
  */
 public class AiApiUpdateDraft {
 
+    private Long baseRevision;
+    public Long getBaseRevision() { return baseRevision; }
+    public void setBaseRevision(Long value) { baseRevision=value; }
     private String apiId;
     private String responseId;
     private String teamId;

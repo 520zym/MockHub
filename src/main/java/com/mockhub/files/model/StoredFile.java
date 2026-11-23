@@ -12,7 +12,10 @@ public class StoredFile {
     private long downloadCount;
     private long transferredBytes;
     private String lastDownloadedAt;
-    private java.util.List<String> tags = new java.util.ArrayList<String>();
+    /** 与接口共用同一套团队标签，返回完整标签对象以便前端显示名称与颜色。 */
+    private java.util.List<com.mockhub.mock.model.entity.Tag> tags = new java.util.ArrayList<com.mockhub.mock.model.entity.Tag>();
+    /** 仅用于写入：本次保存选中的共享标签 ID。 */
+    private java.util.List<String> tagIds = new java.util.ArrayList<String>();
 
     public String getFileId() { return fileId; }
     public void setFileId(String fileId) { this.fileId = fileId; }
@@ -44,6 +47,9 @@ public class StoredFile {
     public String getLastDownloadedAt() { return lastDownloadedAt; }
     public void setLastDownloadedAt(String lastDownloadedAt) { this.lastDownloadedAt = lastDownloadedAt; }
 
-    public java.util.List<String> getTags() { return tags; }
-    public void setTags(java.util.List<String> tags) { this.tags = tags; }
+    public java.util.List<com.mockhub.mock.model.entity.Tag> getTags() { return tags; }
+    public void setTags(java.util.List<com.mockhub.mock.model.entity.Tag> tags) { this.tags = tags; }
+
+    public java.util.List<String> getTagIds() { return tagIds; }
+    public void setTagIds(java.util.List<String> tagIds) { this.tagIds = tagIds; }
 }

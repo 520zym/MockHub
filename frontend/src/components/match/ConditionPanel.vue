@@ -1,445 +1,210 @@
 <template>
-  <div class="condition-panel" :class="{ collapsed: !expanded }">
-    <!-- 顶部条 -->
-    <div class="panel-header" @click="expanded = !expanded">
-      <span class="title">
-        <el-icon class="caret">
-          <ArrowDown v-if="expanded" />
-          <ArrowRight v-else />
-        </el-icon>
-        响应规则
-      </span>
-      <span class="subtitle">所有条件都满足才命中（AND）</span>
-      <span class="spacer"></span>
-      <span v-if="ruleSummary" class="rule-summary">{{ ruleSummary }}</span>
-    </div>
-
-    <!-- 主体 -->
-    <div v-if="expanded" class="panel-body">
-      <!-- 工具条 -->
-      <div class="toolbar">
-        <span class="label">新增条件来源</span>
-        <el-radio-group v-model="source" size="small">
-          <el-radio-button value="BODY">Body</el-radio-button>
-          <el-radio-button value="QUERY">Query</el-radio-button>
-          <el-radio-button value="HEADER">Header</el-radio-button>
-        </el-radio-group>
-
-        <el-button size="small" class="from-log-btn" disabled>
-          <el-icon><Document /></el-icon>
-          从请求日志导入
-          <span class="badge">v1.1</span>
-        </el-button>
-
-        <el-popover
-          v-if="source !== 'HEADER'"
-          :width="460"
-          trigger="click"
-          placement="bottom"
-          v-model:visible="showPasteDialog"
-        >
-          <template #reference>
-            <el-button size="small" type="primary" plain>
-              <el-icon><Edit /></el-icon>
-              粘贴示例
-            </el-button>
-          </template>
-          <div class="paste-dialog">
-            <div class="paste-hint">
-              {{ pasteHint }}
-            </div>
-            <el-input
-              v-model="pastedText"
-              type="textarea"
-              :rows="8"
-              placeholder="在这里粘贴..."
-            />
-            <div class="paste-actions">
-              <el-button size="small" @click="showPasteDialog = false">取消</el-button>
-              <el-button size="small" type="primary" @click="applyPasted">
-                解析并导入
-              </el-button>
-            </div>
-          </div>
-        </el-popover>
-
-        <el-button
-          v-if="aiStore.capabilities.conditions"
-          size="small"
-          class="ai-rule-btn"
-          @click="aiDrawerVisible = true"
-        >
-          <el-icon><MagicStick /></el-icon>
-          AI 生成规则
-        </el-button>
-
-        <span class="hint-right">
-          <el-icon><InfoFilled /></el-icon>
-          规则空时，该返回体作为兜底
-        </span>
+  <div class="condition-panel">
+    <section class="rules-card">
+      <header class="rules-heading">
+        <button type="button" class="rules-toggle" :aria-expanded="rulesOpen" @click="rulesOpen = !rulesOpen"><strong>匹配条件</strong><span class="rules-summary" :class="{ 'fallback-notice': !conditions.length && !parseError }">{{ rulesSummary }}</span><span aria-hidden="true">{{ rulesOpen ? '⌃' : '⌄' }}</span></button>
+        <div class="rules-tools"><button type="button" class="text-button" @click="openSamples('trial')">试匹配</button><button v-if="!hideHelp" type="button" class="help-button" @click="helpVisible = true">图解用法</button></div>
+      </header>
+      <div v-show="rulesOpen" class="rules-content">
+        <p v-if="parseError" class="inline-error" role="alert">{{ parseError }}</p>
+        <div v-if="isRandom" class="mode-notice"><strong>等概率随机</strong><span>条件保留，本模式不参与判断。</span></div>
+        <template v-else>
+          <p v-if="conditions.length && enabledCount === 1 && (selectedResponse?.isActive ?? selectedResponse?.active)" class="selection-hint" role="status">仅一份启用，条件暂不参与判断</p>
+          <ConditionTable v-if="!parseError" :model-value="conditions" :default-source="source" :read-only="readOnly" @update:model-value="onConditionsUpdate">
+            <template #actions><button v-if="!readOnly" type="button" class="soft-button from-request" @click="openSamples('build')">从请求生成条件</button><button v-if="!readOnly && aiStore.capabilities.conditions" type="button" class="text-button ai-rules-button" @click="openAi">AI 生成</button></template>
+          </ConditionTable>
+        </template>
+        <section v-if="!hideReturnPreview" class="return-preview"><header><strong>命中后返回</strong><button type="button" class="text-button" @click="emit('edit-response')">{{ readOnly ? '查看返回体' : '编辑返回体' }} →</button></header><slot name="return-preview" /></section>
       </div>
+    </section>
 
-      <!-- 左右分栏 -->
-      <div class="split">
-        <div v-if="source !== 'HEADER'" class="col-left">
-          <SampleTree
-            :model-value="sampleText"
-            :used-paths="usedPaths"
-            :sample-kind="source === 'BODY' ? bodySampleKind : 'json'"
-            @select="onTreePick"
-          />
+    <el-dialog v-model="samplesOpen" :title="sampleIntent === 'build' ? '从请求生成条件' : '试匹配'" width="min(860px, calc(100vw - 28px))" top="6vh" append-to-body class="match-sample-dialog">
+      <aside class="sample-card" aria-label="请求样例">
+        <div class="source-tabs" role="tablist" aria-label="请求样例来源"><button v-for="item in sources" :key="item" type="button" role="tab" :aria-selected="source === item" :class="{ active: source === item }" @click="source = item">{{ sourceLabels[item] }}</button></div>
+        <div class="sample-columns">
+          <section class="sample-input-column"><div class="sample-label-row"><label :for="sampleInputId">{{ sampleLabel }}</label><button type="button" class="text-button" @click="fillExample">载入示例</button></div>
+            <el-input :id="sampleInputId" v-model="sampleInputs[source]" type="textarea" :rows="6" resize="vertical" :placeholder="samplePlaceholder" aria-label="请求样例文本" spellcheck="false" />
+            <div class="sample-actions"><button type="button" class="soft-button extract-fields" @click="applyPasted">提取字段 →</button></div>
+            <p v-if="sampleError" class="inline-error" role="alert">{{ sampleError }}</p>
+          </section>
+          <section class="sample-fields-column"><div class="fields-heading"><strong>{{ readOnly || isRandom ? '请求字段' : '点一下，加入当前返回体' }}</strong><span>{{ conditions.length }} 条已选</span></div>
+            <SampleTree :model-value="sampleText" :used-paths="usedPaths" :read-only="readOnly || isRandom" :sample-kind="source === 'BODY' ? bodySampleKind : 'json'" :flat-fields="source !== 'BODY'" @select="onTreePick" />
+            <p v-if="latestAdded" class="sample-added" role="status">✓ 已添加 {{ latestAdded }}</p>
+          </section>
         </div>
-        <div v-else class="col-left header-hint">
-          <el-icon><InfoFilled /></el-icon>
-          <div>
-            <div class="header-hint__title">Header 条件</div>
-            <div class="header-hint__desc">在右侧填写请求头名称与预期值，例如 <code>X-Env</code> 等于 <code>test</code>；名称不区分大小写。</div>
+        <section class="sample-preview">
+          <div class="preview-actions"><strong>试匹配结果</strong><button type="button" class="run-preview" :disabled="previewLoading || !teamId || (readOnly && !apiId)" @click="runPreview">{{ previewLoading ? '正在试配…' : isRandom ? '查看随机候选' : '试匹配' }}</button></div>
+          <p v-if="readOnly" class="saved-notice">只读 · 按已保存配置试配</p>
+          <p v-if="!teamId || (readOnly && !apiId)" class="inline-error">{{ !teamId ? '请选择团队后试配' : '只读试配需要已保存的接口' }}</p>
+          <p v-if="previewError" class="inline-error" role="alert">{{ previewError }}</p>
+          <div v-if="previewResult" class="preview-result" :class="{ neutral: !previewResult.matchedIndex && previewResult.matchedIndex !== 0 }" role="status">
+            <strong>{{ resultTitle }}</strong><p>{{ resultExplanation }}</p>
+            <p v-if="previewResult.responseCode != null" class="result-meta">返回 {{ previewResult.responseCode }} · {{ previewResult.bodyType || 'TEXT' }}</p>
+            <ul v-if="previewResult.mode === 'RANDOM' && previewResult.candidates?.length" class="random-candidates"><li v-for="candidate in previewResult.candidates" :key="candidate.index"><span>{{ candidate.responseName || candidate.responseId || '返回体 ' + (candidate.index + 1) }}</span><span>1 / {{ previewResult.enabledCount }}</span></li></ul>
+            <p v-if="previewResult.usingSavedConfiguration" class="saved-notice">按已保存配置试配</p>
           </div>
-        </div>
-        <div class="col-right">
-          <ConditionTable
-            :model-value="conditions"
-            :default-source="source"
-            @update:model-value="onConditionsUpdate"
-          />
-        </div>
-      </div>
-    </div>
-
-    <AiConditionsDrawer
-      v-model="aiDrawerVisible"
-      :team-id="teamId"
-      :api-context="apiContext"
-      :response-name="responseName"
-      :conditions="modelValue"
-      :body-sample="sampleText"
-      :sample-kind="bodySampleKind"
-      @apply="applyAiRules"
-    />
+          <details class="privacy-note"><summary>试匹配范围</summary><p>只选择返回体，不执行 Mock、不写调用日志、不返回正文。可编辑时包含当前草稿，保存接口后才正式生效。</p></details>
+        </section>
+      </aside>
+      <template #footer><el-button type="primary" @click="samplesOpen = false">{{ sampleIntent === 'build' ? '完成，返回编辑' : '返回编辑' }}</el-button></template>
+    </el-dialog>
+    <MatchGuide v-model="helpVisible" :mode="selectionMode" :body-sample-kind="bodySampleKind" />
+    <AiConditionsDrawer v-if="!readOnly" v-model="aiDrawerVisible" :read-only="readOnly" :team-id="teamId" :api-context="apiContext" :response-name="responseName" :conditions="modelValue" :body-sample="sampleInputs.BODY" :sample-kind="bodySampleKind" @apply="applyAiRules" />
   </div>
 </template>
 
 <script setup>
-/**
- * 响应规则折叠面板
- *
- * 对外暴露 v-model="conditionsJson"（JSON 字符串），内部管理：
- * - 展开/折叠状态
- * - 示例文本（粘贴后在左树展示）
- * - 当前参数来源（BODY / QUERY）
- * - conditions 数组（内部持有解析后的数组，变化时 emit JSON 字符串）
- *
- * 点击左树叶子 → 追加一条条件（字段路径 / 值 / 类型预填）。
- */
-import { ref, computed, watch, onMounted } from 'vue'
-import { ArrowDown, ArrowRight, Document, Edit, InfoFilled, MagicStick } from '@element-plus/icons-vue'
+import { ref, computed, reactive, watch, onMounted, onBeforeUnmount, getCurrentInstance } from 'vue'
 import { ElMessage } from 'element-plus'
 import SampleTree from './SampleTree.vue'
 import ConditionTable from './ConditionTable.vue'
+import MatchGuide from './MatchGuide.vue'
 import AiConditionsDrawer from '@/components/ai/AiConditionsDrawer.vue'
 import { useAiStore } from '@/stores/ai'
-import { parseXmlSampleTree } from '@/utils/xmlSampleTree'
+import { previewApiMatch } from '@/api/matchPreview'
+import { SAMPLE_SOURCES, sampleTreeText, buildPreviewSample, previewResponses } from '@/utils/request-samples'
 
 const props = defineProps({
-  /** conditions JSON 字符串，对应 api_response.conditions 字段；空字符串 / null 表示无规则 */
-  modelValue: { type: String, default: '' },
-  /** BODY 示例类型：REST 使用 json；SOAP 使用 xml 生成点分元素路径 */
-  bodySampleKind: { type: String, default: 'json' },
-  /** 所属团队，供 AI 生成使用 */
-  teamId: { type: String, default: null },
-  /** 接口上下文 */
-  apiContext: { type: Object, default: () => ({}) },
-  /** 当前返回体名称 */
-  responseName: { type: String, default: '默认返回体' }
+  modelValue: { type: String, default: '' }, readOnly: { type: Boolean, default: false },
+  bodySampleKind: { type: String, default: 'json' }, teamId: { type: String, default: null },
+  apiContext: { type: Object, default: () => ({}) }, responseName: { type: String, default: '默认返回体' },
+  apiId: { type: String, default: null }, responses: { type: Array, default: () => [] },
+  selectedResponseIndex: { type: Number, default: 0 }, selectionMode: { type: String, default: 'CONDITION' },
+  operationName: { type: String, default: null },
+  // Inline usage (response tab) already shows the body right below, so the summary is noise.
+  hideReturnPreview: { type: Boolean, default: false },
+  hideHelp: { type: Boolean, default: false }
 })
-
-const emit = defineEmits(['update:modelValue'])
-
-const aiStore = useAiStore()
-const aiDrawerVisible = ref(false)
-
-// 本地状态
-const expanded = ref(true)
-const source = ref('BODY')
-const sampleText = ref('')
-const showPasteDialog = ref(false)
-const pastedText = ref('')
-
-// 来源变化后要求重新导入，避免把 Body 的字段误加为 Query 条件，反之亦然。
-watch([source, () => props.bodySampleKind], () => {
-  sampleText.value = ''
-  pastedText.value = ''
+const emit = defineEmits(['update:modelValue', 'edit-response'])
+const aiStore = useAiStore(), aiDrawerVisible = ref(false)
+// The request workspace is opt-in. Both generation and trial reuse these local samples.
+const samplesOpen = ref(false), helpVisible = ref(false), rulesOpen = ref(true), sampleIntent = ref('build'), latestAdded = ref('')
+const sampleInputId = 'match-sample-' + (getCurrentInstance()?.uid ?? 'isolated')
+const sources = SAMPLE_SOURCES, sourceLabels = { BODY: 'Body', QUERY: 'Query', HEADER: 'Header' }
+const source = ref('BODY'), sampleInputs = reactive({ BODY: '', QUERY: '', HEADER: '' })
+const parsedSamples = reactive({ BODY: '', QUERY: '', HEADER: '' }), sampleError = ref('')
+const parseError = ref(''), conditions = ref(parseConditions(props.modelValue))
+const previewResult = ref(null), previewError = ref(''), previewLoading = ref(false)
+let requestVersion = 0, controller = null, disposed = false
+const isRandom = computed(() => props.selectionMode === 'RANDOM')
+const selectedResponse = computed(() => props.responses?.[props.selectedResponseIndex])
+const enabledCount = computed(() => props.responses.filter(r => r.isActive ?? r.active).length)
+const rulesSummary = computed(() => {
+  if (conditions.value.length) return conditions.value.length + ' 条条件'
+  return enabledCount.value > 1 && (selectedResponse.value?.isActive ?? selectedResponse.value?.active) ? '兜底' : '无条件'
 })
-
-onMounted(() => {
-  aiStore.load()
-})
-
-// 从 modelValue 解析出初始条件数组
-const conditions = ref(parseConditions(props.modelValue))
-
-// 仅当 modelValue 从外部变化时同步（避免自己 emit 后无限循环）
-watch(() => props.modelValue, (v) => {
-  const next = parseConditions(v)
-  if (JSON.stringify(next) !== JSON.stringify(conditions.value)) {
-    conditions.value = next
-  }
-})
-
-// 用于 SampleTree 的已用路径列表
-const usedPaths = computed(() => conditions.value
-  .filter(c => c.source === source.value).map(c => c.path).filter(Boolean))
-
-// 显示在折叠态右侧的规则摘要（如"3 条规则"）
-const ruleSummary = computed(() => {
-  const n = conditions.value.length
-  return n === 0 ? '无规则（兜底）' : `${n} 条规则`
-})
-
-const pasteHint = computed(() => {
-  if (source.value === 'QUERY') {
-    return '粘贴一段 URL 查询串（?a=1&b=2），解析后在下方树中点击字段即可快速生成条件。'
-  }
-  if (props.bodySampleKind === 'xml') {
-    return '粘贴 SOAP 请求 XML，解析后点击字段生成条件。路径忽略命名空间前缀，例如 Envelope.Body.GetUserRequest.userId。'
-  }
-  return '粘贴一段 JSON Body，解析后在下方树中点击字段即可快速生成条件。'
-})
+function openSamples(intent) { sampleIntent.value = intent; samplesOpen.value = true }
+function fillExample() {
+  sampleInputs[source.value] = source.value === 'QUERY' ? '?status=paid&amount=100' : source.value === 'HEADER' ? 'X-Mock-Mode: success' : props.bodySampleKind === 'xml' ? '<Envelope><Body><status>paid</status><amount>100</amount></Body></Envelope>' : '{ "status": "paid", "amount": 100 }'
+  applyPasted()
+}
+const sampleText = computed(() => parsedSamples[source.value])
+const usedPaths = computed(() => conditions.value.filter(c => c.source === source.value).map(c => c.path).filter(Boolean))
+const sampleLabel = computed(() => source.value === 'QUERY' ? '粘贴 URL 查询串' : source.value === 'HEADER' ? '粘贴 Header JSON 或 Name: value' : props.bodySampleKind === 'xml' ? '粘贴 SOAP / XML Body' : '粘贴 JSON Body')
+const samplePlaceholder = computed(() => source.value === 'QUERY' ? '?channel=alipay&orderId=202610280001' : source.value === 'HEADER' ? 'X-Mock-Sandbox: 0' : props.bodySampleKind === 'xml' ? '<Envelope><Body>...</Body></Envelope>' : '{ "channel": "alipay", "amount": 100 }')
+const reasonCopy = {
+  CONDITION_MATCH: ['条件命中', '由服务端按返回体顺序选择首个命中项。'],
+  FALLBACK: ['使用兜底', '带规则的返回体均未命中，使用无规则兜底。'],
+  SINGLE_ENABLED: ['唯一启用返回体', '运行时唯一启用直接返回，不执行条件判断。'],
+  NO_MATCH: ['未命中', '没有条件命中，也没有可用兜底。'],
+  NO_ENABLED_RESPONSE: ['无启用返回体', '没有可参与选择的返回体，请检查启用状态。'],
+  RANDOM_EQUAL_PROBABILITY: ['等概率随机候选', '每个启用返回体等概率参与，条件不执行；此处不固定命中任何一项。']
+}
+const resultTitle = computed(() => { const r = previewResult.value; if (!r) return ''; const name = r.matchedResponseName || r.matchedResponseId; return (reasonCopy[r.reason]?.[0] || '服务端选择结果') + (name ? ' · ' + name : '') })
+const resultExplanation = computed(() => reasonCopy[previewResult.value?.reason]?.[1] || '仅展示服务端返回的选择元信息。')
 
 function parseConditions(json) {
-  if (!json) return []
+  if (!json) { parseError.value = ''; return [] }
   try {
     const obj = JSON.parse(json)
-    return Array.isArray(obj?.conditions) ? obj.conditions : []
-  } catch {
-    return []
-  }
+    if (!obj || Array.isArray(obj) || (obj.conditions != null && !Array.isArray(obj.conditions))) throw new Error()
+    parseError.value = ''
+    return (obj.conditions || []).filter(Boolean).map(c => ({ ...c }))
+  } catch { parseError.value = '当前条件 JSON 无效，请修复后再试配。'; return [] }
 }
-
-function serializeConditions(list) {
-  if (!list || list.length === 0) return ''
-  return JSON.stringify({ conditions: list })
-}
-
+function serializeConditions(list) { return list?.length ? JSON.stringify({ conditions: list }) : '' }
 function onConditionsUpdate(next) {
-  conditions.value = next
-  emit('update:modelValue', serializeConditions(next))
+  if (props.readOnly || isRandom.value) return
+  if (next.length > 100) { ElMessage.warning('每条返回体最多 100 个条件'); return }
+  conditions.value = next.map(c => ({ ...c })); parseError.value = ''; invalidatePreview()
+  emit('update:modelValue', serializeConditions(conditions.value))
 }
-
-/** 应用 AI 生成的规则（已在前端按追加/替换合并） */
+function openAi() { if (!props.readOnly && !isRandom.value && aiStore.capabilities.conditions) aiDrawerVisible.value = true }
 function applyAiRules(payload) {
-  try {
-    const parsed = JSON.parse(payload.json)
-    const next = Array.isArray(parsed?.conditions) ? parsed.conditions : []
-    onConditionsUpdate(next)
-  } catch (e) {
-    ElMessage.error('规则内容解析失败，请重试')
-  }
+  if (props.readOnly || isRandom.value) return
+  try { const parsed = JSON.parse(payload.json); if (!Array.isArray(parsed?.conditions)) throw new Error(); onConditionsUpdate(parsed.conditions) }
+  catch { ElMessage.error('规则内容解析失败，请重试') }
 }
-
 function onTreePick(path, value, valueType) {
-  // 避免重复添加：若已有相同 source+path 的条件，不再追加（但值可能需要更新）
-  const dup = conditions.value.find((c) => c.source === source.value && c.path === path)
-  if (dup) {
-    ElMessage.info(`字段 ${path} 已在条件列表中`)
-    return
-  }
-  const next = [...conditions.value, {
-    source: source.value,
-    path,
-    operator: 'EQ',
-    value: value == null ? '' : String(value),
-    valueType: valueType || 'STRING'
-  }]
-  onConditionsUpdate(next)
+  if (props.readOnly || isRandom.value || !path) return
+  const duplicate = conditions.value.some(c => c.source === source.value && (source.value === 'HEADER' ? c.path?.toLowerCase() === path.toLowerCase() : c.path === path))
+  if (duplicate) { ElMessage.info('该字段已在当前来源的条件中'); return }
+  latestAdded.value = path
+  onConditionsUpdate([...conditions.value, { source: source.value, path, operator: 'EQ', value: value == null ? '' : String(value), valueType: valueType || 'STRING' }])
 }
-
 function applyPasted() {
-  const text = pastedText.value.trim()
-  if (!text) {
-    showPasteDialog.value = false
-    return
-  }
-  if (source.value === 'BODY') {
-    if (props.bodySampleKind === 'xml') {
-      try {
-        parseXmlSampleTree(text)
-        sampleText.value = text
-        showPasteDialog.value = false
-      } catch (e) {
-        ElMessage.error(e.message || '无法解析为 XML，请检查格式')
-      }
-      return
-    }
-    // 尝试解析 JSON；失败给提示
-    try {
-      JSON.parse(text)
-      sampleText.value = text
-      showPasteDialog.value = false
-    } catch {
-      ElMessage.error('无法解析为 JSON，请检查格式')
-    }
-  } else {
-    // QUERY：把 URL 查询串转为一个扁平对象再当 JSON 用
-    const obj = queryStringToObject(text)
-    if (Object.keys(obj).length === 0) {
-      ElMessage.error('未识别出任何查询参数')
-      return
-    }
-    sampleText.value = JSON.stringify(obj, null, 2)
-    showPasteDialog.value = false
-  }
+  sampleError.value = ''
+  try { parsedSamples[source.value] = sampleTreeText(source.value, sampleInputs[source.value], props.bodySampleKind) }
+  catch (error) { parsedSamples[source.value] = ''; sampleError.value = error.message || '样例解析失败' }
 }
-
-/** 解析查询串：支持 ?a=1&b=2 和 a=1&b=2 两种形式 */
-function queryStringToObject(s) {
-  let cleaned = s.trim()
-  const q = cleaned.indexOf('?')
-  if (q >= 0) cleaned = cleaned.substring(q + 1)
-  const out = {}
-  for (const pair of cleaned.split('&')) {
-    if (!pair) continue
-    const eq = pair.indexOf('=')
-    const k = eq >= 0 ? pair.substring(0, eq) : pair
-    const v = eq >= 0 ? pair.substring(eq + 1) : ''
-    if (k) out[decodeURIComponent(k)] = decodeURIComponent(v)
-  }
-  return out
+function identity() { return JSON.stringify([props.teamId, props.apiId, props.operationName, props.readOnly]) }
+function fingerprint() { return JSON.stringify([identity(), props.selectionMode, props.modelValue, props.responses, sampleInputs.BODY, sampleInputs.QUERY, sampleInputs.HEADER, props.bodySampleKind, props.selectedResponseIndex]) }
+function invalidatePreview() { requestVersion++; controller?.abort(); controller = null; previewLoading.value = false; previewResult.value = null; previewError.value = '' }
+async function runPreview() {
+  invalidatePreview()
+  if (!props.teamId || (props.readOnly && !props.apiId)) return
+  let payload
+  try {
+    payload = { teamId: props.teamId, apiId: props.apiId || undefined, operationName: props.operationName || undefined,
+      responseMode: props.selectionMode || 'CONDITION',
+      responses: props.readOnly ? [] : previewResponses(props.responses || [], props.operationName, props.selectedResponseIndex, props.modelValue || ''),
+      sample: buildPreviewSample(sampleInputs, props.bodySampleKind) }
+  } catch (error) { previewError.value = error.message || '请求样例无效'; return }
+  const version = ++requestVersion, scope = fingerprint(), abort = new AbortController(); controller = abort; previewLoading.value = true
+  try {
+    const result = await previewApiMatch(payload, { signal: abort.signal })
+    if (disposed || version !== requestVersion || scope !== fingerprint()) return
+    previewResult.value = result
+  } catch (error) {
+    if (disposed || version !== requestVersion || scope !== fingerprint() || error.code === 'ERR_CANCELED') return
+    previewError.value = error?.msg || (error?.isTimeout ? '试配超时，请重试' : '试配失败，请检查网络或配置后重试')
+  } finally { if (version === requestVersion) { previewLoading.value = false; controller = null } }
 }
+watch(() => props.modelValue, value => { conditions.value = parseConditions(value); invalidatePreview() })
+watch(() => [props.teamId, props.apiId, props.operationName], () => {
+  invalidatePreview(); aiDrawerVisible.value = false; samplesOpen.value = false; helpVisible.value = false; latestAdded.value = ''; sampleError.value = ''
+  for (const key of sources) { sampleInputs[key] = ''; parsedSamples[key] = '' }
+}, { flush: 'sync' })
+watch(() => props.readOnly, () => { aiDrawerVisible.value = false; invalidatePreview() }, { flush: 'sync' })
+watch(() => [props.selectionMode, props.selectedResponseIndex, props.bodySampleKind], () => { aiDrawerVisible.value = false; latestAdded.value = ''; invalidatePreview() })
+watch(() => props.responses, invalidatePreview, { deep: true })
+for (const key of sources) watch(() => sampleInputs[key], () => { invalidatePreview(); parsedSamples[key] = ''; sampleError.value = '' }, { flush: 'sync' })
+watch(source, () => { sampleError.value = '' })
+defineExpose({ openSamples })
+onMounted(() => { aiStore.load() })
+onBeforeUnmount(() => { disposed = true; invalidatePreview() })
 </script>
 
 <style scoped>
-.condition-panel {
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  margin-bottom: 14px;
-}
-.panel-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  cursor: pointer;
-  user-select: none;
-}
-.panel-header:hover {
-  background: #f3f4f6;
-}
-.caret {
-  color: #6366f1;
-  font-size: 14px;
-}
-.title {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-weight: 600;
-  color: #374151;
-  font-size: 13px;
-}
-.subtitle {
-  color: #9ca3af;
-  font-size: 12px;
-}
-.spacer { flex: 1; }
-.rule-summary {
-  font-size: 12px;
-  color: #4f46e5;
-  background: #eef2ff;
-  padding: 2px 8px;
-  border-radius: 10px;
-}
-.panel-body {
-  padding: 0 12px 12px;
-}
-.toolbar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
-  flex-wrap: wrap;
-}
-.label {
-  font-size: 12px;
-  color: #6b7280;
-}
-.from-log-btn {
-  position: relative;
-}
-.badge {
-  margin-left: 4px;
-  padding: 0 4px;
-  font-size: 9px;
-  background: #fde68a;
-  color: #92400e;
-  border-radius: 3px;
-}
-.hint-right {
-  margin-left: auto;
-  font-size: 11px;
-  color: #6b7280;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-.split {
-  display: flex;
-  gap: 12px;
-}
-.col-left { flex: 0 0 44%; }
-.col-right { flex: 1; }
-.ai-rule-btn {
-  background: #fff;
-  border: 1px solid #E7E3FD;
-  color: #4F46E5;
-}
-
-.ai-rule-btn:hover,
-.ai-rule-btn:focus {
-  background: #F5F3FF;
-  border-color: #C7D2FE;
-  color: #4F46E5;
-}
-
-.paste-dialog {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.paste-hint {
-  font-size: 12px;
-  color: #6b7280;
-}
-.paste-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-.header-hint {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 16px;
-  background: #F8FAFC;
-  border-right: 1px solid #E5E7EB;
-  color: #64748B;
-  font-size: 12px;
-  line-height: 1.7;
-}
-
-.header-hint__title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #1B2559;
-  margin-bottom: 4px;
-}
-
-.header-hint__desc code {
-  font-family: 'SF Mono', Menlo, Monaco, Consolas, monospace;
-  background: #fff;
-  border: 1px solid #E5E7EB;
-  border-radius: 4px;
-  padding: 0 4px;
-}
+.condition-panel { min-width: 0; font-size: 13px; color: var(--app-text-primary); }
+.rules-card { min-width: 0; }
+.rules-heading, .rules-tools, .rules-toggle { display: flex; align-items: center; gap: 9px; }
+.rules-heading { justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.rules-toggle { border: 0; background: none; color: inherit; cursor: pointer; padding: 0; min-height: 34px; font: inherit; }
+.rules-toggle strong { font-size: 14px; }
+.rules-summary { color: var(--app-text-secondary); font-size: 12px; }.rules-content { padding-top: 8px; }
+.selection-hint { margin: 0 0 12px; color: var(--app-text-secondary); line-height: 1.6; font-size: 12px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+button { font: inherit; }.text-button,.help-button { border: 0; background: transparent; color: var(--app-text-accent); cursor: pointer; min-height: 34px; padding: 0 5px; font-size: 12px; }
+.help-button { border-left: 1px solid var(--app-divider); padding-left: 12px; }.soft-button { min-height: 34px; border: 0; border-radius: 7px; padding: 0 12px; background: var(--app-bg-control); color: var(--app-text-regular); cursor: pointer; font-size: 13px; }.soft-button:hover { background: var(--app-bg-hover); }.ai-rules-button { margin-left: auto; }
+.mode-notice { display: flex; flex-wrap: wrap; gap: 12px; padding: 10px; background: var(--app-bg-control); border-radius: 8px; }.mode-notice span { color: var(--app-text-secondary); }
+.return-preview { margin-top: 14px; padding: 12px; background: var(--app-bg-control); border-radius: 9px; }.return-preview header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.sample-card { min-width: 0; color: var(--app-text-primary); font-size: 13px; }.sample-step-line { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 18px; color: var(--app-text-secondary); font-size: 13px; }.sample-step-line b { color: var(--app-text-accent); margin-right: 4px; }
+.source-tabs { display: flex; width: fit-content; max-width: 100%; gap: 4px; border-radius: 8px; padding: 3px; margin-bottom: 16px; background: var(--app-bg-control); }.source-tabs button { border: 0; border-radius: 6px; background: transparent; color: var(--app-text-secondary); cursor: pointer; min-height: 34px; padding: 0 22px; font-size: 13px; }.source-tabs button.active { background: #fff; color: var(--app-text-accent); }
+.sample-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }.sample-input-column,.sample-fields-column { min-width: 0; }.sample-label-row,.fields-heading { min-height: 34px; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; font-size: 12px; }.fields-heading span { color: var(--app-text-secondary); }
+.sample-card :deep(.el-textarea__inner) { min-height: 164px; background: var(--app-bg-control); border: 1px solid transparent; border-radius: 8px; box-shadow: none; color: var(--app-text-regular); font: 12px/1.7 var(--app-font-mono); padding: 10px; }.sample-card :deep(.el-textarea__inner:focus) { border-color: var(--app-accent); }
+.sample-fields-column :deep(.tree-body) { max-height: 260px; overflow: auto; }.sample-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; }.sample-actions span { color: var(--app-text-secondary); font-size: 12px; }.sample-added { color: var(--app-text-success); font-size: 12px; overflow-wrap: anywhere; margin: 8px 0 0; }
+.sample-preview { border-top: 1px solid var(--app-divider); margin-top: 18px; padding-top: 16px; }.preview-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }.preview-actions > div { display: grid; gap: 5px; }.preview-actions span { font-size: 12px; color: var(--app-text-secondary); }.run-preview { border: 0; border-radius: 7px; min-height: 36px; min-width: 100px; padding: 0 14px; background: var(--app-accent); color: #fff; cursor: pointer; font-size: 13px; }.run-preview:disabled { background: var(--app-bg-control); color: var(--app-text-disabled); cursor: not-allowed; }
+.inline-error { color: var(--app-text-danger); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }.privacy-note { margin-top: 12px; color: var(--app-text-secondary); font-size: 12px; line-height: 1.7; }.privacy-note summary { cursor: pointer; }.privacy-note p { margin: 6px 0 0; }.saved-notice { color: var(--app-text-warning); font-size: 12px; line-height: 1.6; }
+.preview-result { border-radius: 8px; background: var(--app-bg-control); color: var(--app-text-success); padding: 12px; margin-top: 12px; font-size: 13px; }.preview-result.neutral { color: var(--app-text-secondary); }.preview-result p { margin: 5px 0 0; line-height: 1.6; }.random-candidates { list-style: none; padding: 0; margin: 8px 0 0; }.random-candidates li { display: flex; justify-content: space-between; gap: 8px; padding: 4px 0; }
+@media(max-width: 600px) { .sample-columns { grid-template-columns: minmax(0, 1fr); gap: 12px; }.sample-step-line { font-size: 12px; gap: 7px; justify-content: flex-start; }.sample-actions { flex-wrap: wrap; }.rules-tools { gap: 4px; }.source-tabs { width: 100%; }.source-tabs button { flex: 1; padding: 0 12px; }.sample-fields-column :deep(.tree-body) { max-height: 180px; } }
 </style>

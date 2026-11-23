@@ -79,6 +79,7 @@ public class ApiController {
             @RequestParam(required = false) String method,
             @RequestParam(required = false) Boolean enabled,
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String createdBy,
             @RequestParam(required = false) String tagIds,
             @RequestParam(required = false) String type,
             @RequestParam(required = false) String sortBy,
@@ -90,7 +91,7 @@ public class ApiController {
         if (tagIds != null && !tagIds.isEmpty()) {
             tagIdList = Arrays.asList(tagIds.split(","));
         }
-        PageResult<ApiDefinitionVO> result = apiService.list(teamId, groupId, method, enabled, keyword, tagIdList, type, sortBy, sortDir, page, size);
+        PageResult<ApiDefinitionVO> result = apiService.list(teamId, groupId, method, enabled, keyword, tagIdList, type, sortBy, sortDir, page, size, createdBy);
         return Result.ok(result);
     }
 
@@ -104,6 +105,35 @@ public class ApiController {
     public Result<ApiDefinitionDetailVO> getById(@PathVariable String id) {
         ApiDefinitionDetailVO detail = apiService.getById(id);
         return Result.ok(detail);
+    }
+
+    @GetMapping("/trash")
+    public Result<PageResult<Map<String,Object>>> trash(@RequestParam(required=false) String teamId,
+            @RequestParam(defaultValue="1") int page,@RequestParam(defaultValue="20") int size) {
+        return Result.ok(apiService.trash(teamId,page,size));
+    }
+    @PostMapping("/{id}/restore")
+    public Result<ApiSaveResultVO> restore(@PathVariable String id,@RequestBody com.mockhub.mock.model.dto.ApiRestoreRequest request) {
+        return Result.ok(ApiSaveResultVO.from(apiService.restore(id,
+                com.mockhub.mock.lifecycle.ApiVersions.require(request.getExpectedRevision()),request.getNewPath())));
+    }
+    @DeleteMapping("/{id}/purge")
+    public Result<Void> purge(@PathVariable String id,@RequestParam(required=false) Long expectedRevision) {
+        apiService.purge(id,com.mockhub.mock.lifecycle.ApiVersions.require(expectedRevision));return Result.ok();
+    }
+    @PostMapping("/{id}/revisions/{revisionId}/rollback")
+    public Result<ApiSaveResultVO> rollback(@PathVariable String id,@PathVariable String revisionId,
+            @RequestBody com.mockhub.mock.model.dto.ApiRestoreRequest request) {
+        return Result.ok(ApiSaveResultVO.from(apiService.rollback(id,revisionId,
+                com.mockhub.mock.lifecycle.ApiVersions.require(request.getExpectedRevision()))));
+    }
+
+    @GetMapping("/{id}/revisions")
+    public Result<List<Map<String,Object>>> revisions(@PathVariable String id) { return Result.ok(apiService.revisions(id)); }
+
+    @GetMapping("/{id}/revisions/{revisionId}")
+    public Result<Map<String,Object>> revision(@PathVariable String id,@PathVariable String revisionId) {
+        return Result.ok(apiService.revision(id,revisionId));
     }
 
     /**
@@ -127,6 +157,7 @@ public class ApiController {
      */
     @PutMapping("/{id}")
     public Result<ApiSaveResultVO> update(@PathVariable String id, @RequestBody ApiDefinitionDTO dto) {
+        com.mockhub.mock.lifecycle.ApiVersions.require(dto.getExpectedRevision());
         ApiDefinition api = apiService.update(id, dto);
         return Result.ok(ApiSaveResultVO.from(api));
     }
@@ -138,8 +169,8 @@ public class ApiController {
      * @return 空响应
      */
     @DeleteMapping("/{id}")
-    public Result<Void> delete(@PathVariable String id) {
-        apiService.delete(id);
+    public Result<Void> delete(@PathVariable String id,@RequestParam(required=false) Long expectedRevision) {
+        apiService.delete(id,com.mockhub.mock.lifecycle.ApiVersions.require(expectedRevision));
         return Result.ok();
     }
 
@@ -152,8 +183,8 @@ public class ApiController {
      * @return 新创建的接口定义
      */
     @PostMapping("/{id}/copy")
-    public Result<ApiDefinition> copy(@PathVariable String id) {
-        ApiDefinition api = apiService.copy(id);
+    public Result<ApiDefinition> copy(@PathVariable String id,@RequestParam(required=false) Long expectedRevision) {
+        ApiDefinition api = apiService.copy(id,com.mockhub.mock.lifecycle.ApiVersions.require(expectedRevision));
         return Result.ok(api);
     }
 
@@ -166,9 +197,11 @@ public class ApiController {
      * @return 新的启用状态 {"enabled": true/false}
      */
     @PutMapping("/{id}/toggle")
-    public Result<Map<String, Boolean>> toggle(@PathVariable String id) {
-        boolean newEnabled = apiService.toggle(id);
-        return Result.ok(Collections.singletonMap("enabled", newEnabled));
+    public Result<Map<String, Object>> toggle(@PathVariable String id,@RequestParam(required=false) Long expectedRevision) {
+        long expected=com.mockhub.mock.lifecycle.ApiVersions.require(expectedRevision);
+        boolean newEnabled = apiService.toggle(id,expected);
+        Map<String,Object> result=new java.util.LinkedHashMap<String,Object>();result.put("enabled",newEnabled);result.put("revision",expected+1);
+        return Result.ok(result);
     }
 
     /**
@@ -181,8 +214,11 @@ public class ApiController {
      */
     @PostMapping("/batch")
     public Result<BatchApiResult> batch(@RequestBody BatchApiRequest request) {
+        if(request.getIds()!=null) for(String id:request.getIds()) {
+            com.mockhub.mock.lifecycle.ApiVersions.require(request.getExpectedRevisions()==null?null:request.getExpectedRevisions().get(id));
+        }
         BatchApiResult result = apiService.batch(
-                request.getAction(), request.getIds(), request.getTargetGroupId());
+                request.getAction(), request.getIds(), request.getTargetGroupId(), request.getExpectedRevisions());
         return Result.ok(result);
     }
 
@@ -195,7 +231,7 @@ public class ApiController {
     public Result<Map<String, Object>> uploadResponseFile(
             @RequestParam String teamId,
             @RequestParam("file") MultipartFile file) {
-        permissionChecker.checkTeamAccess(teamId);
+        permissionChecker.checkTeamWrite(teamId);
         MockFileStorageService.StoredMockFile stored = fileStorageService.store(teamId, file);
         Map<String, Object> data = new java.util.HashMap<String, Object>();
         data.put("bodyType", "FILE");

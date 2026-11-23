@@ -63,6 +63,9 @@ public class ImportExportService {
     private final TeamService teamService;
     private final PermissionChecker permissionChecker;
     private final MockFileStorageService mockFileStorageService;
+    private final ApiService apiService;
+    @org.springframework.beans.factory.annotation.Autowired
+    private SoapService soapService;
 
     public ImportExportService(ApiRepository apiRepository,
                                ApiResponseRepository apiResponseRepository,
@@ -72,7 +75,8 @@ public class ImportExportService {
                                GlobalHeaderRepository globalHeaderRepository,
                                TeamService teamService,
                                PermissionChecker permissionChecker,
-                               MockFileStorageService mockFileStorageService) {
+                               MockFileStorageService mockFileStorageService,ApiService apiService) {
+        this.apiService=apiService;
         this.apiRepository = apiRepository;
         this.apiResponseRepository = apiResponseRepository;
         this.groupRepository = groupRepository;
@@ -96,7 +100,7 @@ public class ImportExportService {
         Team team = teamService.getById(teamId);
 
         ImportExportData data = new ImportExportData();
-        data.setVersion("2.0");
+        data.setVersion("2.2");
         data.setExportedAt(new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss").format(new Date()));
         data.setTeamName(team != null ? team.getName() : "");
         data.setGroups(groupRepository.findByTeamId(teamId));
@@ -113,6 +117,7 @@ public class ImportExportService {
         data.setApiResponses(allResponses);
 
         data.setGlobalHeaders(globalHeaderRepository.findByTeamId(teamId));
+        fillTagMapping(data);
 
         log.info("导出团队数据: teamId={}, apis={}, responses={}, groups={}, tags={}, globalHeaders={}",
                 teamId,
@@ -145,7 +150,7 @@ public class ImportExportService {
         }
 
         ImportExportData data = new ImportExportData();
-        data.setVersion("2.1");
+        data.setVersion("2.2");
         data.setExportedAt(new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss").format(new Date()));
         data.setTeamName(team != null ? team.getName() : "");
         data.setGroups(groupRepository.findByTeamId(teamId));
@@ -158,11 +163,40 @@ public class ImportExportService {
         }
         data.setApiResponses(allResponses);
         data.setGlobalHeaders(globalHeaderRepository.findByTeamId(teamId));
+        fillTagMapping(data);
         return buildExportPackage(data);
     }
 
+    private void fillTagMapping(ImportExportData data) {
+        Map<String,List<String>> mapping=new HashMap<String,List<String>>();
+        for(ApiDefinition api:data.getApis())mapping.put(api.getId(),apiTagRepository.findTagIdsByApiId(api.getId()));
+        data.setApiTags(mapping);
+    }
+
     private ExportPackage buildExportPackage(ImportExportData data) {
+        data.setVersion("2.3");
         Map<String, Resource> files = new HashMap<String, Resource>();
+        Map<String, String> wsdlFiles = new HashMap<String, String>();
+        Map<String, String> exportedWsdls = new HashMap<String, String>();
+        for (ApiDefinition api : data.getApis()) {
+            if (!"SOAP".equalsIgnoreCase(api.getType())) continue;
+            try {
+                String key = wsdlReference(api);
+                if (key == null) continue;
+                String identity = api.getTeamId() + "\n" + key;
+                String entry = exportedWsdls.get(identity);
+                if (entry == null) {
+                    byte[] bytes = soapService.readWsdlForExport(api.getTeamId(), key);
+                    entry = "wsdl/" + UUID.randomUUID().toString() + ".wsdl";
+                    files.put(entry, new org.springframework.core.io.ByteArrayResource(bytes));
+                    exportedWsdls.put(identity, entry);
+                }
+                wsdlFiles.put(api.getId(), entry);
+            } catch (Exception invalid) {
+                throw new com.mockhub.common.model.BizException(40927,"EXPORT_WSDL_MISSING: WSDL缺失、不安全或损坏，不能生成不完整导出包");
+            }
+        }
+        if (!wsdlFiles.isEmpty()) data.setApiWsdlFiles(wsdlFiles);
         if (data.getApiResponses() != null) {
             Set<String> exported = new HashSet<String>();
             for (ApiResponse response : data.getApiResponses()) {
@@ -177,8 +211,7 @@ public class ImportExportService {
                     files.put(response.getFilePath(), mockFileStorageService.loadAsResource(response.getFilePath()));
                     exported.add(response.getFilePath());
                 } catch (Exception e) {
-                    log.warn("导出文件响应实体失败，跳过文件实体: filePath={}, reason={}",
-                            response.getFilePath(), e.getMessage());
+                    throw new com.mockhub.common.model.BizException(40927,"EXPORT_ATTACHMENT_MISSING: 附件缺失，不能生成不完整导出包");
                 }
             }
         }
@@ -193,270 +226,181 @@ public class ImportExportService {
      * @param mode   导入模式："merge"（合并）或 "override"（覆盖）
      * @return 导入结果统计
      */
-    public ImportResult importApis(String teamId, ImportExportData data, String mode) {
-        return importApis(teamId, data, mode, Collections.<String, FileBundleEntry>emptyMap());
+    public void checkImportPermission(String teamId,String mode) {
+        if("override".equalsIgnoreCase(mode))permissionChecker.checkTeamAdmin(teamId);
+        else if("merge".equalsIgnoreCase(mode))permissionChecker.checkTeamWrite(teamId);
+        else throw new com.mockhub.common.model.BizException(40000,"导入模式仅支持 merge 或 override");
     }
-
-    public ImportResult importApis(String teamId, ImportExportData data, String mode,
-                                   Map<String, FileBundleEntry> bundledFiles) {
-        permissionChecker.checkTeamAccess(teamId);
-
-        String now = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss").format(new Date());
-        String userId = SecurityContextUtil.getCurrentUserId();
-        boolean isOverride = "override".equalsIgnoreCase(mode);
-
-        // 在任何分组、标签、接口或文件写入前完成模式/返回体预校验，避免随机空池导致半导入。
-        validateImportResponseConfigurations(teamId, data, isOverride);
-
-        int imported = 0;
-        int skipped = 0;
-        int overridden = 0;
-
-        // 导入分组：建立旧 ID → 新 ID 映射
-        Map<String, String> groupIdMap = new HashMap<String, String>();
-        if (data.getGroups() != null) {
-            for (ApiGroup group : data.getGroups()) {
-                String oldId = group.getId();
-                group.setId(UUID.randomUUID().toString());
-                group.setTeamId(teamId);
-                group.setCreatedAt(now);
-                groupRepository.insert(group);
-                groupIdMap.put(oldId, group.getId());
+    public ImportResult importApis(String teamId,ImportExportData data,String mode) {
+        return importApis(teamId,data,mode,Collections.emptyMap(),Collections.emptyMap());
+    }
+    public ImportResult importApis(String teamId,ImportExportData data,String mode,Map<String,FileBundleEntry> files) {
+        return importApis(teamId,data,mode,files,Collections.emptyMap());
+    }
+    public ImportResult importApis(String teamId,ImportExportData data,String mode,Map<String,FileBundleEntry> files,Map<String,Long> expectedRevisions) {
+        return com.mockhub.mock.lifecycle.ApiMutationSource.withSource("IMPORT",() -> apiRepository.write(() ->
+                importInternal(teamId,data,mode,files,expectedRevisions)));
+    }
+    private ImportResult importInternal(String teamId,ImportExportData data,String mode,Map<String,FileBundleEntry> files,Map<String,Long> expectedRevisions) {
+        checkImportPermission(teamId,mode);
+        if(data==null)throw new com.mockhub.common.model.BizException(40000,"导入数据不能为空");
+        boolean override="override".equalsIgnoreCase(mode);int skipped=0,imported=0,overridden=0;
+        List<ImportItem> items=new ArrayList<ImportItem>();Set<String> routes=new HashSet<String>(),sourceIds=new HashSet<String>();
+        // Prevalidate EVERY target/version/configuration while holding the write transaction, before any metadata or disk write.
+        for(ApiDefinition source:data.getApis()==null?Collections.<ApiDefinition>emptyList():data.getApis()) {
+            if(source==null||source.getId()==null||!sourceIds.add(source.getId()))throw new com.mockhub.common.model.BizException(40000,"导入接口ID缺失或重复");
+            String path=com.mockhub.mock.lifecycle.ApiPaths.normalize(source.getPath());
+            if(source.getMethod()==null||source.getMethod().trim().isEmpty())throw new com.mockhub.common.model.BizException(40000,"导入接口方法不能为空");
+            String method=source.getMethod().trim().toUpperCase(java.util.Locale.ROOT);
+            if(!routes.add(method+" "+path))throw new com.mockhub.common.model.BizException(40000,"导入包存在规范化后重复的路径与方法");
+            List<ApiDefinition> found=apiRepository.findByTeamIdAndPathAndMethod(teamId,path,method);
+            ApiDefinition target=found.isEmpty()?null:found.get(0);
+            if(target!=null&&!override) { skipped++;continue; }
+            com.mockhub.mock.model.dto.ApiDefinitionDTO dto=toDto(source,teamId,path,method);
+            dto.setResponses(importResponses(source,data));
+            if(target!=null) {
+                Long expected=expectedRevisions==null?null:expectedRevisions.get(target.getId());
+                if(com.mockhub.mock.lifecycle.ApiVersions.require(expected)!=target.getRevision())throw com.mockhub.mock.lifecycle.ApiVersions.conflict();
+                dto.setExpectedRevision(expected);
             }
-            log.info("导入分组: 数量={}", data.getGroups().size());
+            ResponseValidator.validateDtos(dto.getResponses(),responseModes(source));
+            items.add(new ImportItem(source,target,dto));
         }
-
-        // 导入标签：建立旧 ID → 新 ID 映射
-        Map<String, String> tagIdMap = new HashMap<String, String>();
-        if (data.getTags() != null) {
-            for (Tag tag : data.getTags()) {
-                String oldId = tag.getId();
-                tag.setId(UUID.randomUUID().toString());
-                tag.setTeamId(teamId);
-                tagRepository.insert(tag);
-                tagIdMap.put(oldId, tag.getId());
+        validateWsdlManifest(data,files);
+        // All target revisions were checked above. Store each mapped attachment once, replacing only copied DTO config.
+        Map<String,String> importedWsdls=new HashMap<String,String>();
+        for(ImportItem item:items) {
+            String entry=data.getApiWsdlFiles()==null?null:data.getApiWsdlFiles().get(item.source.getId());
+            if(entry==null)continue;
+            String key=importedWsdls.get(entry);
+            if(key==null) { key=soapService.storeImportedWsdl(teamId,files.get(entry).getData());importedWsdls.put(entry,key); }
+            ((com.fasterxml.jackson.databind.node.ObjectNode)item.dto.getSoapConfig()).put("wsdlFileName",key);
+        }
+        Map<String,String> groupMap=new HashMap<String,String>(),tagMap=new HashMap<String,String>();
+        if(!items.isEmpty()) {
+            for(ApiGroup source:data.getGroups()==null?Collections.<ApiGroup>emptyList():data.getGroups()) {
+                if(source.getId()==null||groupMap.containsKey(source.getId()))throw new com.mockhub.common.model.BizException(40000,"导入分组ID缺失或重复");
+                ApiGroup group=new ApiGroup();group.setId(UUID.randomUUID().toString());group.setTeamId(teamId);group.setName(source.getName());
+                group.setSortOrder(source.getSortOrder());group.setCreatedAt(java.time.Instant.now().toString());groupRepository.insert(group);groupMap.put(source.getId(),group.getId());
             }
-            log.info("导入标签: 数量={}", data.getTags().size());
+            for(Tag source:data.getTags()==null?Collections.<Tag>emptyList():data.getTags()) {
+                if(source.getId()==null||tagMap.containsKey(source.getId()))throw new com.mockhub.common.model.BizException(40000,"导入标签ID缺失或重复");
+                Tag tag=new Tag();tag.setId(UUID.randomUUID().toString());tag.setTeamId(teamId);tag.setName(source.getName());tag.setColor(source.getColor()==null?"#3B6D11":source.getColor());
+                tagRepository.insert(tag);tagMap.put(source.getId(),tag.getId());
+            }
         }
-
-        // 导入接口：建立旧 apiId → 新 apiId 映射
-        Map<String, String> apiIdMap = new HashMap<String, String>();
-        if (data.getApis() != null) {
-            for (ApiDefinition api : data.getApis()) {
-                // 检查同团队内 path+method 是否已存在
-                List<ApiDefinition> existingList = apiRepository.findByTeamIdAndPathAndMethod(
-                        teamId, api.getPath(), api.getMethod());
-
-                if (!existingList.isEmpty()) {
-                    if (isOverride) {
-                        // 覆盖模式：更新已有接口
-                        ApiDefinition existing = existingList.get(0);
-                        existing.setName(api.getName());
-                        existing.setDescription(api.getDescription());
-                        existing.setType(api.getType());
-                        existing.setResponseCode(api.getResponseCode());
-                        existing.setContentType(api.getContentType());
-                        existing.setResponseBody(api.getResponseBody());
-                        existing.setDelayMs(api.getDelayMs());
-                        existing.setGlobalHeaderOverrides(api.getGlobalHeaderOverrides());
-                        existing.setSoapConfig(api.getSoapConfig());
-                        existing.setResponseMode(normalizeResponseMode(api.getResponseMode()));
-                        // 即使导入包没有 apiResponses，也要校验 SOAP operation 中的模式值。
-                        responseModes(existing);
-                        existing.setUpdatedAt(now);
-                        existing.setUpdatedBy(userId);
-
-                        // 映射 groupId
-                        if (api.getGroupId() != null && groupIdMap.containsKey(api.getGroupId())) {
-                            existing.setGroupId(groupIdMap.get(api.getGroupId()));
-                        }
-
-                        apiRepository.update(existing);
-                        // 记录 ID 映射，用于后续导入返回体
-                        apiIdMap.put(api.getId(), existing.getId());
-                        // 覆盖模式下清除旧返回体
-                        apiResponseRepository.deleteByApiId(existing.getId());
-                        overridden++;
-                    } else {
-                        // 合并模式：跳过已存在的
-                        skipped++;
-                    }
+        for(ImportItem item:items) {
+            item.dto.setGroupId(groupMap.get(item.source.getGroupId()));
+            List<String> tags=new ArrayList<String>();
+            if(data.getApiTags()!=null&&data.getApiTags().containsKey(item.source.getId())) {
+                for(String old:data.getApiTags().get(item.source.getId())) {
+                    if(!tagMap.containsKey(old))throw new com.mockhub.common.model.BizException(40000,"导入标签关联缺少标签定义");
+                    tags.add(tagMap.get(old));
+                }
+            } else if(item.target!=null)tags.addAll(apiTagRepository.findTagIdsByApiId(item.target.getId()));
+            item.dto.setTagIds(tags);
+            for(com.mockhub.mock.model.dto.ApiResponseDTO response:item.dto.getResponses()) {
+                if(!"FILE".equalsIgnoreCase(response.getBodyType()))continue;
+                FileBundleEntry bundled=files==null?null:files.get(response.getFilePath());
+                if(bundled!=null) {
+                    MockFileStorageService.StoredMockFile stored=mockFileStorageService.store(teamId,
+                            response.getFileName()==null?bundled.getFileName():response.getFileName(),response.getContentType(),
+                            bundled.getData().length,new ByteArrayInputStream(bundled.getData()));
+                    response.setFilePath(stored.getFilePath());response.setFileName(stored.getFileName());response.setFileSize(stored.getFileSize());
                 } else {
-                    // 新接口：插入
-                    String oldId = api.getId();
-                    api.setId(UUID.randomUUID().toString());
-                    api.setTeamId(teamId);
-                    api.setCreatedBy(userId);
-                    api.setCreatedAt(now);
-                    api.setUpdatedAt(now);
-                    api.setUpdatedBy(userId);
-                    api.setResponseMode(normalizeResponseMode(api.getResponseMode()));
-                    // 即使导入包没有 apiResponses，也要校验 SOAP operation 中的模式值。
-                    responseModes(api);
-
-                    // 映射 groupId
-                    if (api.getGroupId() != null && groupIdMap.containsKey(api.getGroupId())) {
-                        api.setGroupId(groupIdMap.get(api.getGroupId()));
-                    } else {
-                        api.setGroupId(null);
-                    }
-
-                    apiRepository.insert(api);
-                    apiIdMap.put(oldId, api.getId());
-                    imported++;
+                    apiRepository.requireFileReference(teamId,response.getFilePath());mockFileStorageService.loadAsResource(response.getFilePath());
                 }
             }
+            if(item.target==null) { apiService.create(item.dto);imported++; }
+            else { apiService.update(item.target.getId(),item.dto);overridden++; }
         }
-
-        // 导入返回体
-        if (data.getApiResponses() != null && !data.getApiResponses().isEmpty()) {
-            // 先按新 apiId 分组 + 逐组校验（v1.4.3 新增条件响应相关约束，避免写入后数据异常）
-            Map<String, List<ApiResponse>> grouped = new HashMap<String, List<ApiResponse>>();
-            for (ApiResponse resp : data.getApiResponses()) {
-                String newApiId = apiIdMap.get(resp.getApiId());
-                if (newApiId == null) {
-                    // 对应的接口未导入（合并模式下被跳过），跳过此返回体
-                    continue;
-                }
-                resp.setId(UUID.randomUUID().toString());
-                resp.setApiId(newApiId);
-                if ("FILE".equalsIgnoreCase(resp.getBodyType())
-                        && resp.getFilePath() != null
-                        && bundledFiles != null
-                        && bundledFiles.containsKey(resp.getFilePath())) {
-                    FileBundleEntry entry = bundledFiles.get(resp.getFilePath());
-                    MockFileStorageService.StoredMockFile stored = mockFileStorageService.store(
-                            teamId,
-                            resp.getFileName() != null ? resp.getFileName() : entry.getFileName(),
-                            resp.getContentType(),
-                            entry.getData().length,
-                            new ByteArrayInputStream(entry.getData()));
-                    resp.setFilePath(stored.getFilePath());
-                    resp.setFileName(stored.getFileName());
-                    resp.setFileSize(stored.getFileSize());
-                }
-                resp.setCreatedAt(now);
-                resp.setUpdatedAt(now);
-                List<ApiResponse> list = grouped.get(newApiId);
-                if (list == null) {
-                    list = new ArrayList<ApiResponse>();
-                    grouped.put(newApiId, list);
-                }
-                list.add(resp);
-            }
-            // 每个导入接口都必须校验：不能只校验有返回体的分组，否则 RANDOM 的空池会漏过。
-            for (String newApiId : apiIdMap.values()) {
-                ApiDefinition importedApi = apiRepository.findById(newApiId);
-                List<ApiResponse> responses = grouped.get(newApiId);
-                ResponseValidator.validateEntities(responses,
-                        responseModes(importedApi));
-            }
-            int respImported = 0;
-            for (List<ApiResponse> group : grouped.values()) {
-                for (ApiResponse resp : group) {
-                    apiResponseRepository.insert(resp);
-                    respImported++;
-                }
-            }
-            log.info("导入返回体: 数量={}", respImported);
-        } else if (!apiIdMap.isEmpty()) {
-            // 老导出包没有 apiResponses 时，CONDITION 沿用默认返回体兼容路径；
-            // RANDOM 无法凭空生成候选项，必须在写入默认返回体前拒绝。
-            for (String newApiId : apiIdMap.values()) {
-                ApiDefinition importedApi = apiRepository.findById(newApiId);
-                ResponseValidator.validateEntities(null, responseModes(importedApi));
-            }
-            // 兼容旧版导出文件（无 apiResponses 字段）：为每个导入的 REST 接口创建默认返回体
-            for (Map.Entry<String, String> entry : apiIdMap.entrySet()) {
-                String newApiId = entry.getValue();
-                // 检查是否已有返回体（覆盖模式下可能已被上面的逻辑清空）
-                if (apiResponseRepository.countByApiId(newApiId) == 0) {
-                    ApiDefinition importedApi = apiRepository.findById(newApiId);
-                    if (importedApi != null && "REST".equals(importedApi.getType())) {
-                        ApiResponse defaultResp = new ApiResponse();
-                        defaultResp.setId(UUID.randomUUID().toString());
-                        defaultResp.setApiId(newApiId);
-                        defaultResp.setName("Default");
-                        defaultResp.setResponseCode(importedApi.getResponseCode());
-                        defaultResp.setContentType(importedApi.getContentType());
-                        defaultResp.setResponseBody(importedApi.getResponseBody());
-                        defaultResp.setDelayMs(importedApi.getDelayMs());
-                        defaultResp.setActive(true);
-                        defaultResp.setSortOrder(0);
-                        defaultResp.setCreatedAt(now);
-                        defaultResp.setUpdatedAt(now);
-                        apiResponseRepository.insert(defaultResp);
-                    }
-                }
-            }
-        }
-
-        log.info("导入完成: teamId={}, mode={}, imported={}, skipped={}, overridden={}",
-                teamId, mode, imported, skipped, overridden);
-
-        return new ImportResult(imported, skipped, overridden);
+        ImportResult result=new ImportResult(imported,skipped,overridden);
+        if(data.getApiTags()==null&&data.getTags()!=null&&!data.getTags().isEmpty())
+            result.getWarnings().add("TAG_ASSOCIATIONS_UNAVAILABLE: 旧包没有标签关联映射，新接口不推测标签，覆盖接口保留原标签");
+        if(data.getGlobalHeaders()!=null&&!data.getGlobalHeaders().isEmpty())
+            result.getWarnings().add("TEAM_HEADERS_NOT_IMPORTED: 团队全局响应头为共享配置，本次未修改，请由管理员单独核对");
+        return result;
     }
-
-    private String normalizeResponseMode(String mode) {
-        if (mode == null || mode.trim().isEmpty()) {
-            return "CONDITION";
-        }
-        if ("CONDITION".equalsIgnoreCase(mode) || "RANDOM".equalsIgnoreCase(mode)) {
-            return mode.toUpperCase();
-        }
-        throw new com.mockhub.common.model.BizException(40418,
-                "返回体选择模式仅支持 CONDITION 或 RANDOM：" + mode);
-    }
-
-    private Map<String, String> responseModes(ApiDefinition api) {
-        Map<String, String> modes = new HashMap<String, String>();
-        modes.put("__REST__", normalizeResponseMode(api == null ? null : api.getResponseMode()));
-        if (api == null || api.getSoapConfig() == null || api.getSoapConfig().trim().isEmpty()) {
-            return modes;
-        }
+    /** A nonempty WSDL reference must be a string in an object; never silently discard malformed config. */
+    private String wsdlReference(ApiDefinition api) {
+        if(api.getSoapConfig()==null)return null;
         try {
-            JsonNode operations = JSON_MAPPER.readTree(api.getSoapConfig()).path("operations");
-            if (operations.isArray()) {
-                for (JsonNode operation : operations) {
-                    String name = operation.path("operationName").asText(null);
-                    if (name != null && !name.isEmpty()) {
-                        modes.put(name, normalizeResponseMode(operation.path("responseMode").asText(null)));
-                    }
-                }
-            }
-            return modes;
-        } catch (IOException e) {
-            throw new com.mockhub.common.model.BizException(40418,
-                    "SOAP 配置无法解析，无法校验返回体选择模式");
+            JsonNode config=JSON_MAPPER.readTree(api.getSoapConfig());
+            if(config==null || config.isNull())return null;
+            if(!config.isObject())throw new IOException("SOAP config is not an object");
+            JsonNode key=config.get("wsdlFileName");
+            if(key==null || key.isNull() || (key.isTextual() && key.asText().isEmpty()))return null;
+            if(!key.isTextual())throw new IOException("WSDL reference is not a string");
+            return key.asText();
+        } catch(IOException invalid) { throw new com.mockhub.common.model.BizException(40000,"导入接口SOAP配置损坏"); }
+    }
+    private void validateWsdlManifest(ImportExportData data,Map<String,FileBundleEntry> files) {
+        Map<String,String> manifest=data.getApiWsdlFiles()==null?Collections.<String,String>emptyMap():data.getApiWsdlFiles();
+        if(manifest.isEmpty() && !"2.3".equals(data.getVersion()))return; // Legacy JSON keeps aggregate reference validation unchanged.
+        Set<String> referenced=new HashSet<String>();
+        for(ApiDefinition api:data.getApis()==null?Collections.<ApiDefinition>emptyList():data.getApis()) {
+            if(!"SOAP".equalsIgnoreCase(api.getType()))continue;
+            String key=wsdlReference(api);
+            if(key==null)continue;
+            referenced.add(api.getId());
+            if("2.3".equals(data.getVersion()) && !manifest.containsKey(api.getId()))
+                throw new com.mockhub.common.model.BizException(40927,"IMPORT_WSDL_MISSING: 完整导入包缺少WSDL附件映射");
+        }
+        for(Map.Entry<String,String> mapping:manifest.entrySet()) {
+            String entry=mapping.getValue();
+            if(!referenced.contains(mapping.getKey()) || entry==null
+                    || !entry.matches("wsdl/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}[.]wsdl"))
+                throw new com.mockhub.common.model.BizException(40000,"WSDL附件映射无效");
+            FileBundleEntry bundled=files==null?null:files.get(entry);
+            if(bundled==null || bundled.getData()==null || bundled.getData().length==0)
+                throw new com.mockhub.common.model.BizException(40927,"IMPORT_WSDL_MISSING: 完整导入包缺少映射的WSDL附件内容");
+            if(bundled.getData().length>SoapService.MAX_WSDL_BYTES)
+                throw new com.mockhub.common.model.BizException(40701,"WSDL文件不能超过10MiB");
         }
     }
-
-    /**
-     * 仅校验本次实际会导入（新增或 override）的接口。merge 模式下被跳过的既有接口不受导入包影响。
-     */
-    private void validateImportResponseConfigurations(String teamId, ImportExportData data, boolean isOverride) {
-        if (data.getApis() == null || data.getApis().isEmpty()) {
-            return;
+    private com.mockhub.mock.model.dto.ApiDefinitionDTO toDto(ApiDefinition source,String team,String path,String method) {
+        com.mockhub.mock.model.dto.ApiDefinitionDTO dto=new com.mockhub.mock.model.dto.ApiDefinitionDTO();
+        dto.setTeamId(team);dto.setName(source.getName());dto.setType(source.getType()==null?"REST":source.getType());dto.setDescription(source.getDescription());
+        dto.setPath(path);dto.setMethod(method);dto.setEnabled(source.isEnabled());dto.setResponseCode(source.getResponseCode());dto.setContentType(source.getContentType());
+        dto.setResponseBody(source.getResponseBody());dto.setDelayMs(source.getDelayMs());dto.setResponseMode(normalizeResponseMode(source.getResponseMode()));
+        try {
+            if(source.getGlobalHeaderOverrides()!=null)dto.setGlobalHeaderOverrides(JSON_MAPPER.readValue(source.getGlobalHeaderOverrides(),new com.fasterxml.jackson.core.type.TypeReference<Map<String,String>>(){}));
+            if(source.getSoapConfig()!=null)dto.setSoapConfig(JSON_MAPPER.readTree(source.getSoapConfig()));
+        } catch(IOException invalid) { throw new com.mockhub.common.model.BizException(40000,"导入接口JSON配置损坏"); }
+        return dto;
+    }
+    private List<com.mockhub.mock.model.dto.ApiResponseDTO> importResponses(ApiDefinition source,ImportExportData data) {
+        List<com.mockhub.mock.model.dto.ApiResponseDTO> result=new ArrayList<com.mockhub.mock.model.dto.ApiResponseDTO>();
+        if(data.getApiResponses()!=null)for(ApiResponse response:data.getApiResponses())if(source.getId().equals(response.getApiId())) {
+            com.mockhub.mock.model.dto.ApiResponseDTO dto=new com.mockhub.mock.model.dto.ApiResponseDTO();
+            dto.setName(response.getName());dto.setSoapOperationName(response.getSoapOperationName());dto.setActive(response.isActive());
+            dto.setResponseCode(response.getResponseCode());dto.setContentType(response.getContentType());dto.setResponseBody(response.getResponseBody());
+            dto.setBodyType(response.getBodyType());dto.setFilePath(response.getFilePath());dto.setFileName(response.getFileName());dto.setFileSize(response.getFileSize());
+            dto.setDownloadName(response.getDownloadName());dto.setDelayMs(response.getDelayMs());dto.setSortOrder(response.getSortOrder());dto.setConditions(response.getConditions());result.add(dto);
         }
-        Map<String, List<ApiResponse>> responsesByApiId = new HashMap<String, List<ApiResponse>>();
-        if (data.getApiResponses() != null) {
-            for (ApiResponse response : data.getApiResponses()) {
-                List<ApiResponse> responses = responsesByApiId.get(response.getApiId());
-                if (responses == null) {
-                    responses = new ArrayList<ApiResponse>();
-                    responsesByApiId.put(response.getApiId(), responses);
-                }
-                responses.add(response);
+        if(result.isEmpty()&&"CONDITION".equals(normalizeResponseMode(source.getResponseMode()))&&"REST".equalsIgnoreCase(source.getType()==null?"REST":source.getType())) {
+            com.mockhub.mock.model.dto.ApiResponseDTO dto=new com.mockhub.mock.model.dto.ApiResponseDTO();dto.setName("Default");dto.setActive(true);
+            dto.setResponseCode(source.getResponseCode());dto.setContentType(source.getContentType());dto.setResponseBody(source.getResponseBody());dto.setDelayMs(source.getDelayMs());result.add(dto);
+        }
+        return result;
+    }
+    private String normalizeResponseMode(String mode) {
+        if(mode==null||mode.trim().isEmpty())return "CONDITION";
+        if("CONDITION".equalsIgnoreCase(mode)||"RANDOM".equalsIgnoreCase(mode))return mode.toUpperCase(java.util.Locale.ROOT);
+        throw new com.mockhub.common.model.BizException(40418,"返回体选择模式仅支持 CONDITION 或 RANDOM");
+    }
+    private Map<String,String> responseModes(ApiDefinition api) {
+        Map<String,String> modes=new HashMap<String,String>();modes.put("__REST__",normalizeResponseMode(api.getResponseMode()));
+        if(api.getSoapConfig()!=null)try {
+            for(JsonNode operation:JSON_MAPPER.readTree(api.getSoapConfig()).path("operations")) {
+                if(operation.hasNonNull("operationName"))modes.put(operation.path("operationName").asText(),normalizeResponseMode(operation.path("responseMode").asText(null)));
             }
-        }
-        for (ApiDefinition api : data.getApis()) {
-            List<ApiDefinition> existing = apiRepository.findByTeamIdAndPathAndMethod(
-                    teamId, api.getPath(), api.getMethod());
-            if (!existing.isEmpty() && !isOverride) {
-                continue;
-            }
-            ResponseValidator.validateEntities(responsesByApiId.get(api.getId()), responseModes(api));
-        }
+        } catch(IOException invalid) { throw new com.mockhub.common.model.BizException(40418,"SOAP配置无法解析"); }
+        return modes;
+    }
+    private static final class ImportItem {
+        final ApiDefinition source,target;final com.mockhub.mock.model.dto.ApiDefinitionDTO dto;
+        ImportItem(ApiDefinition source,ApiDefinition target,com.mockhub.mock.model.dto.ApiDefinitionDTO dto) { this.source=source;this.target=target;this.dto=dto; }
     }
 
     public static class ExportPackage {

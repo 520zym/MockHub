@@ -62,7 +62,7 @@ public class GlobalHeaderService {
      * @param headers 新的全局响应头列表
      */
     public void replaceAll(String teamId, List<GlobalHeader> headers) {
-        permissionChecker.checkTeamAccess(teamId);
+        permissionChecker.checkTeamAdmin(teamId);
 
         // 为每条记录生成 ID
         if (headers != null) {

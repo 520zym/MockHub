@@ -1,0 +1,10 @@
+# Reproducible single-file galleries and one-off inspection artifacts.
+/index-standalone.html
+/permissions/index-standalone.html
+/permissions/standalone/
+/build/*.json
+/permissions/build/*.json
+/permissions/build/analyze.py
+/permissions/build/blueprint.py
+/permissions/build/bands.py
+/permissions/screens/standalone-p01.png

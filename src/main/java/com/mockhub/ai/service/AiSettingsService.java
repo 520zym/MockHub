@@ -2,6 +2,7 @@ package com.mockhub.ai.service;
 
 import com.mockhub.ai.model.AiProviderPreset;
 import com.mockhub.ai.model.AiSettings;
+import com.mockhub.ai.model.dto.AiConnectionTestRequest;
 import com.mockhub.ai.model.dto.AiSettingsDTO;
 import com.mockhub.ai.model.dto.AiSettingsUpdateRequest;
 import com.mockhub.ai.model.dto.AiStatusDTO;
@@ -109,9 +110,7 @@ public class AiSettingsService {
                 if (!notBlank(current.getBaseUrl())) {
                     current.setBaseUrl(preset.getBaseUrl());
                 }
-                if (!notBlank(current.getModel())) {
-                    current.setModel(preset.getDefaultModel());
-                }
+                // 模型由用户在连接建立后从上游列表中选择，不在保存连接时自动填充。
             }
         }
         if (request.getApiKey() != null) {
@@ -134,9 +133,19 @@ public class AiSettingsService {
 
     /** 设置页连通性测试，仅超管可调用。 */
     public Map<String, Object> testConnection() {
-        AiSettings settings = load();
-        if (!isConfigured(settings)) {
-            throw new BizException(40303, "请先填写 Base URL、Model 与 API Key");
+        return testConnection(load());
+    }
+
+    /**
+     * 对给定配置做一次真实 Chat Completions 探测。
+     * 相比 /models，这条链路能覆盖不提供模型列表的 OpenAI 兼容服务（例如千问AI Token Plan）。
+     */
+    public Map<String, Object> testConnection(AiSettings settings) {
+        if (!isConnectionConfigured(settings)) {
+            throw new BizException(40303, "请先填写服务地址与 API Key");
+        }
+        if (!notBlank(settings.getModel())) {
+            throw new BizException(40303, "请先选择用于测试的模型");
         }
         long started = System.currentTimeMillis();
         String provider = settings.getProvider();
@@ -221,6 +230,68 @@ public class AiSettingsService {
             permissionChecker.checkTeamAccess(teamId);
         }
         return settings;
+    }
+
+    /**
+     * 连接测试与模型列表只需要服务地址和凭据，不要求已经选择模型。
+     */
+    public boolean isConnectionConfigured(AiSettings settings) {
+        if (settings == null || settings.isKeyInvalid()) {
+            return false;
+        }
+        if (AiSettings.PROVIDER_MOCK.equals(settings.getProvider())) {
+            return true;
+        }
+        boolean keyRequired = !"ollama".equalsIgnoreCase(settings.getVendor());
+        return notBlank(settings.getBaseUrl()) && (!keyRequired || notBlank(settings.getApiKey()));
+    }
+
+    /**
+     * 用当前表单拼出一个“不落库”的候选配置，供保存前的连通性测试使用。
+     * apiKey 为 null 时沿用已保存的 Key；空字符串表示本次不使用 Key。
+     */
+    public AiSettings connectionCandidate(AiConnectionTestRequest request) {
+        AiSettings current = load();
+        AiSettings candidate = new AiSettings();
+        candidate.setEnabled(current.isEnabled());
+        candidate.setProvider(current.getProvider());
+        candidate.setVendor(current.getVendor());
+        candidate.setBaseUrl(current.getBaseUrl());
+        candidate.setModel(current.getModel());
+        candidate.setApiKey(current.getApiKey());
+        candidate.setAccessScope(current.getAccessScope());
+
+        if (request != null) {
+            if (request.getProvider() != null && !request.getProvider().trim().isEmpty()) {
+                candidate.setProvider(request.getProvider().trim().toUpperCase());
+            }
+            if (request.getBaseUrl() != null) {
+                candidate.setBaseUrl(trimToNull(request.getBaseUrl()));
+            }
+            if (request.getVendor() != null && !request.getVendor().trim().isEmpty()) {
+                candidate.setVendor(AiProviderPresets.normalize(request.getVendor()));
+            } else if (candidate.getVendor() == null || candidate.getVendor().trim().isEmpty()) {
+                candidate.setVendor(AiProviderPresets.infer(candidate.getBaseUrl()));
+            }
+            if (request.getApiKey() != null) {
+                String key = request.getApiKey().trim();
+                candidate.setApiKey(key.isEmpty() ? null : key);
+            }
+            if (request.getModel() != null) {
+                candidate.setModel(trimToNull(request.getModel()));
+            }
+        }
+        if (!notBlank(candidate.getModel()) && notBlank(candidate.getVendor())) {
+            AiProviderPreset preset = AiProviderPresets.get(candidate.getVendor());
+            if (preset != null && notBlank(preset.getDefaultModel())) {
+                candidate.setModel(preset.getDefaultModel());
+            }
+        }
+        candidate.setKeyInvalid(false);
+        if (!isConnectionConfigured(candidate)) {
+            throw new BizException(40303, "请填写服务地址与 API Key");
+        }
+        return candidate;
     }
 
     public boolean isConfigured(AiSettings settings) {

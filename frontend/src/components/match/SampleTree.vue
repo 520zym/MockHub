@@ -24,12 +24,13 @@
         :search="normalizedSearch"
         :used-paths="usedPathsSet"
         :collapsed="collapsedMap"
+        :read-only="readOnly"
         @toggle="onToggle"
         @pick="onPick"
       />
     </div>
     <div v-else class="tree-empty">
-      <p>粘贴一段示例请求，点击字段即可快速生成条件</p>
+      <p>粘贴并解析请求样例后，在这里查看字段</p>
     </div>
   </div>
 </template>
@@ -58,7 +59,9 @@ const props = defineProps({
   modelValue: { type: String, default: '' },
   /** 已被加入条件的路径数组，用于灰显 + ✓ 标记 */
   usedPaths: { type: Array, default: () => [] },
-  sampleKind: { type: String, default: 'json' }
+  readOnly: { type: Boolean, default: false },
+  sampleKind: { type: String, default: 'json' },
+  flatFields: { type: Boolean, default: false }
 })
 
 const emit = defineEmits(['select'])
@@ -78,6 +81,9 @@ const rootNode = computed(() => {
   try {
     if (props.sampleKind === 'xml') return parseXmlSampleTree(raw)
     const parsed = JSON.parse(raw)
+    if (props.flatFields && parsed && !Array.isArray(parsed) && typeof parsed === 'object') {
+      return { path: '', key: '', kind: 'object', size: Object.keys(parsed).length, children: Object.entries(parsed).map(([key, value]) => ({ path: key, key, kind: 'leaf', value: value == null ? null : String(value), valueType: 'STRING' })) }
+    }
     return buildNode('', '', parsed)
   } catch {
     return null
@@ -140,6 +146,7 @@ function onToggle(path) {
 }
 
 function onPick(node) {
+  if (props.readOnly) return
   if (node.kind !== 'leaf') return
   emit('select', node.path, node.value == null ? '' : node.value, node.valueType)
 }
@@ -154,42 +161,11 @@ watch(normalizedSearch, (kw) => {
 </script>
 
 <style scoped>
-.sample-tree {
-  display: flex;
-  flex-direction: column;
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  padding: 10px;
-}
-.tree-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-.tree-search {
-  flex: 1;
-}
-.field-count {
-  font-size: 11px;
-  color: #9ca3af;
-  white-space: nowrap;
-}
-.tree-body {
-  max-height: 260px;
-  overflow-y: auto;
-  font-family: 'Consolas', 'Monaco', monospace;
-  font-size: 12px;
-  line-height: 1.7;
-  border-top: 1px solid #f3f4f6;
-  padding-top: 6px;
-}
-.tree-empty {
-  color: #9ca3af;
-  font-size: 12px;
-  text-align: center;
-  padding: 28px 12px;
-  border-top: 1px dashed #e5e7eb;
-}
+.sample-tree { display: flex; flex-direction: column; min-width: 0; }
+.tree-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.tree-search { flex: 1; min-width: 0; }
+.tree-search :deep(.el-input__wrapper) { background: #F4F6F9; box-shadow: none; border-radius: 7px; }
+.field-count { font-size: 12px; color: var(--app-text-muted); white-space: nowrap; }
+.tree-body { max-height: 260px; overflow: auto; scrollbar-width: thin; font: 12px/1.8 'SF Mono', Menlo, Consolas, monospace; padding-top: 6px; }
+.tree-empty { color: var(--app-text-muted); font-size: 12px; text-align: center; padding: 18px 8px; background: #F8F9FB; border-radius: 9px; line-height: 1.8; }
 </style>

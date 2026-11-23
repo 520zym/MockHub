@@ -8,13 +8,30 @@ CREATE TABLE IF NOT EXISTS user (
     username     TEXT NOT NULL,
     password_hash TEXT NOT NULL,
     display_name TEXT NOT NULL,
-    global_role  TEXT NOT NULL DEFAULT 'MEMBER',  -- SUPER_ADMIN / TEAM_ADMIN / MEMBER
+    global_role  TEXT NOT NULL DEFAULT 'USER',  -- SUPER_ADMIN / USER
     first_login  INTEGER NOT NULL DEFAULT 1,      -- 0=false, 1=true
+    status       TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'DISABLED')),
+    auth_version INTEGER NOT NULL DEFAULT 0 CHECK (auth_version >= 0),
     created_at   TEXT NOT NULL,
     updated_at   TEXT NOT NULL
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_user_username ON user(username);
+
+-- ========== 网页认证会话（JWT sid） ==========
+
+CREATE TABLE IF NOT EXISTS auth_session (
+    id           TEXT PRIMARY KEY,
+    user_id      TEXT NOT NULL,
+    auth_version INTEGER NOT NULL,
+    created_at   TEXT NOT NULL,
+    expires_at   INTEGER NOT NULL,
+    revoked_at   TEXT,
+    user_agent   TEXT,
+    ip_address   TEXT,
+    FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_auth_session_user ON auth_session(user_id);
 
 -- ========== 团队 ==========
 
@@ -23,18 +40,28 @@ CREATE TABLE IF NOT EXISTS team (
     name       TEXT NOT NULL,
     identifier TEXT NOT NULL,   -- 团队短标识，全局唯一，2~8 大写字母/数字
     color      TEXT NOT NULL DEFAULT '#185FA5',
+    description TEXT,
+    status     TEXT NOT NULL DEFAULT 'ACTIVE' CHECK(status IN ('ACTIVE', 'ARCHIVED')),
+    created_by TEXT,
     created_at TEXT NOT NULL
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_team_identifier ON team(identifier);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_team_name ON team(name);
 
+-- 所有管理员敏感写操作在事务内先更新本行，取得 SQLite 写锁再读取最终状态。
+CREATE TABLE IF NOT EXISTS security_guard (
+    id INTEGER PRIMARY KEY CHECK(id = 1),
+    revision INTEGER NOT NULL DEFAULT 0
+);
+INSERT OR IGNORE INTO security_guard(id, revision) VALUES(1, 0);
+
 -- ========== 用户-团队关联 ==========
 
 CREATE TABLE IF NOT EXISTS user_team (
     user_id TEXT NOT NULL,
     team_id TEXT NOT NULL,
-    role    TEXT NOT NULL DEFAULT 'MEMBER',  -- TEAM_ADMIN / MEMBER
+    role    TEXT NOT NULL DEFAULT 'EDITOR',  -- TEAM_ADMIN / EDITOR / VIEWER
     PRIMARY KEY (user_id, team_id),
     FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE,
     FOREIGN KEY (team_id) REFERENCES team(id) ON DELETE CASCADE
@@ -81,6 +108,10 @@ CREATE TABLE IF NOT EXISTS api_definition (
     created_at             TEXT NOT NULL,
     updated_at             TEXT NOT NULL,
     updated_by             TEXT,
+    revision               INTEGER NOT NULL DEFAULT 1 CHECK(revision >= 1),
+    deleted_at             TEXT,
+    deleted_by             TEXT,
+    purge_after            TEXT,
     FOREIGN KEY (team_id)  REFERENCES team(id) ON DELETE CASCADE,
     FOREIGN KEY (group_id) REFERENCES api_group(id) ON DELETE SET NULL,
     FOREIGN KEY (created_by) REFERENCES user(id) ON DELETE SET NULL,
@@ -89,13 +120,30 @@ CREATE TABLE IF NOT EXISTS api_definition (
 
 -- 同团队内 path + method 唯一
 CREATE UNIQUE INDEX IF NOT EXISTS idx_api_definition_team_path_method
-    ON api_definition(team_id, path, method);
+    ON api_definition(team_id, path, method) WHERE deleted_at IS NULL;
 
 CREATE INDEX IF NOT EXISTS idx_api_definition_team_id ON api_definition(team_id);
 CREATE INDEX IF NOT EXISTS idx_api_definition_group_id ON api_definition(group_id);
 CREATE INDEX IF NOT EXISTS idx_api_definition_enabled ON api_definition(team_id, enabled);
 -- 注意：last_called_at 索引由 migrateV3 创建，避免老库 schema.sql 早于
 -- migrateV3 执行时该列尚不存在导致 CREATE INDEX 失败
+
+-- ========== 接口生命周期 ==========
+
+CREATE TABLE IF NOT EXISTS api_revision (
+    id TEXT PRIMARY KEY, api_id TEXT NOT NULL, team_id TEXT NOT NULL, revision INTEGER NOT NULL,
+    action TEXT NOT NULL, actor_id TEXT, actor_name_snapshot TEXT NOT NULL, created_at TEXT NOT NULL,
+    source TEXT NOT NULL, snapshot_json TEXT NOT NULL, snapshot_schema_version INTEGER NOT NULL DEFAULT 1,
+    restored_from_revision_id TEXT, UNIQUE(api_id, revision)
+);
+CREATE TABLE IF NOT EXISTS api_tombstone (api_id TEXT PRIMARY KEY, team_id TEXT NOT NULL, name TEXT, method TEXT, path TEXT, revision INTEGER NOT NULL, deleted_at TEXT, deleted_by TEXT, purged_at TEXT NOT NULL, purged_by TEXT);
+CREATE INDEX IF NOT EXISTS idx_api_revision_api ON api_revision(api_id, revision DESC);
+CREATE TABLE IF NOT EXISTS api_lifecycle_lock (id INTEGER PRIMARY KEY CHECK(id=1), marker INTEGER NOT NULL DEFAULT 0, history_delete_allowed INTEGER NOT NULL DEFAULT 0);
+INSERT OR IGNORE INTO api_lifecycle_lock(id,marker) VALUES(1,0);
+CREATE TABLE IF NOT EXISTS mock_blob (file_path TEXT PRIMARY KEY, team_id TEXT NOT NULL, lease_expires_at INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS mock_blob_ref (file_path TEXT NOT NULL, owner_type TEXT NOT NULL, owner_id TEXT NOT NULL,
+    expires_at INTEGER, PRIMARY KEY(file_path,owner_type,owner_id));
+CREATE INDEX IF NOT EXISTS idx_mock_blob_ref_owner ON mock_blob_ref(owner_type,owner_id);
 
 -- ========== 标签 ==========
 
@@ -166,7 +214,9 @@ CREATE TABLE IF NOT EXISTS request_log (
     request_params  TEXT,    -- JSON 字符串
     response_code   INTEGER,
     duration_ms     INTEGER,
-    created_at      TEXT NOT NULL
+    created_at      TEXT NOT NULL,
+    -- API：Mock 接口调用；FILE：文件服务器公开链接下载
+    target_type     TEXT NOT NULL DEFAULT 'API'
 );
 
 CREATE INDEX IF NOT EXISTS idx_request_log_team_id ON request_log(team_id);
@@ -282,12 +332,15 @@ CREATE TABLE IF NOT EXISTS file_server_file (
     deleted INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_file_server_team_time ON file_server_file(team_id, uploaded_at);
+-- 文件标签复用团队共享标签表 tag：与接口标签是同一套，删除标签时关联自动失效。
 CREATE TABLE IF NOT EXISTS file_server_tag (
     file_id TEXT NOT NULL,
-    tag TEXT NOT NULL,
-    PRIMARY KEY (file_id, tag)
+    tag_id  TEXT NOT NULL,
+    PRIMARY KEY (file_id, tag_id),
+    FOREIGN KEY (file_id) REFERENCES file_server_file(file_id) ON DELETE CASCADE,
+    FOREIGN KEY (tag_id) REFERENCES tag(id) ON DELETE CASCADE
 );
-CREATE INDEX IF NOT EXISTS idx_file_server_tag_name ON file_server_tag(tag);
+CREATE INDEX IF NOT EXISTS idx_file_server_tag_tag_id ON file_server_tag(tag_id);
 
 -- ========== AI 助手（issue #6） ==========
 -- 单行配置表：id 固定为 'default'。API Key 只在服务端使用，接口永不回显明文。
@@ -321,7 +374,12 @@ CREATE TABLE IF NOT EXISTS ai_pending_action (
     created_at    TEXT NOT NULL,
     expires_at    TEXT NOT NULL,
     confirmed_at  TEXT,
-    result_api_id TEXT
+    result_api_id TEXT,
+    base_revision INTEGER,
+    target_api_id TEXT,
+    source_type TEXT NOT NULL DEFAULT 'WEB',
+    source_token_id TEXT,
+    source_scope_json TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_ai_pending_action_user ON ai_pending_action(user_id, status);
 CREATE INDEX IF NOT EXISTS idx_ai_pending_action_expires ON ai_pending_action(status, expires_at);
@@ -352,6 +410,9 @@ CREATE TABLE IF NOT EXISTS mcp_token (
     name          TEXT NOT NULL,
     token_hash    TEXT NOT NULL,
     token_prefix  TEXT NOT NULL,
+    scope_version INTEGER NOT NULL DEFAULT 0,
+    team_ids      TEXT,
+    scopes        TEXT,
     user_id       TEXT NOT NULL,
     created_at    TEXT NOT NULL,
     last_used_at  TEXT,

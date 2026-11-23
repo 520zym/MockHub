@@ -1,0 +1,524 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440, initial-scale=1">
+<title>接口 · MockHub 信号台</title>
+<link rel="stylesheet" href="assets/desk.css">
+<style>
+  /* 本页专用布局（只用 token，不新增颜色/阴影/圆角） */
+  .pg-main { display: flex; flex-direction: column; height: calc(100vh - var(--chrome-h)); padding: 24px var(--content-pad) 22px; }
+  .pg-head { flex: 0 0 auto; }
+  .pg-toolbar { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 12px 0; }
+  .pg-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+  .tabs { flex: 0 0 auto; }
+  .filters { display: flex; align-items: center; gap: 8px; padding: 10px 0 0; }
+  .filters .spacer { flex: 1; }
+  .table { table-layout: fixed; }
+  .iface { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  .iface__name { font-size: var(--fs-small); font-weight: 500; color: var(--ink); line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .iface__path { line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .detail__body .section { padding: 13px 0; }
+  .detail__body .variant { padding: 7px 0; }
+  .count-cell { text-align: right; font-family: var(--font-mono); font-size: 12px; color: var(--ink-2); }
+  .count-cell small { color: var(--ink-3); font-size: 11px; }
+  .table .cell-actions { padding-right: 8px; }
+  .table .row-actions .icon-btn { width: 24px; height: 24px; }
+  .table-foot {
+    display: flex; align-items: center; gap: 12px; flex: 0 0 40px;
+    padding: 0 14px; border-top: 1px solid var(--line);
+    font-size: var(--fs-micro); color: var(--ink-3); background: var(--surface);
+  }
+  .table-foot .spacer { flex: 1; }
+  .pager { display: flex; align-items: center; gap: 2px; }
+  .pager button {
+    min-width: 24px; height: 24px; padding: 0 6px; border: 1px solid transparent;
+    border-radius: var(--radius); background: none; font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); cursor: pointer;
+  }
+  .pager button:hover { border-color: var(--line-strong); color: var(--ink); }
+  .pager button[aria-current="page"] { background: var(--ink); border-color: var(--ink); color: var(--ink-inv); }
+  .pager button[disabled] { opacity: .4; cursor: default; }
+  .pager button svg { width: 12px; height: 12px; margin: 0 auto; stroke: currentColor; fill: none; }
+  /* 检视器 */
+  .variant { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line-soft); }
+  .variant:last-child { border-bottom: 0; }
+  .variant__main { min-width: 0; flex: 1; }
+  .variant__name { font-size: var(--fs-caption); font-weight: 500; color: var(--ink); }
+  .variant__cond { margin-top: 2px; font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); }
+  .variant__n { font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); }
+  .req-line { display: flex; align-items: baseline; gap: 8px; font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-2); }
+  .req-line b { font-weight: 500; color: var(--ok); }
+  .detail__body .code pre { padding: 10px 12px; }
+</style>
+</head>
+<body class="app">
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-api" viewBox="0 0 16 16"><path d="M5.5 3 2.5 8l3 5M10.5 3l3 5-3 5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-files" viewBox="0 0 16 16"><path d="M2.5 4.2V3.2h4l1.4 1.4h5.6v8.2h-11z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+  <symbol id="i-variables" viewBox="0 0 16 16"><path d="M3 4.5h3.2M9.8 4.5H13M3 11.5h3.2M9.8 11.5H13M6.6 3 9.4 13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-stats" viewBox="0 0 16 16"><path d="M3 13V8M8 13V3M13 13V6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-logs" viewBox="0 0 16 16"><path d="M3 3.5h10M3 8h10M3 12.5h6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-users" viewBox="0 0 16 16"><circle cx="6" cy="5.5" r="2.3" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M2 13c0-2.2 1.8-3.5 4-3.5s4 1.3 4 3.5M11 4.2a2.2 2.2 0 0 1 0 4.2M11.5 13c0-1.6-.6-2.6-1.5-3.2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-teams" viewBox="0 0 16 16"><rect x="2.5" y="3" width="11" height="10" rx="0.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M2.5 6.5h11M6 6.5V13" fill="none" stroke="currentColor" stroke-width="1.5"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.8v1.6M8 12.6v1.6M1.8 8h1.6M12.6 8h1.6M3.7 3.7l1.1 1.1M11.2 11.2l1.1 1.1M12.3 3.7l-1.1 1.1M4.8 11.2l-1.1 1.1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="m10.2 10.2 3.3 3.3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="8" height="8" rx="0.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 5.5v-3h-8v8h3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+  <symbol id="i-chevron-down" viewBox="0 0 16 16"><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-chevron-left" viewBox="0 0 16 16"><path d="m10 4-4 4 4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-chevron-right" viewBox="0 0 16 16"><path d="m6 4 4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-external" viewBox="0 0 16 16"><path d="M9.5 2.5h4v4M13.5 2.5 7.5 8.5M12 9.5v3.5H3V4h3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-more" viewBox="0 0 16 16"><path d="M3.5 8h.01M8 8h.01M12.5 8h.01" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 16 16"><path d="M2.5 4h11M6 4V2.5h4V4M4 4l.8 9.5h6.4L12 4M6.5 6.5v5M9.5 6.5v5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 16 16"><path d="m10.5 2.5 3 3-8 8-3.5 1 1-3.5z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+  <symbol id="i-play" viewBox="0 0 16 16"><path d="M5 3.2 12.5 8 5 12.8z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+  <symbol id="i-check" viewBox="0 0 16 16"><path d="m3 8.5 3.2 3.2L13 5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 16 16"><path d="M8 10.5V2.5M5 5l3-3 3 3M2.5 12.5v1.5h11v-1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-download" viewBox="0 0 16 16"><path d="M8 2.5v8M5 7.5 8 10.5l3-3M2.5 12.5v1.5h11v-1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 16 16"><rect x="3.5" y="7" width="9" height="6.5" rx="0.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M5.8 7V5.2a2.2 2.2 0 0 1 4.4 0V7" fill="none" stroke="currentColor" stroke-width="1.5"/></symbol>
+  <symbol id="i-filter" viewBox="0 0 16 16"><path d="M2.5 3.5h11L9.5 8.5v4L6.5 14V8.5z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 4.8V8l2 1.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-panel" viewBox="0 0 16 16"><rect x="2.5" y="3" width="11" height="10" rx="0.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10 3v10" fill="none" stroke="currentColor" stroke-width="1.5"/></symbol>
+  <symbol id="i-close" viewBox="0 0 16 16"><path d="m4 4 8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-arrow-right" viewBox="0 0 16 16"><path d="M3 8h10M9.5 4.5 13 8l-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</svg>
+
+<header class="chrome">
+  <div class="brand">
+    <svg class="brand__mark" viewBox="0 0 18 18" aria-hidden="true">
+      <rect x="1" y="1" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <path d="M4 12.5 6.5 5l3 7 2.5-7 2 7.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+    </svg>
+    MockHub
+  </div>
+  <button class="chrome__team" type="button" aria-label="切换团队，当前团队 交易中台">
+    <svg width="14" height="14" aria-hidden="true"><use href="#i-teams"/></svg>
+    <b>交易中台</b>
+    <svg width="12" height="12" aria-hidden="true"><use href="#i-chevron-down"/></svg>
+  </button>
+  <div class="chrome__url">
+    <svg width="13" height="13" aria-hidden="true"><use href="#i-lock"/></svg>
+    <span class="mono">mockhub.local:8080/t/acme</span>
+    <button class="icon-btn" type="button" aria-label="复制 Mock 基地址" data-copy="http://mockhub.local:8080/t/acme">
+      <svg aria-hidden="true"><use href="#i-copy"/></svg>
+    </button>
+  </div>
+  <div class="chrome__spacer"></div>
+  <span class="lamp lamp--live">运行中 · 今日 1,284 次</span>
+  <span class="chrome__sep" aria-hidden="true"></span>
+  <button class="chrome__assist" type="button" aria-label="打开对话助手">
+    <svg width="14" height="14" aria-hidden="true"><use href="#i-bolt"/></svg>
+    助手
+  </button>
+  <button class="chrome__user" type="button" aria-label="账号菜单，张一鸣 超级管理员">
+    <span class="avatar">张</span>
+    张一鸣
+  </button>
+</header>
+
+<div class="shell">
+  <nav class="rail" aria-label="主导航">
+    <div class="rail__group">
+      <div class="rail__label">工作区</div>
+      <a class="rail__item is-active" href="02-api-list.html" aria-current="page"><svg aria-hidden="true"><use href="#i-api"/></svg>接口<span class="count">128</span></a>
+      <a class="rail__item" href="#"><svg aria-hidden="true"><use href="#i-files"/></svg>文件服务器</a>
+      <a class="rail__item" href="#"><svg aria-hidden="true"><use href="#i-variables"/></svg>动态变量</a>
+      <a class="rail__item" href="05-stats.html"><svg aria-hidden="true"><use href="#i-stats"/></svg>使用统计</a>
+      <a class="rail__item" href="04-logs.html"><svg aria-hidden="true"><use href="#i-logs"/></svg>日志记录</a>
+    </div>
+    <div class="rail__group">
+      <div class="rail__label">管理</div>
+      <a class="rail__item" href="#"><svg aria-hidden="true"><use href="#i-users"/></svg>账号管理</a>
+      <a class="rail__item" href="07-teams.html"><svg aria-hidden="true"><use href="#i-teams"/></svg>团队管理</a>
+      <a class="rail__item" href="#"><svg aria-hidden="true"><use href="#i-settings"/></svg>全局设置</a>
+    </div>
+    <div class="rail__foot">
+      <b>v1.4.6 · 内网</b>
+      <span>SQLite · 单文件数据</span>
+    </div>
+  </nav>
+
+  <main class="main settle pg-main">
+    <header class="page-head pg-head">
+      <div class="page-head__title">
+        <h1>接口</h1>
+        <div class="page-head__meta">
+          <span>共 <b class="num" style="font-weight:500;color:var(--ink-2)">128</b> 个</span>
+          <span class="sep"></span>
+          <span>5 个分组</span>
+          <span class="sep"></span>
+          <span><span class="lamp-ink lamp-ink--ok">125 启用</span> · <span class="lamp-ink lamp-ink--idle">3 停用</span></span>
+        </div>
+      </div>
+      <div class="page-head__actions">
+        <button class="btn" type="button"><svg aria-hidden="true"><use href="#i-upload"/></svg>导入</button>
+        <button class="btn" type="button"><svg aria-hidden="true"><use href="#i-download"/></svg>导出</button>
+        <button class="btn btn--primary" type="button"><svg aria-hidden="true"><use href="#i-plus"/></svg>新建接口</button>
+      </div>
+    </header>
+
+    <div class="pg-toolbar">
+      <div class="search" role="search">
+        <svg aria-hidden="true"><use href="#i-search"/></svg>
+        <input type="search" placeholder="搜索接口名称或路径" aria-label="搜索接口名称或路径" data-search>
+        <span class="kbd">⌘K</span>
+      </div>
+      <div class="spacer"></div>
+      <button class="btn btn--quiet" type="button"><svg aria-hidden="true"><use href="#i-filter"/></svg>状态 · 全部<svg aria-hidden="true"><use href="#i-chevron-down"/></svg></button>
+      <button class="btn btn--quiet" type="button">分组 / 标签</button>
+      <button class="btn btn--quiet" type="button">最近修改<svg aria-hidden="true"><use href="#i-chevron-down"/></svg></button>
+      <span style="width:1px;height:18px;background:var(--line)"></span>
+      <button class="btn btn--quiet" type="button" aria-label="回收站"><svg aria-hidden="true"><use href="#i-trash"/></svg>回收站</button>
+    </div>
+
+    <div class="tabs" role="tablist" aria-label="按分组筛选" data-tabs>
+      <button class="tab is-active" role="tab" aria-selected="true" aria-controls="api-table-panel">全部<span class="count">128</span></button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="api-table-panel">订单<span class="count">42</span></button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="api-table-panel">支付<span class="count">18</span></button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="api-table-panel">购物车<span class="count">12</span></button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="api-table-panel">会员<span class="count">31</span></button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="api-table-panel">未分组<span class="count">25</span></button>
+    </div>
+
+    <div class="pg-body" style="padding-top:12px">
+      <div class="split" style="flex:1;min-height:0">
+        <div class="split__master">
+          <div class="table-wrap" id="api-table-panel" role="tabpanel" aria-label="接口列表" style="flex:1;min-height:0">
+            <table class="table" data-master="iface-detail">
+              <caption class="sr-only">交易中台团队的接口列表，共 128 个</caption>
+              <thead>
+                <tr>
+                  <th class="col-check" style="width:38px"><input class="checkbox" type="checkbox" aria-label="选择全部接口" data-select-all></th>
+                  <th style="width:58px">方法</th>
+                  <th>接口</th>
+                  <th style="width:54px" class="num">返回体</th>
+                  <th style="width:60px" class="num">今日</th>
+                  <th style="width:78px">最近调用</th>
+                  <th style="width:50px">启用</th>
+                  <th style="width:72px" class="cell-actions"><span class="sr-only">行操作</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="is-selected" data-selectable data-title="订单详情" data-sub="GET /api/order/{orderId} · 3 个返回体">
+                  <td class="col-check"><input class="checkbox" type="checkbox" aria-label="选择 订单详情"></td>
+                  <td><span class="method"><i class="method__lamp"></i>GET</span></td>
+                  <td class="col-name">
+                    <div class="iface">
+                      <span class="iface__name">订单详情</span>
+                      <span class="path iface__path">/api/order/<span class="param">{orderId}</span></span>
+                    </div>
+                  </td>
+                  <td class="count-cell">3</td>
+                  <td class="count-cell num">412</td>
+                  <td class="muted" style="font-size:12px">刚刚</td>
+                  <td><input class="switch" type="checkbox" checked aria-label="启用 订单详情"></td>
+                  <td class="cell-actions">
+                    <span class="row-actions">
+                      <button class="icon-btn" type="button" aria-label="复制 cURL"><svg aria-hidden="true"><use href="#i-copy"/></svg></button>
+                      <button class="icon-btn" type="button" aria-label="编辑 订单详情"><svg aria-hidden="true"><use href="#i-edit"/></svg></button>
+                    </span>
+                  </td>
+                </tr>
+                <tr data-selectable data-title="创建订单" data-sub="POST /api/order/create · 2 个返回体">
+                  <td class="col-check"><input class="checkbox" type="checkbox" aria-label="选择 创建订单"></td>
+                  <td><span class="method method--write"><i class="method__lamp"></i>POST</span></td>
+                  <td class="col-name">
+                    <div class="iface">
+                      <span class="iface__name">创建订单</span>
+                      <span class="path iface__path">/api/order/create</span>
+                    </div>
+                  </td>
+                  <td class="count-cell">2</td>
+                  <td class="count-cell num">268</td>
+                  <td class="muted" style="font-size:12px">2 分钟前</td>
+                  <td><input class="switch" type="checkbox" checked aria-label="启用 创建订单"></td>
+                  <td class="cell-actions">
+                    <span class="row-actions">
+                      <button class="icon-btn" type="button" aria-label="复制 创建订单 的 cURL"><svg aria-hidden="true"><use href="#i-copy"/></svg></button>
+                      <button class="icon-btn" type="button" aria-label="编辑 创建订单"><svg aria-hidden="true"><use href="#i-edit"/></svg></button>
+                    </span>
+                  </td>
+                </tr>
+                <tr data-selectable data-title="支付回调" data-sub="GET /api/payment/callback · 4 个返回体">
+                  <td class="col-check"><input class="checkbox" type="checkbox" aria-label="选择 支付回调"></td>
+                  <td><span class="method"><i class="method__lamp"></i>GET</span></td>
+                  <td class="col-name">
+                    <div class="iface">
+                      <span class="iface__name">支付回调</span>
+                      <span class="path iface__path">/api/payment/callback</span>
+                    </div>
+                  </td>
+                  <td class="count-cell">4</td>
+                  <td class="count-cell num">187</td>
+                  <td class="muted" style="font-size:12px">4 分钟前</td>
+                  <td><input class="switch" type="checkbox" checked aria-label="启用 支付回调"></td>
+                  <td class="cell-actions">
+                    <span class="row-actions">
+                      <button class="icon-btn" type="button" aria-label="复制 支付回调 的 cURL"><svg aria-hidden="true"><use href="#i-copy"/></svg></button>
+                      <button class="icon-btn" type="button" aria-label="编辑 支付回调"><svg aria-hidden="true"><use href="#i-edit"/></svg></button>
+                    </span>
+                  </td>
+                </tr>
+                <tr data-selectable data-title="更新资料" data-sub="PUT /api/user/{userId}/profile · 1 个返回体">
+                  <td class="col-check"><input class="checkbox" type="checkbox" aria-label="选择 更新资料"></td>
+                  <td><span class="method method--write"><i class="method__lamp"></i>PUT</span></td>
+                  <td class="col-name">
+                    <div class="iface">
+                      <span class="iface__name">更新资料</span>
+                      <span class="path iface__path">/api/user/<span class="param">{userId}</span>/profile</span>
+                    </div>
+                  </td>
+                  <td class="count-cell">1</td>
+                  <td class="count-cell num">96</td>
+                  <td class="muted" style="font-size:12px">11 分钟前</td>
+                  <td><input class="switch" type="checkbox" checked aria-label="启用 更新资料"></td>
+                  <td class="cell-actions">
+                    <span class="row-actions">
+                      <button class="icon-btn" type="button" aria-label="复制 更新资料 的 cURL"><svg aria-hidden="true"><use href="#i-copy"/></svg></button>
+                      <button class="icon-btn" type="button" aria-label="编辑 更新资料"><svg aria-hidden="true"><use href="#i-edit"/></svg></button>
+                    </span>
+                  </td>
+                </tr>
+                <tr data-selectable data-title="删除购物车项" data-sub="DELETE /api/cart/item/{itemId} · 1 个返回体">
+                  <td class="col-check"><input class="checkbox" type="checkbox" aria-label="选择 删除购物车项"></td>
+                  <td><span class="method method--write method--danger"><i class="method__lamp"></i>DELETE</span></td>
+                  <td class="col-name">
+                    <div class="iface">
+                      <span class="iface__name">删除购物车项</span>
+                      <span class="path iface__path">/api/cart/item/<span class="param">{itemId}</span></span>
+                    </div>
+                  </td>
+                  <td class="count-cell">1</td>
+                  <td class="count-cell num">12</td>
+                  <td class="muted" style="font-size:12px">32 分钟前</td>
+                  <td><input class="switch" type="checkbox" checked aria-label="启用 删除购物车项"></td>
+                  <td class="cell-actions">
+                    <span class="row-actions">
+                      <button class="icon-btn" type="button" aria-label="复制 删除购物车项 的 cURL"><svg aria-hidden="true"><use href="#i-copy"/></svg></button>
+                      <button class="icon-btn" type="button" aria-label="编辑 删除购物车项"><svg aria-hidden="true"><use href="#i-edit"/></svg></button>
+                    </span>
+                  </td>
+                </tr>
+                <tr data-selectable data-title="订单列表" data-sub="GET /api/order/list · 2 个返回体">
+                  <td class="col-check"><input class="checkbox" type="checkbox" aria-label="选择 订单列表"></td>
+                  <td><span class="method"><i class="method__lamp"></i>GET</span></td>
+                  <td class="col-name">
+                    <div class="iface">
+                      <span class="iface__name">订单列表<span class="chip chip--code" style="margin-left:6px;height:16px;font-size:11px">分页</span></span>
+                      <span class="path iface__path">/api/order/list<span class="dim">?page=1&size=20</span></span>
+                    </div>
+                  </td>
+                  <td class="count-cell">2</td>
+                  <td class="count-cell num">318</td>
+                  <td class="muted" style="font-size:12px">1 分钟前</td>
+                  <td><input class="switch" type="checkbox" checked aria-label="启用 订单列表"></td>
+                  <td class="cell-actions">
+                    <span class="row-actions">
+                      <button class="icon-btn" type="button" aria-label="复制 订单列表 的 cURL"><svg aria-hidden="true"><use href="#i-copy"/></svg></button>
+                      <button class="icon-btn" type="button" aria-label="编辑 订单列表"><svg aria-hidden="true"><use href="#i-edit"/></svg></button>
+                    </span>
+                  </td>
+                </tr>
+                <tr data-selectable data-title="订单服务（SOAP）" data-sub="SOAP /ws/OrderService · 3 个 Operation">
+                  <td class="col-check"><input class="checkbox" type="checkbox" aria-label="选择 订单服务"></td>
+                  <td><span class="method method--write"><i class="method__lamp"></i>SOAP</span></td>
+                  <td class="col-name">
+                    <div class="iface">
+                      <span class="iface__name">订单服务（SOAP）</span>
+                      <span class="path iface__path">/ws/OrderService <span class="dim">?wsdl</span></span>
+                    </div>
+                  </td>
+                  <td class="count-cell">3</td>
+                  <td class="count-cell num">39</td>
+                  <td class="muted" style="font-size:12px">1 小时前</td>
+                  <td><input class="switch" type="checkbox" checked aria-label="启用 订单服务"></td>
+                  <td class="cell-actions">
+                    <span class="row-actions">
+                      <button class="icon-btn" type="button" aria-label="复制 订单服务 的地址"><svg aria-hidden="true"><use href="#i-copy"/></svg></button>
+                      <button class="icon-btn" type="button" aria-label="编辑 订单服务"><svg aria-hidden="true"><use href="#i-edit"/></svg></button>
+                    </span>
+                  </td>
+                </tr>
+                <tr data-selectable data-title="优惠券校验" data-sub="GET /api/coupon/{code} · 2 个返回体 · 已停用">
+                  <td class="col-check"><input class="checkbox" type="checkbox" aria-label="选择 优惠券校验"></td>
+                  <td><span class="method"><i class="method__lamp"></i>GET</span></td>
+                  <td class="col-name">
+                    <div class="iface">
+                      <span class="iface__name">优惠券校验</span>
+                      <span class="path iface__path">/api/coupon/<span class="param">{code}</span></span>
+                    </div>
+                  </td>
+                  <td class="count-cell">2</td>
+                  <td class="count-cell num">41</td>
+                  <td class="muted" style="font-size:12px">2 小时前</td>
+                  <td><input class="switch" type="checkbox" aria-label="启用 优惠券校验"></td>
+                  <td class="cell-actions">
+                    <span class="row-actions">
+                      <button class="icon-btn" type="button" aria-label="复制 优惠券校验 的 cURL"><svg aria-hidden="true"><use href="#i-copy"/></svg></button>
+                      <button class="icon-btn" type="button" aria-label="编辑 优惠券校验"><svg aria-hidden="true"><use href="#i-edit"/></svg></button>
+                    </span>
+                  </td>
+                </tr>
+                <tr data-selectable data-title="退款申请" data-sub="POST /api/refund/apply · 2 个返回体">
+                  <td class="col-check"><input class="checkbox" type="checkbox" aria-label="选择 退款申请"></td>
+                  <td><span class="method method--write"><i class="method__lamp"></i>POST</span></td>
+                  <td class="col-name">
+                    <div class="iface">
+                      <span class="iface__name">退款申请</span>
+                      <span class="path iface__path">/api/refund/apply</span>
+                    </div>
+                  </td>
+                  <td class="count-cell">2</td>
+                  <td class="count-cell num">8</td>
+                  <td class="muted" style="font-size:12px">3 小时前</td>
+                  <td><input class="switch" type="checkbox" checked aria-label="启用 退款申请"></td>
+                  <td class="cell-actions">
+                    <span class="row-actions">
+                      <button class="icon-btn" type="button" aria-label="复制 退款申请 的 cURL"><svg aria-hidden="true"><use href="#i-copy"/></svg></button>
+                      <button class="icon-btn" type="button" aria-label="编辑 退款申请"><svg aria-hidden="true"><use href="#i-edit"/></svg></button>
+                    </span>
+                  </td>
+                </tr>
+                <tr data-selectable data-title="物流轨迹" data-sub="GET /api/logistics/{no} · 2 个返回体">
+                  <td class="col-check"><input class="checkbox" type="checkbox" aria-label="选择 物流轨迹"></td>
+                  <td><span class="method"><i class="method__lamp"></i>GET</span></td>
+                  <td class="col-name">
+                    <div class="iface">
+                      <span class="iface__name">物流轨迹</span>
+                      <span class="path iface__path">/api/logistics/<span class="param">{no}</span></span>
+                    </div>
+                  </td>
+                  <td class="count-cell">2</td>
+                  <td class="count-cell num">0</td>
+                  <td class="muted" style="font-size:12px">6 天前</td>
+                  <td><input class="switch" type="checkbox" checked aria-label="启用 物流轨迹"></td>
+                  <td class="cell-actions">
+                    <span class="row-actions">
+                      <button class="icon-btn" type="button" aria-label="复制 物流轨迹 的 cURL"><svg aria-hidden="true"><use href="#i-copy"/></svg></button>
+                      <button class="icon-btn" type="button" aria-label="编辑 物流轨迹"><svg aria-hidden="true"><use href="#i-edit"/></svg></button>
+                    </span>
+                  </td>
+                </tr>
+                <tr data-selectable data-title="库存快照" data-sub="PATCH /api/stock/{sku} · 1 个返回体">
+                  <td class="col-check"><input class="checkbox" type="checkbox" aria-label="选择 健康检查"></td>
+                  <td><span class="method method--write"><i class="method__lamp"></i>PATCH</span></td>
+                  <td class="col-name">
+                    <div class="iface">
+                      <span class="iface__name">库存快照</span>
+                      <span class="path iface__path">/api/stock/<span class="param">{sku}</span></span>
+                    </div>
+                  </td>
+                  <td class="count-cell">1</td>
+                  <td class="count-cell num">4</td>
+                  <td class="muted" style="font-size:12px">昨天</td>
+                  <td><input class="switch" type="checkbox" aria-label="启用 库存快照"></td>
+                  <td class="cell-actions">
+                    <span class="row-actions">
+                      <button class="icon-btn" type="button" aria-label="复制 库存快照 的 cURL"><svg aria-hidden="true"><use href="#i-copy"/></svg></button>
+                      <button class="icon-btn" type="button" aria-label="编辑 库存快照"><svg aria-hidden="true"><use href="#i-edit"/></svg></button>
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="table-foot">
+            <span>共 128 个接口 · 第 1 页，共 7 页</span>
+            <span class="spacer"></span>
+            <span class="pager">
+              <button type="button" disabled aria-label="上一页"><svg aria-hidden="true"><use href="#i-chevron-left"/></svg></button>
+              <button type="button" aria-current="page">1</button>
+              <button type="button">2</button>
+              <button type="button">3</button>
+              <button type="button" aria-label="下一页"><svg aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+            </span>
+          </div>
+        </div>
+
+        <aside class="split__detail detail" aria-label="接口检视器">
+          <div class="detail__head">
+            <div class="row" style="justify-content:space-between">
+              <span class="lamp-ink lamp-ink--ok">启用中</span>
+              <button class="icon-btn" type="button" aria-label="关闭检视器"><svg aria-hidden="true"><use href="#i-close"/></svg></button>
+            </div>
+            <div class="detail__title" style="margin-top:8px">
+              <span class="method"><i class="method__lamp"></i>GET</span>
+              <h2 data-detail-title>订单详情</h2>
+            </div>
+            <div class="path" style="margin-top:2px" data-detail-sub>/api/order/{orderId}</div>
+          </div>
+
+          <div class="detail__body">
+            <div class="section" style="padding-top:0">
+              <div class="section__label">基本信息</div>
+              <dl class="kv">
+                <dt>分组</dt><dd>订单</dd>
+                <dt>类型</dt><dd>REST · JSON</dd>
+                <dt>创建</dt><dd>张一鸣 · 10-12</dd>
+                <dt>最近修改</dt><dd>10-28 15:20</dd>
+              </dl>
+            </div>
+
+            <div class="section">
+              <div class="section__label">返回体<span class="spacer"></span><span class="mono" style="font-size:11px;letter-spacing:0">3 个</span></div>
+              <div class="variant">
+                <span class="lamp-ink lamp-ink--ok" aria-hidden="true"></span>
+                <div class="variant__main">
+                  <div class="variant__name">默认成功</div>
+                  <div class="variant__cond">无条件下 · 兜底</div>
+                </div>
+                <span class="variant__n">214</span>
+              </div>
+              <div class="variant">
+                <span class="lamp-ink lamp-ink--ok" aria-hidden="true"></span>
+                <div class="variant__main">
+                  <div class="variant__name">微信渠道</div>
+                  <div class="variant__cond">body.channel = wechat</div>
+                </div>
+                <span class="variant__n">186</span>
+              </div>
+              <div class="variant">
+                <span class="lamp-ink lamp-ink--warn" aria-hidden="true"></span>
+                <div class="variant__main">
+                  <div class="variant__name">沙箱超时</div>
+                  <div class="variant__cond">header.x-mock-sandbox = 1</div>
+                </div>
+                <span class="variant__n">12</span>
+              </div>
+            </div>
+
+            <div class="section">
+              <div class="section__label">最近一次请求<span class="spacer"></span><a href="04-logs.html" style="font-size:11px;color:var(--ink-2);text-decoration:underline;text-underline-offset:2px">查看日志</a></div>
+              <div class="req-line">
+                <b>200</b><span>14:32:07</span><span>·</span><span>12 ms</span><span>·</span><span>命中 微信渠道</span>
+              </div>
+            </div>
+
+          </div>
+
+          <div class="detail__foot">
+            <a class="btn btn--primary" href="03-api-edit.html" style="flex:1;justify-content:center"><svg aria-hidden="true"><use href="#i-edit"/></svg>编辑接口</a>
+            <button class="btn" type="button" data-copy="curl -s http://mockhub.local:8080/t/acme/api/order/42"><svg aria-hidden="true"><use href="#i-copy"/></svg>cURL</button>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <div class="bulk-bar" data-bulk hidden role="region" aria-label="批量操作">
+      <span class="count">已选 <b data-bulk-count>0</b> 项</span>
+      <span style="width:1px;height:20px;background:var(--line-inv)"></span>
+      <button class="btn btn--sm" type="button">启用</button>
+      <button class="btn btn--sm" type="button">停用</button>
+      <button class="btn btn--sm" type="button">移动分组</button>
+      <button class="btn btn--sm" type="button">导出选中</button>
+      <span class="spacer"></span>
+      <button class="btn btn--sm btn--danger" type="button">删除</button>
+      <button class="btn btn--sm" type="button">取消选择</button>
+    </div>
+  </main>
+</div>
+
+<script src="assets/desk.js"></script>
+</body>
+</html>

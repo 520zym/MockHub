@@ -35,7 +35,7 @@ public class MockFileMaintenanceService {
     }
 
     public MockFileStorageService.OrphanCleanupResult cleanOrphanFiles() {
-        return mockFileStorageService.deleteOrphanFiles(apiResponseRepository.findAllFilePaths());
+        return apiResponseRepository.withFileGcLock(() -> mockFileStorageService.deleteOrphanFiles(apiResponseRepository.findAllFilePaths()));
     }
 
     public MockFileStorageService.StorageStats getStorageStats() {
@@ -51,7 +51,7 @@ public class MockFileMaintenanceService {
         long retentionMillis = Math.max(1, mockFileProperties.getOrphanRetentionHours()) * 60L * 60L * 1000L;
         long cutoffMillis = new Date().getTime() - retentionMillis;
         MockFileStorageService.OrphanCleanupResult result =
-                mockFileStorageService.deleteOrphanFiles(apiResponseRepository.findAllFilePaths(), cutoffMillis);
+                apiResponseRepository.withFileGcLock(() -> mockFileStorageService.deleteOrphanFiles(apiResponseRepository.findAllFilePaths(), cutoffMillis));
         if (result.getDeletedCount() > 0) {
             log.info("自动清理孤儿文件: deletedCount={}, deletedSize={}",
                     result.getDeletedCount(), result.getDeletedSize());

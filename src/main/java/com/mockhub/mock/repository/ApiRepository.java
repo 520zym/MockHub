@@ -24,6 +24,7 @@ public class ApiRepository {
     private static final Logger log = LoggerFactory.getLogger(ApiRepository.class);
 
     private final JdbcTemplate jdbcTemplate;
+    private final ApiLifecycleRepository lifecycle;
 
     /** api_definition 表行映射器 */
     private static final RowMapper<ApiDefinition> ROW_MAPPER = new RowMapper<ApiDefinition>() {
@@ -46,6 +47,9 @@ public class ApiRepository {
             api.setGlobalHeaderOverrides(rs.getString("global_header_overrides"));
             api.setSoapConfig(rs.getString("soap_config"));
             api.setScenarios(rs.getString("scenarios"));
+            api.setDeletedAt(rs.getString("deleted_at"));
+            api.setDeletedBy(rs.getString("deleted_by"));
+            api.setPurgeAfter(rs.getString("purge_after"));
             api.setResponseMode(rs.getString("response_mode"));
             api.setHitCount(rs.getLong("hit_count"));
             api.setLastCalledAt(rs.getString("last_called_at"));
@@ -53,6 +57,7 @@ public class ApiRepository {
             api.setCreatedAt(rs.getString("created_at"));
             api.setUpdatedAt(rs.getString("updated_at"));
             api.setUpdatedBy(rs.getString("updated_by"));
+            api.setRevision(rs.getLong("revision"));
             return api;
         }
     };
@@ -85,12 +90,73 @@ public class ApiRepository {
             api.setCreatedAt(rs.getString("created_at"));
             api.setUpdatedAt(rs.getString("updated_at"));
             api.setUpdatedBy(rs.getString("updated_by"));
+            api.setRevision(rs.getLong("revision"));
             return api;
         }
     };
 
-    public ApiRepository(JdbcTemplate jdbcTemplate) {
+    public ApiRepository(JdbcTemplate jdbcTemplate) { this(jdbcTemplate,50); }
+    @org.springframework.beans.factory.annotation.Autowired
+    public ApiRepository(JdbcTemplate jdbcTemplate,@org.springframework.beans.factory.annotation.Value("${mock.api.max-revisions:50}") int maxRevisions) {
         this.jdbcTemplate = jdbcTemplate;
+        this.lifecycle = new ApiLifecycleRepository(jdbcTemplate,maxRevisions);
+    }
+
+    public <T> T write(java.util.function.Supplier<T> work) { return lifecycle.write(work); }
+    public void appendRevision(String id,String action,String source,String restoredFrom) { lifecycle.append(id,action,source,restoredFrom); }
+    public List<java.util.Map<String,Object>> history(String id) { return lifecycle.history(id); }
+    public java.util.Map<String,Object> revision(String id,String revisionId) { return lifecycle.revision(id,revisionId); }
+
+    public ApiDefinition findIncludingDeleted(String id) {
+        List<ApiDefinition> rows=jdbcTemplate.query("SELECT * FROM api_definition WHERE id=?", ROW_MAPPER,id);
+        return rows.isEmpty()?null:rows.get(0);
+    }
+    public void markDeleted(String id,String now,String actor,String purgeAfter) {
+        jdbcTemplate.update("UPDATE api_definition SET deleted_at=?,deleted_by=?,purge_after=? WHERE id=? AND deleted_at IS NULL",
+                now,actor,purgeAfter,id);
+    }
+
+    public List<ApiDefinition> findByGroupIncludingDeleted(String groupId) {
+        return jdbcTemplate.query("SELECT * FROM api_definition WHERE group_id=?",ROW_MAPPER,groupId);
+    }
+    public List<ApiDefinition> findByTagIncludingDeleted(String tagId) {
+        return jdbcTemplate.query("SELECT a.* FROM api_definition a JOIN api_tag t ON t.api_id=a.id WHERE t.tag_id=?",ROW_MAPPER,tagId);
+    }
+    public void claimMetadataRevisions(List<ApiDefinition> apis,String teamId) {
+        for(ApiDefinition api:apis) {
+            if(!teamId.equals(api.getTeamId())) throw new com.mockhub.common.model.BizException(40102,"跨团队分组或标签关联无效");
+            if(jdbcTemplate.update("UPDATE api_definition SET revision=revision+1,updated_at=?,updated_by=? WHERE id=? AND revision=?",
+                    java.time.Instant.now().toString(),com.mockhub.common.util.SecurityContextUtil.getCurrentUserId(),api.getId(),api.getRevision())!=1)
+                throw com.mockhub.mock.lifecycle.ApiVersions.conflict();
+        }
+    }
+    public void appendMetadataRevisions(List<ApiDefinition> apis,String action) {
+        for(ApiDefinition api:apis) appendRevision(api.getId(),action,"WEB",null);
+    }
+
+    public void requireFileReference(String teamId,String path) { new MockBlobRepository(jdbcTemplate).requireUsable(teamId,path); }
+
+    public List<java.util.Map<String,Object>> trash(List<String> teamIds,String teamId,int offset,int limit) {
+        return lifecycle.trash(teamIds,teamId,offset,limit);
+    }
+    public long countTrash(List<String> teamIds,String teamId) { return lifecycle.countTrash(teamIds,teamId); }
+    public void applySnapshot(String id,java.util.Map<String,Object> snapshot) { lifecycle.applySnapshot(id,snapshot); }
+    public void purgeAggregate(ApiDefinition api,String actor) { lifecycle.purge(api,actor); }
+    public int purgeExpired(int limit) { return lifecycle.purgeExpired(limit); }
+    public int restore(String id,long expected,String path,String now,String actor,String purgeAfter) {
+        return jdbcTemplate.update("UPDATE api_definition SET revision=revision+1,deleted_at=NULL,deleted_by=NULL,purge_after=NULL,"
+                        + "enabled=0,path=?,updated_at=?,updated_by=? WHERE id=? AND revision=? AND deleted_at IS NOT NULL AND purge_after=?",
+                path,now,actor,id,expected,purgeAfter);
+    }
+    public void removeMissingTeamReferences(String id,String teamId) {
+        jdbcTemplate.update("UPDATE api_definition SET group_id=NULL WHERE id=? AND group_id IS NOT NULL "
+                + "AND NOT EXISTS(SELECT 1 FROM api_group g WHERE g.id=api_definition.group_id AND g.team_id=?)",id,teamId);
+        jdbcTemplate.update("DELETE FROM api_tag WHERE api_id=? AND NOT EXISTS(SELECT 1 FROM tag t WHERE t.id=api_tag.tag_id AND t.team_id=?)",id,teamId);
+    }
+
+    public int claimRevision(String id,long expected,String now,String actor) {
+        return jdbcTemplate.update("UPDATE api_definition SET revision=revision+1,updated_at=?,updated_by=? "
+                + "WHERE id=? AND revision=? AND deleted_at IS NULL",now,actor,id,expected);
     }
 
     /**
@@ -101,7 +167,7 @@ public class ApiRepository {
      */
     public ApiDefinition findById(String id) {
         List<ApiDefinition> list = jdbcTemplate.query(
-                "SELECT * FROM api_definition WHERE id = ?", ROW_MAPPER, id);
+                "SELECT * FROM api_definition WHERE id = ? AND deleted_at IS NULL", ROW_MAPPER, id);
         return list.isEmpty() ? null : list.get(0);
     }
 
@@ -117,7 +183,7 @@ public class ApiRepository {
      */
     public List<ApiDefinition> findByTeamIdAndMethodAndEnabled(String teamId, String method, boolean enabled) {
         return jdbcTemplate.query(
-                "SELECT * FROM api_definition WHERE team_id = ? AND method = ? AND enabled = ?",
+                "SELECT * FROM api_definition WHERE team_id = ? AND method = ? AND enabled = ? AND deleted_at IS NULL",
                 ROW_MAPPER, teamId, method, enabled ? 1 : 0);
     }
 
@@ -131,7 +197,7 @@ public class ApiRepository {
      */
     public List<ApiDefinition> findByTeamIdAndPathAndMethod(String teamId, String path, String method) {
         return jdbcTemplate.query(
-                "SELECT * FROM api_definition WHERE team_id = ? AND path = ? AND method = ?",
+                "SELECT * FROM api_definition WHERE team_id = ? AND path = ? AND method = ? AND deleted_at IS NULL",
                 ROW_MAPPER, teamId, path, method);
     }
 
@@ -175,17 +241,22 @@ public class ApiRepository {
                                        List<String> tagIds, String type,
                                        String sortBy, String sortDir,
                                        int offset, int limit) {
+        return findAll(teamIds,teamId,groupId,method,enabled,keyword,tagIds,type,sortBy,sortDir,offset,limit,null);
+    }
+    public List<ApiDefinition> findAll(List<String> teamIds,String teamId,String groupId,String method,Boolean enabled,
+            String keyword,List<String> tagIds,String type,String sortBy,String sortDir,int offset,int limit,String createdBy) {
         StringBuilder sql = new StringBuilder();
         sql.append("SELECT a.id, a.team_id, a.group_id, a.type, a.name, a.description, a.method, a.path, ");
         sql.append("a.response_code, a.content_type, a.delay_ms, a.enabled, ");
         sql.append("a.global_header_overrides, a.soap_config, a.response_mode, ");
         sql.append("a.hit_count, a.last_called_at, ");
-        sql.append("a.created_by, a.created_at, a.updated_at, a.updated_by ");
+        sql.append("a.created_by, a.created_at, a.updated_at, a.updated_by, a.revision ");
         sql.append("FROM api_definition a ");
 
-        sql.append("WHERE 1=1 ");
+        sql.append("WHERE a.deleted_at IS NULL ");
 
         List<Object> params = new ArrayList<Object>();
+        if(createdBy!=null && !createdBy.isEmpty()) { sql.append("AND a.created_by = ? "); params.add(createdBy); }
         // 多标签筛选：命中任一标签即返回。使用 EXISTS + IN 避免 JOIN 去重问题
         if (tagIds != null && !tagIds.isEmpty()) {
             sql.append("AND EXISTS (SELECT 1 FROM api_tag at WHERE at.api_id = a.id AND at.tag_id IN (");
@@ -261,12 +332,17 @@ public class ApiRepository {
      */
     public long count(List<String> teamIds, String teamId, String groupId,
                       String method, Boolean enabled, String keyword, List<String> tagIds, String type) {
+        return count(teamIds,teamId,groupId,method,enabled,keyword,tagIds,type,null);
+    }
+    public long count(List<String> teamIds,String teamId,String groupId,String method,Boolean enabled,String keyword,
+            List<String> tagIds,String type,String createdBy) {
         StringBuilder sql = new StringBuilder();
         sql.append("SELECT COUNT(*) FROM api_definition a ");
 
-        sql.append("WHERE 1=1 ");
+        sql.append("WHERE a.deleted_at IS NULL ");
 
         List<Object> params = new ArrayList<Object>();
+        if(createdBy!=null && !createdBy.isEmpty()) { sql.append("AND a.created_by = ? "); params.add(createdBy); }
         // 多标签筛选：命中任一标签即计数
         if (tagIds != null && !tagIds.isEmpty()) {
             sql.append("AND EXISTS (SELECT 1 FROM api_tag at WHERE at.api_id = a.id AND at.tag_id IN (");
@@ -381,7 +457,7 @@ public class ApiRepository {
      */
     public long countByGroupId(String groupId) {
         Long count = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM api_definition WHERE group_id = ?", Long.class, groupId);
+                "SELECT COUNT(*) FROM api_definition WHERE group_id = ? AND deleted_at IS NULL", Long.class, groupId);
         return count != null ? count : 0L;
     }
 
@@ -434,7 +510,7 @@ public class ApiRepository {
         if (ids == null || ids.isEmpty()) {
             return java.util.Collections.<ApiDefinition>emptyList();
         }
-        StringBuilder sql = new StringBuilder("SELECT * FROM api_definition WHERE id IN (");
+        StringBuilder sql = new StringBuilder("SELECT * FROM api_definition WHERE deleted_at IS NULL AND id IN (");
         for (int i = 0; i < ids.size(); i++) {
             sql.append(i > 0 ? ",?" : "?");
         }
@@ -523,7 +599,7 @@ public class ApiRepository {
      */
     public List<ApiDefinition> findByTeamId(String teamId) {
         return jdbcTemplate.query(
-                "SELECT * FROM api_definition WHERE team_id = ? ORDER BY created_at",
+                "SELECT * FROM api_definition WHERE team_id = ? AND deleted_at IS NULL ORDER BY created_at",
                 ROW_MAPPER, teamId);
     }
 }

@@ -1,7 +1,7 @@
 <template>
-  <div class="rich-text-editor">
+  <div class="rich-text-editor" :class="{ 'rich-text-editor--readonly': readOnly }" @keydown.capture="markUserEditing" @pointerdown.capture="markUserEditing" @drop.capture="markUserEditing">
     <!-- 工具栏 -->
-    <Toolbar
+    <Toolbar v-if="!readOnly"
       :editor="editorRef"
       :defaultConfig="toolbarConfig"
       class="rich-text-toolbar"
@@ -28,11 +28,12 @@
  * 图片以 base64 内嵌（离线环境无需图片上传服务）。
  * 存储格式为 HTML。
  */
-import { ref, shallowRef, onBeforeUnmount } from 'vue'
+import { ref, shallowRef, watch, onBeforeUnmount } from 'vue'
 import { Editor, Toolbar } from '@wangeditor/editor-for-vue'
 import '@wangeditor/editor/dist/css/style.css'
 
 const props = defineProps({
+  readOnly: { type: Boolean, default: false },
   /** HTML 内容 (v-model) */
   modelValue: {
     type: String,
@@ -54,6 +55,10 @@ const emit = defineEmits(['update:modelValue'])
 
 // 编辑器实例（shallowRef 避免深层响应式代理导致问题）
 const editorRef = shallowRef(null)
+let disposed = false, userEditing = false, lastEmitted = null
+function markUserEditing() { if (!props.readOnly) userEditing = true }
+watch(() => props.readOnly, value => { const editor = editorRef.value; if (editor) value ? editor.disable() : editor.enable() })
+watch(() => props.modelValue, value => { if (value !== lastEmitted) userEditing = false })
 
 // 工具栏配置：只保留常用功能
 const toolbarConfig = {
@@ -81,6 +86,8 @@ const toolbarConfig = {
 // 编辑器配置
 const editorConfig = {
   placeholder: props.placeholder,
+  readOnly: props.readOnly,
+  autoFocus: false,
   // 图片以 base64 内嵌，无需上传服务
   MENU_CONF: {
     insertImage: {
@@ -89,9 +96,10 @@ const editorConfig = {
     uploadImage: {
       // 自定义上传：转为 base64
       customUpload(file, insertFn) {
+        if (props.readOnly || disposed) return
         const reader = new FileReader()
         reader.onload = () => {
-          insertFn(reader.result, file.name, '')
+          if (!props.readOnly && !disposed) insertFn(reader.result, file.name, '')
         }
         reader.readAsDataURL(file)
       }
@@ -102,21 +110,21 @@ const editorConfig = {
 /** 编辑器创建完成回调 */
 function handleCreated(editor) {
   editorRef.value = editor
+  if (props.readOnly) editor.disable()
 }
 
 /** 内容变化回调 */
 function handleChange(editor) {
-  const html = editor.getHtml()
-  // wangeditor 空内容时返回 '<p><br></p>'，统一为空字符串
-  if (html === '<p><br></p>') {
-    emit('update:modelValue', '')
-  } else {
-    emit('update:modelValue', html)
-  }
+  if (props.readOnly || disposed || !userEditing) return
+  const value = editor.getHtml()
+  const html = value === '<p><br></p>' ? '' : value
+  lastEmitted = html
+  if (html !== props.modelValue) emit('update:modelValue', html)
 }
 
 // 组件销毁时释放编辑器
 onBeforeUnmount(() => {
+  disposed = true
   if (editorRef.value) {
     editorRef.value.destroy()
   }
@@ -124,29 +132,8 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.rich-text-editor {
-  border: 2px solid #F1F5F9;
-  border-radius: 10px;
-  overflow: hidden;
-}
-
-.rich-text-toolbar {
-  border-bottom: 1px solid #F1F5F9;
-}
-
-/* 覆盖 wangeditor 默认样式以匹配 Soft UI 风格 */
-.rich-text-content {
-  overflow-y: auto;
-}
-
-:deep(.w-e-text-container) {
-  font-size: 14px;
-  line-height: 1.6;
-  color: #1B2559;
-}
-
-:deep(.w-e-text-placeholder) {
-  color: #A3AED0;
-  font-style: normal;
-}
+.rich-text-editor { min-width: 0; border: 0; border-radius: 10px; overflow: hidden; background: var(--app-bg-control); --w-e-textarea-bgcolor: var(--app-bg-control); --w-e-toolbar-bgcolor: var(--app-bg-control); --w-e-textarea-color: var(--app-text-regular); --w-e-toolbar-active-color: var(--app-accent); --w-e-toolbar-border-color: transparent; }
+.rich-text-toolbar { background: var(--app-bg-control); border: 0; padding: 2px; }
+.rich-text-content { overflow-y: auto; min-width: 0; font-size: 12px; line-height: 1.8; }
+.rich-text-editor :deep(.w-e-bar) { background: transparent; flex-wrap: wrap; }.rich-text-editor :deep(.w-e-text-container) { background: var(--app-bg-control); border: 0; }.rich-text-editor :deep(.w-e-bar-item) { min-width: 25px; }.rich-text-editor :deep(.w-e-bar-item button) { height: 28px; padding: 4px; }.rich-text-editor :deep(.w-e-modal),.rich-text-editor :deep(.w-e-select-list) { box-shadow: none; border: 0; border-radius: 10px; background: white; }.rich-text-editor--readonly :deep([contenteditable]) { cursor: text; }
 </style>

@@ -23,11 +23,11 @@ public class McpTokenRepository {
 
     public void insert(McpToken token) {
         jdbcTemplate.update("INSERT INTO mcp_token "
-                        + "(id, name, token_hash, token_prefix, user_id, created_at, last_used_at, expires_at, revoked_at) "
-                        + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        + "(id, name, token_hash, token_prefix, user_id, created_at, last_used_at, expires_at, revoked_at, scope_version, team_ids, scopes) "
+                        + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 token.getId(), token.getName(), token.getTokenHash(), token.getTokenPrefix(),
                 token.getUserId(), token.getCreatedAt(), token.getLastUsedAt(),
-                token.getExpiresAt(), token.getRevokedAt());
+                token.getExpiresAt(), token.getRevokedAt(), token.getScopeVersion(), token.getTeamIdsJson(), token.getScopesJson());
     }
 
     public McpToken findByHash(String hash) {
@@ -60,9 +60,19 @@ public class McpTokenRepository {
         });
     }
 
+    public List<McpToken> findByOwner(String userId) {
+        return jdbcTemplate.query("SELECT * FROM mcp_token WHERE user_id=? ORDER BY created_at DESC, id", ROW_MAPPER, userId);
+    }
+
     public void revoke(String id, String now) {
         jdbcTemplate.update("UPDATE mcp_token SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL",
                 now, id);
+    }
+
+    /** Explicit owner-wide revocation for password resets, password changes and account disable. */
+    public int revokeAllByOwner(String userId, String now) {
+        return jdbcTemplate.update("UPDATE mcp_token SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL",
+                now, userId);
     }
 
     public void touchLastUsed(String id, String now) {
@@ -82,6 +92,9 @@ public class McpTokenRepository {
             t.setLastUsedAt(rs.getString("last_used_at"));
             t.setExpiresAt(rs.getString("expires_at"));
             t.setRevokedAt(rs.getString("revoked_at"));
+            t.setScopeVersion(rs.getInt("scope_version"));
+            t.setTeamIdsJson(rs.getString("team_ids"));
+            t.setScopesJson(rs.getString("scopes"));
             return t;
         }
     };

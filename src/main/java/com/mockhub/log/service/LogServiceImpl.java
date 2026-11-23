@@ -33,6 +33,8 @@ public class LogServiceImpl implements LogService {
     private final LogRepository logRepository;
     private final LogRetainProperties logRetainProperties;
     private final PermissionChecker permissionChecker;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.mockhub.system.repository.UserRepository users;
 
     public LogServiceImpl(LogRepository logRepository, LogRetainProperties logRetainProperties,
                           PermissionChecker permissionChecker) {
@@ -145,6 +147,20 @@ public class LogServiceImpl implements LogService {
         }
     }
 
+    /** Detail authorization derives from the stored row, not a caller-supplied team parameter. */
+    @Override public RequestLog getRequestLog(String id){
+        RequestLog row=logRepository.findRequestLogById(id);
+        if(row==null)throw new com.mockhub.common.model.BizException(40403,"请求日志不存在或已清理");
+        permissionChecker.checkTeamAccess(row.getTeamId());
+        return mayReadRaw(row.getTeamId())?row:LogPrivacySanitizer.requestCopy(row);
+    }
+    private boolean mayReadRaw(String teamId){
+        if(users==null)return false;
+        com.mockhub.system.model.entity.User actor=users.findById(com.mockhub.common.util.SecurityContextUtil.getCurrentUserId());
+        if(actor==null || !actor.isActive())return false;
+        return "SUPER_ADMIN".equals(actor.getGlobalRole()) || "TEAM_ADMIN".equals(users.findUserTeamRole(actor.getId(),teamId));
+    }
+
     /**
      * 分页查询操作日志（含权限校验）
      */
@@ -153,6 +169,7 @@ public class LogServiceImpl implements LogService {
         permissionChecker.checkTeamAccess(teamId);
         long total = logRepository.countOperationLogs(teamId);
         List<OperationLog> items = logRepository.findOperationLogs(teamId, page, size);
+        if(!mayReadRaw(teamId)){List<OperationLog> safe=new java.util.ArrayList<OperationLog>();for(OperationLog item:items)safe.add(LogPrivacySanitizer.operationCopy(item));items=safe;}
         return PageResult.of(items, total, page, size);
     }
 
@@ -164,6 +181,7 @@ public class LogServiceImpl implements LogService {
         permissionChecker.checkTeamAccess(teamId);
         long total = logRepository.countRequestLogs(teamId);
         List<RequestLog> items = logRepository.findRequestLogs(teamId, page, size);
+        if(!mayReadRaw(teamId)){List<RequestLog> safe=new java.util.ArrayList<RequestLog>();for(RequestLog item:items)safe.add(LogPrivacySanitizer.requestCopy(item));items=safe;}
         return PageResult.of(items, total, page, size);
     }
 }

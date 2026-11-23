@@ -42,6 +42,10 @@ public class AiConversationRepository {
                 LIST_MAPPER, userId, limit);
     }
 
+    public void updateTitle(String id, String title) {
+        jdbcTemplate.update("UPDATE ai_conversation SET title = ? WHERE id = ?", title, id);
+    }
+
     public void updateMeta(String id, String title, String updatedAt) {
         jdbcTemplate.update("UPDATE ai_conversation SET title = COALESCE(?, title), updated_at = ? WHERE id = ?",
                 title, updatedAt, id);
@@ -59,6 +63,17 @@ public class AiConversationRepository {
         return jdbcTemplate.query(
                 "SELECT * FROM ai_conversation_message WHERE conversation_id = ? ORDER BY rowid ASC",
                 MESSAGE_MAPPER, conversationId);
+    }
+
+    /** Resolve immutable resource ownership without reading or returning its private payload. */
+    public String findApiTeam(String apiId) {
+        List<String> teams = jdbcTemplate.queryForList("SELECT team_id FROM api_definition WHERE id = ?", String.class, apiId);
+        return teams.isEmpty() ? null : teams.get(0);
+    }
+
+    public String findActionTeam(String actionId) {
+        List<String> teams = jdbcTemplate.queryForList("SELECT team_id FROM ai_pending_action WHERE id = ?", String.class, actionId);
+        return teams.isEmpty() ? null : teams.get(0);
     }
 
     public void delete(String id, String userId) {

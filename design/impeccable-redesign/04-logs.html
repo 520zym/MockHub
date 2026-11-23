@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440, initial-scale=1">
+<title>请求日志 · MockHub</title>
+<link rel="stylesheet" href="assets/desk.css">
+<style>
+  /* 本页布局：玻璃面板 + 卡片内滚动（只用 tokenower） */
+  .pg-main { display: flex; flex-direction: column; height: calc(100vh - var(--chrome-h)); gap: 14px; padding: 8px var(--content-pad) 0; }
+  .pg-main > .page-head { flex: 0 0 auto; }
+  .split { flex: 1 1 auto; min-height: 0; }
+  .split__master { flex: 0 0 520px; width: 520px; }
+  .split__detail { flex: 1 1 auto; width: auto; }
+  .log-filters { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); flex: 0 0 auto; }
+  .log-filters .search { flex: 1 1 auto; min-width: 0; }
+  .log-foot { display: flex; align-items: center; justify-content: space-between; flex: 0 0 46px; padding: 0 14px; border-top: 1px solid var(--line); font-size: var(--fs-caption); color: var(--ink-3); }
+  .split__master .table th, .split__master .table td { padding: 0 10px; }
+  .split__master .table th:first-child, .split__master .table td:first-child { padding-left: 14px; }
+  .split__master .table th:last-child, .split__master .table td:last-child { padding-right: 14px; }
+  .split__master .method { min-width: 0; }
+  .detail__foot { background: transparent; }
+  .detail__head .detail__title { align-items: center; }
+  .detail__body .section { padding: 12px 0; }
+  .tabs { padding: 0 18px; flex: 0 0 auto; }
+  .detail__body .code pre { padding: 10px 14px; }
+</style>
+</head>
+<body class="app">
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <g id="i-base" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </defs>
+  <symbol id="i-api" viewBox="0 0 16 16"><path d="M5.5 3 2.5 8l3 5M10.5 3l3 5-3 5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-files" viewBox="0 0 16 16"><path d="M2.5 4.2V3.2h4l1.4 1.4h5.6v8.2h-11z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+  <symbol id="i-variables" viewBox="0 0 16 16"><path d="M3 4.5h3.2M9.8 4.5H13M3 11.5h3.2M9.8 11.5H13M6.6 3 9.4 13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-stats" viewBox="0 0 16 16"><path d="M3 13V8M8 13V3M13 13V6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-logs" viewBox="0 0 16 16"><path d="M3 3.5h10M3 8h10M3 12.5h6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-users" viewBox="0 0 16 16"><circle cx="6" cy="5.5" r="2.3" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M2 13c0-2.2 1.8-3.5 4-3.5s4 1.3 4 3.5M11 4.2a2.2 2.2 0 0 1 0 4.2M11.5 13c0-1.6-.6-2.6-1.5-3.2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-teams" viewBox="0 0 16 16"><rect x="2.5" y="3" width="11" height="10" rx="0.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M2.5 6.5h11M6 6.5V13" fill="none" stroke="currentColor" stroke-width="1.5"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.8v1.6M8 12.6v1.6M1.8 8h1.6M12.6 8h1.6M3.7 3.7l1.1 1.1M11.2 11.2l1.1 1.1M12.3 3.7l-1.1 1.1M4.8 11.2l-1.1 1.1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="m10.2 10.2 3.3 3.3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="8" height="8" rx="0.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 5.5v-3h-8v8h3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+  <symbol id="i-chevron-down" viewBox="0 0 16 16"><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-chevron-right" viewBox="0 0 16 16"><path d="m6 4 4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-external" viewBox="0 0 16 16"><path d="M9.5 2.5h4v4M13.5 2.5 7.5 8.5M12 9.5v3.5H3V4h3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-more" viewBox="0 0 16 16"><path d="M3.5 8h.01M8 8h.01M12.5 8h.01" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 16 16"><path d="M2.5 4h11M6 4V2.5h4V4M4 4l.8 9.5h6.4L12 4M6.5 6.5v5M9.5 6.5v5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 16 16"><path d="m10.5 2.5 3 3-8 8-3.5 1 1-3.5z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+  <symbol id="i-play" viewBox="0 0 16 16"><path d="M5 3.2 12.5 8 5 12.8z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 16 16"><path d="M13 8a5 5 0 1 1-1.6-3.7M13 2.2v3.2H9.8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-check" viewBox="0 0 16 16"><path d="m3 8.5 3.2 3.2L13 5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-close" viewBox="0 0 16 16"><path d="m4 4 8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 16 16"><path d="M8 10.5V2.5M5 5l3-3 3 3M2.5 12.5v1.5h11v-1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-download" viewBox="0 0 16 16"><path d="M8 2.5v8M5 7.5 8 10.5l3-3M2.5 12.5v1.5h11v-1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-code" viewBox="0 0 16 16"><path d="m5 5-3 3 3 3M11 5l3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 4.8V8l2 1.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-filter" viewBox="0 0 16 16"><path d="M2.5 3.5h11L9.5 8.5v4L6.5 14V8.5z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+  <symbol id="i-arrow-right" viewBox="0 0 16 16"><path d="M3 8h10M9.5 4.5 13 8l-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 16 16"><rect x="3.5" y="7" width="9" height="6.5" rx="0.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M5.8 7V5.2a2.2 2.2 0 0 1 4.4 0V7" fill="none" stroke="currentColor" stroke-width="1.5"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 16 16"><path d="M8 2.8 14 13H2z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M8 6.2v3.2M8 11.2h.01" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 16 16"><path d="M8.8 1.8 3.5 9h3.6l-.9 5.2L13 6.5H9.2z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 16 16"><path d="M1.5 8S4 3.8 8 3.8 14.5 8 14.5 8 12 12.2 8 12.2 1.5 8 1.5 8Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="8" cy="8" r="1.9" fill="none" stroke="currentColor" stroke-width="1.5"/></symbol>
+  <symbol id="i-eye-off" viewBox="0 0 16 16"><path d="M1.5 8S4 3.8 8 3.8c1.1 0 2 .3 2.9.8M14.5 8s-2.5 4.2-6.5 4.2c-1.1 0-2-.3-2.9-.8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M2.5 2.5 13.5 13.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 16 16"><path d="M8.8 1.8 3.5 9h3.6l-.9 5.2L13 6.5H9.2z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+  <symbol id="i-panel" viewBox="0 0 16 16"><rect x="2.5" y="3" width="11" height="10" rx="0.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10 3v10" fill="none" stroke="currentColor" stroke-width="1.5"/></symbol>
+</svg>
+
+<!-- ===================== 墨色状态条 48px（全局固定） ===================== -->
+<header class="chrome">
+  <div class="brand">
+    <svg class="brand__mark" viewBox="0 0 18 18" aria-hidden="true">
+      <rect x="1" y="1" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <path d="M4 12.5 6.5 5l3 7 2.5-7 2 7.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+    </svg>
+    MockHub
+  </div>
+  <button class="chrome__team" type="button" aria-label="切换团队，当前团队 交易中台">
+    <svg width="14" height="14" aria-hidden="true"><use href="#i-teams"/></svg>
+    <b>交易中台</b>
+    <svg width="12" height="12" aria-hidden="true"><use href="#i-chevron-down"/></svg>
+  </button>
+  <div class="chrome__url">
+    <svg width="13" height="13" aria-hidden="true"><use href="#i-lock"/></svg>
+    <span class="mono">mockhub.local:8080/t/acme</span>
+    <button class="icon-btn" type="button" aria-label="复制 Mock 基地址" data-copy="http://mockhub.local:8080/t/acme">
+      <svg aria-hidden="true"><use href="#i-copy"/></svg>
+    </button>
+  </div>
+  <div class="chrome__spacer"></div>
+  <span class="lamp lamp--live">运行中 · 今日 1,284 次</span>
+  <span class="chrome__sep" aria-hidden="true"></span>
+  <button class="chrome__assist" type="button" aria-label="打开对话助手">
+    <svg width="14" height="14" aria-hidden="true"><use href="#i-bolt"/></svg>
+    助手
+  </button>
+  <button class="chrome__user" type="button" aria-label="账号菜单，张一鸣 超级管理员">
+    <span class="avatar">张</span>
+    张一鸣
+  </button>
+</header>
+
+<div class="shell">
+  <!-- ===================== 左侧导航 232px ===================== -->
+  <nav class="rail" aria-label="主导航">
+    <div class="rail__group">
+      <div class="rail__label">工作区</div>
+      <a class="rail__item" href="02-api-list.html"><svg aria-hidden="true"><use href="#i-api"/></svg>接口<span class="count">128</span></a>
+      <a class="rail__item" href="#"><svg aria-hidden="true"><use href="#i-files"/></svg>文件服务器</a>
+      <a class="rail__item" href="#"><svg aria-hidden="true"><use href="#i-variables"/></svg>动态变量</a>
+      <a class="rail__item" href="05-stats.html"><svg aria-hidden="true"><use href="#i-stats"/></svg>使用统计</a>
+      <a class="rail__item is-active" href="04-logs.html" aria-current="page"><svg aria-hidden="true"><use href="#i-logs"/></svg>日志记录</a>
+    </div>
+    <div class="rail__group">
+      <div class="rail__label">管理</div>
+      <a class="rail__item" href="#"><svg aria-hidden="true"><use href="#i-users"/></svg>账号管理</a>
+      <a class="rail__item" href="07-teams.html"><svg aria-hidden="true"><use href="#i-teams"/></svg>团队管理</a>
+      <a class="rail__item" href="#"><svg aria-hidden="true"><use href="#i-settings"/></svg>全局设置</a>
+    </div>
+    <div class="rail__foot">
+      <b>v1.4.6 · 内网</b>
+      <span>SQLite · 单文件数据</span>
+    </div>
+  </nav>
+
+  <main class="main settle pg-main">
+    <header class="page-head">
+      <div class="page-head__title">
+        <h1>请求日志</h1>
+        <div class="page-head__meta">
+          <span>交易中台</span><span class="sep"></span>
+          <span>保留 30 天</span><span class="sep"></span>
+          <span class="lamp-ink lamp-ink--ok">实时接收</span><span class="sep"></span>
+          <span>今日 <span class="num">1,284</span> 次</span>
+        </div>
+      </div>
+      <div class="page-head__actions">
+        <button class="btn btn--quiet" type="button">暂停实时</button>
+        <button class="btn" type="button"><svg aria-hidden="true"><use href="#i-download"/></svg>导出日志</button>
+      </div>
+    </header>
+
+    <div class="split">
+      <!-- ===== 左：日志列表 520 ===== -->
+      <div class="split__master">
+        <div class="log-filters">
+          <div class="row row--tight">
+            <label class="search">
+              <svg aria-hidden="true"><use href="#i-search"/></svg>
+              <input type="search" placeholder="按路径或请求 ID 搜索" aria-label="搜索日志">
+              <span class="kbd">⌘K</span>
+            </label>
+            <button class="icon-btn" type="button" aria-label="更多筛选条件"><svg aria-hidden="true"><use href="#i-filter"/></svg></button>
+          </div>
+          <div class="row row--tight">
+            <select class="select input--sm" style="width:104px" aria-label="请求方法">
+              <option>全部方法</option><option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option>
+            </select>
+            <select class="select input--sm" style="width:112px" aria-label="响应状态">
+              <option>全部状态</option><option>2xx</option><option>4xx</option><option>5xx</option>
+            </select>
+            <select class="select input--sm" style="width:132px" aria-label="时间范围">
+              <option>最近 15 分钟</option><option>最近 1 小时</option><option>今天</option><option>最近 7 天</option>
+            </select>
+            <span class="grow"></span>
+          </div>
+        </div>
+
+        <div class="table-wrap" style="flex:1 1 auto;min-height:0">
+          <table class="table" style="table-layout:fixed">
+            <caption class="sr-only">最近 15 分钟的请求日志，共 7,842 条，按时间倒序</caption>
+            <colgroup>
+              <col style="width:72px"><col style="width:66px"><col><col style="width:52px"><col style="width:48px">
+            </colgroup>
+            <thead>
+              <tr>
+                <th>时间</th>
+                <th>方法</th>
+                <th>请求</th>
+                <th>状态</th>
+                <th style="text-align:right">延迟</th>
+              </tr>
+            </thead>
+            <tbody>
+          <tr class="is-selected">
+            <td><span class="mono num" style="font-size:11px;color:var(--ink-3)">14:32:07</span></td>
+            <td><span class="method"><i class="method__lamp"></i>GET</span></td>
+            <td class="truncate"><span class="path">/api/order/10086</span></td>
+            <td><span class="lamp-ink lamp-ink--ok num">200</span></td>
+            <td class="num" style="font-size:11px;color:var(--ink-3)">12ms</td>
+          </tr>
+          <tr>
+            <td><span class="mono num" style="font-size:11px;color:var(--ink-3)">14:32:05</span></td>
+            <td><span class="method method--write"><i class="method__lamp"></i>POST</span></td>
+            <td class="truncate"><span class="path">/api/order/create</span></td>
+            <td><span class="lamp-ink lamp-ink--ok num">200</span></td>
+            <td class="num" style="font-size:11px;color:var(--ink-3)">21ms</td>
+          </tr>
+          <tr>
+            <td><span class="mono num" style="font-size:11px;color:var(--ink-3)">14:31:58</span></td>
+            <td><span class="method"><i class="method__lamp"></i>GET</span></td>
+            <td class="truncate"><span class="path">/api/payment/callback<span class="dim">?ch=alipay</span></span></td>
+            <td><span class="lamp-ink lamp-ink--ok num">200</span></td>
+            <td class="num" style="font-size:11px;color:var(--ink-3)">9ms</td>
+          </tr>
+          <tr>
+            <td><span class="mono num" style="font-size:11px;color:var(--ink-3)">14:31:52</span></td>
+            <td><span class="method"><i class="method__lamp"></i>GET</span></td>
+            <td class="truncate"><span class="path">/api/order/10084</span></td>
+            <td><span class="lamp-ink lamp-ink--ok num">200</span></td>
+            <td class="num" style="font-size:11px;color:var(--ink-3)">11ms</td>
+          </tr>
+          <tr>
+            <td><span class="mono num" style="font-size:11px;color:var(--ink-3)">14:31:47</span></td>
+            <td><span class="method method--write"><i class="method__lamp"></i>PUT</span></td>
+            <td class="truncate"><span class="path">/api/user/2041/profile</span></td>
+            <td><span class="lamp-ink lamp-ink--ok num">200</span></td>
+            <td class="num" style="font-size:11px;color:var(--ink-3)">34ms</td>
+          </tr>
+          <tr>
+            <td><span class="mono num" style="font-size:11px;color:var(--ink-3)">14:31:40</span></td>
+            <td><span class="method"><i class="method__lamp"></i>GET</span></td>
+            <td class="truncate"><span class="path">/api/order/10083</span></td>
+            <td><span class="lamp-ink lamp-ink--idle num">404</span></td>
+            <td class="num" style="font-size:11px;color:var(--ink-3)">8ms</td>
+          </tr>
+          <tr>
+            <td><span class="mono num" style="font-size:11px;color:var(--ink-3)">14:31:33</span></td>
+            <td><span class="method method--write method--danger"><i class="method__lamp"></i>DELETE</span></td>
+            <td class="truncate"><span class="path">/api/cart/item/8812</span></td>
+            <td><span class="lamp-ink lamp-ink--ok num">200</span></td>
+            <td class="num" style="font-size:11px;color:var(--ink-3)">15ms</td>
+          </tr>
+          <tr>
+            <td><span class="mono num" style="font-size:11px;color:var(--ink-3)">14:31:29</span></td>
+            <td><span class="method"><i class="method__lamp"></i>GET</span></td>
+            <td class="truncate"><span class="path">/api/payment/callback</span></td>
+            <td><span class="lamp-ink lamp-ink--danger num">500</span></td>
+            <td class="num" style="font-size:11px;color:var(--ink-3)">6ms</td>
+          </tr>
+          <tr>
+            <td><span class="mono num" style="font-size:11px;color:var(--ink-3)">14:31:21</span></td>
+            <td><span class="method"><i class="method__lamp"></i>GET</span></td>
+            <td class="truncate"><span class="path">/api/order/10082</span></td>
+            <td><span class="lamp-ink lamp-ink--ok num">200</span></td>
+            <td class="num" style="font-size:11px;color:var(--ink-3)">13ms</td>
+          </tr>
+          <tr>
+            <td><span class="mono num" style="font-size:11px;color:var(--ink-3)">14:31:15</span></td>
+            <td><span class="method method--write"><i class="method__lamp"></i>POST</span></td>
+            <td class="truncate"><span class="path">/api/order/create</span></td>
+            <td><span class="lamp-ink lamp-ink--ok num">200</span></td>
+            <td class="num" style="font-size:11px;color:var(--ink-3)">19ms</td>
+          </tr>
+          <tr>
+            <td><span class="mono num" style="font-size:11px;color:var(--ink-3)">14:31:09</span></td>
+            <td><span class="method method--write"><i class="method__lamp"></i>POST</span></td>
+            <td class="truncate"><span class="path">/ws/OrderService</span></td>
+            <td><span class="lamp-ink lamp-ink--ok num">200</span></td>
+            <td class="num" style="font-size:11px;color:var(--ink-3)">41ms</td>
+          </tr>
+          <tr>
+            <td><span class="mono num" style="font-size:11px;color:var(--ink-3)">14:31:02</span></td>
+            <td><span class="method"><i class="method__lamp"></i>GET</span></td>
+            <td class="truncate"><span class="path">/api/user/2041</span></td>
+            <td><span class="lamp-ink lamp-ink--ok num">200</span></td>
+            <td class="num" style="font-size:11px;color:var(--ink-3)">10ms</td>
+          </tr>
+          <tr>
+            <td><span class="mono num" style="font-size:11px;color:var(--ink-3)">14:30:55</span></td>
+            <td><span class="method"><i class="method__lamp"></i>GET</span></td>
+            <td class="truncate"><span class="path">/api/order/10081</span></td>
+            <td><span class="lamp-ink lamp-ink--ok num">200</span></td>
+            <td class="num" style="font-size:11px;color:var(--ink-3)">12ms</td>
+          </tr>
+          <tr>
+            <td><span class="mono num" style="font-size:11px;color:var(--ink-3)">14:30:48</span></td>
+            <td><span class="method"><i class="method__lamp"></i>GET</span></td>
+            <td class="truncate"><span class="path">/api/order/1007</span></td>
+            <td><span class="lamp-ink lamp-ink--idle num">404</span></td>
+            <td class="num" style="font-size:11px;color:var(--ink-3)">7ms</td>
+          </tr>
+          <tr>
+            <td><span class="mono num" style="font-size:11px;color:var(--ink-3)">14:30:41</span></td>
+            <td><span class="method method--write"><i class="method__lamp"></i>PUT</span></td>
+            <td class="truncate"><span class="path">/api/user/2040/profile</span></td>
+            <td><span class="lamp-ink lamp-ink--ok num">200</span></td>
+            <td class="num" style="font-size:11px;color:var(--ink-3)">28ms</td>
+          </tr>
+          <tr>
+            <td><span class="mono num" style="font-size:11px;color:var(--ink-3)">14:30:33</span></td>
+            <td><span class="method method--write method--danger"><i class="method__lamp"></i>DELETE</span></td>
+            <td class="truncate"><span class="path">/api/cart/item/8801</span></td>
+            <td><span class="lamp-ink lamp-ink--ok num">200</span></td>
+            <td class="num" style="font-size:11px;color:var(--ink-3)">14ms</td>
+          </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="log-foot">
+          <span class="num">共 7,842 条</span>
+          <button class="btn btn--sm" type="button">加载更多</button>
+        </div>
+      </div>
+
+      <!-- ===== 右：检视器 ===== -->
+      <aside class="split__detail detail" aria-label="请求详情">
+        <div class="detail__head">
+          <div class="detail__title">
+            <span class="method"><i class="method__lamp"></i>GET</span>
+            <span class="path" style="font-size:var(--fs-body)">/api/order/10086</span>
+            <span class="grow"></span>
+            <span class="chip chip--ok">200 OK</span>
+          </div>
+          <div class="row" style="margin-top:9px;gap:8px;flex-wrap:wrap;font-size:var(--fs-caption);color:var(--ink-3)">
+            <span class="mono num">14:32:07.418</span><span>·</span>
+            <span class="mono num">12ms</span><span>·</span>
+            <span class="lamp-ink lamp-ink--warn">兜底返回体 · 默认订单</span><span>·</span>
+            <span class="mono num">216 B</span>
+          </div>
+          <div class="row" style="margin-top:6px;gap:6px;font-size:11px;color:var(--ink-3)">
+            <span>请求 ID</span><span class="mono">lg_9f3a21c8</span>
+            <span>·</span><span>交易中台</span>
+            <span>·</span><span class="mono">172.18.4.21</span>
+          </div>
+        </div>
+
+        <div class="tabs" role="tablist" aria-label="请求详情" data-tabs>
+          <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="p-request">请求</button>
+          <button class="tab is-active" type="button" role="tab" aria-selected="true" aria-controls="p-response">响应</button>
+          <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="p-chain">命中链路<span class="count">4 步</span></button>
+        </div>
+
+        <section class="detail__body" id="p-response" data-tab-panel role="tabpanel" aria-label="响应">
+          <div class="section" style="padding-top:0">
+            <dl class="kv">
+              <dt>状态码</dt><dd><span class="lamp-ink lamp-ink--ok num">200 OK</span></dd>
+              <dt>Content-Type</dt><dd class="mono" style="font-size:var(--fs-caption)">application/json; charset=utf-8</dd>
+              <dt>响应字节</dt><dd class="mono num" style="font-size:var(--fs-caption)">216 B</dd>
+              <dt>响应耗时</dt><dd class="mono num" style="font-size:var(--fs-caption)">12ms（服务端 11.4ms）</dd>
+              <dt>命中返回体</dt><dd><span class="lamp-ink lamp-ink--warn">兜底返回体 · 默认订单</span></dd>
+            </dl>
+          </div>
+          <div class="section">
+            <div class="section__label">响应体<span class="spacer"></span><button class="btn btn--sm btn--quiet" type="button" data-copy='{"orderId":"10086"}'><svg aria-hidden="true"><use href="#i-copy"/></svg>复制 JSON</button></div>
+            <div class="code"><pre>{
+  <span class="key">"orderId"</span><span class="punct">:</span> <span class="str">"10086"</span><span class="punct">,</span>
+  <span class="key">"status"</span><span class="punct">:</span> <span class="str">"CREATED"</span><span class="punct">,</span>
+  <span class="key">"channel"</span><span class="punct">:</span> <span class="str">"unknown"</span><span class="punct">,</span>
+  <span class="key">"amount"</span><span class="punct">:</span> <span class="num">0.00</span><span class="punct">,</span>
+  <span class="key">"createdAt"</span><span class="punct">:</span> <span class="str">"2026-11-04T14:32:07+08:00"</span><span class="punct">,</span>
+  <span class="key">"buyer"</span><span class="punct">:</span> <span class="punct">{</span>
+    <span class="key">"userId"</span><span class="punct">:</span> <span class="str">"2041"</span><span class="punct">,</span>
+    <span class="key">"nickname"</span><span class="punct">:</span> <span class="str">"林小满"</span>
+  <span class="punct">},</span>
+  <span class="key">"items"</span><span class="punct">:</span> <span class="punct">[]</span>
+<span class="punct">}</span></pre></div>
+          </div>
+        </section>
+
+        <section class="detail__body" id="p-request" data-tab-panel role="tabpanel" aria-label="请求" hidden>
+          <div class="section" style="padding-top:0">
+            <div class="section__label">请求头</div>
+            <dl class="kv" style="grid-template-columns:112px 1fr">
+              <dt class="mono">Host</dt><dd class="mono" style="font-size:var(--fs-caption)">mockhub.local:8080</dd>
+              <dt class="mono">User-Agent</dt><dd class="mono truncate" style="font-size:var(--fs-caption)">okhttp/4.12.0</dd>
+              <dt class="mono">Accept</dt><dd class="mono" style="font-size:var(--fs-caption)">application/json</dd>
+              <dt class="mono">Authorization</dt><dd class="mono" style="font-size:var(--fs-caption)">Bearer ···· 8f21</dd>
+            </dl>
+          </div>
+          <div class="section">
+            <div class="section__label">Query 参数</div>
+            <dl class="kv" style="grid-template-columns:112px 1fr">
+              <dt class="mono">channel</dt><dd class="mono" style="font-size:var(--fs-caption)">alipay</dd>
+            </dl>
+          </div>
+          <div class="section">
+            <div class="section__label">请求体</div>
+            <div class="banner">GET 请求没有 Body。条件评估只看 Query 与请求头。</div>
+          </div>
+        </section>
+
+        <section class="detail__body" id="p-chain" data-tab-panel role="tabpanel" aria-label="命中链路" hidden>
+          <div class="chain">
+            <div class="chain__step">
+              <div class="chain__dot">1</div>
+              <div>
+                <div class="chain__title">接口匹配 · 订单详情</div>
+                <div class="chain__meta">GET /api/order/{orderId} ｜ 3 个返回体，按配置顺序评估</div>
+              </div>
+            </div>
+            <div class="chain__step chain__step--miss">
+              <div class="chain__dot">2</div>
+              <div>
+                <div class="chain__title">返回体 1 · 微信渠道 · 未命中</div>
+                <div class="chain__meta">query.channel = wechat ｜ 实际 alipay</div>
+              </div>
+            </div>
+            <div class="chain__step chain__step--miss">
+              <div class="chain__dot">3</div>
+              <div>
+                <div class="chain__title">返回体 2 · 沙箱订单 · 未命中</div>
+                <div class="chain__meta">header.x-mock-sandbox = 1 ｜ 请求头缺失</div>
+              </div>
+            </div>
+            <div class="chain__step chain__step--hit">
+              <div class="chain__dot">4</div>
+              <div>
+                <div class="chain__title">兜底返回体 · 命中</div>
+                <div class="chain__meta">无条件 ｜ 前两条均未满足，按顺序落到兜底</div>
+                <div class="row row--tight" style="margin-top:8px"><span class="chip chip--ok">200</span><span class="chip chip--code">12ms</span></div>
+              </div>
+            </div>
+          </div>
+          <hr class="divider">
+          <div class="row">
+            <button class="btn" type="button"><svg aria-hidden="true"><use href="#i-play"/></svg>重放这次匹配</button>
+            <button class="btn btn--quiet" type="button"><svg aria-hidden="true"><use href="#i-bolt"/></svg>AI 诊断</button>
+          </div>
+          <p style="margin-top:10px;font-size:11px;color:var(--ink-3)">按返回体顺序逐条评估，全部条件为 AND，未命中落到兜底。</p>
+        </section>
+
+        <div class="detail__foot">
+          <button class="btn" type="button" data-copy="curl -s http://mockhub.local:8080/t/acme/api/order/10086"><svg aria-hidden="true"><use href="#i-copy"/></svg>复制 cURL</button>
+          <span class="grow"></span>
+          <button class="btn btn--quiet" type="button"><svg aria-hidden="true"><use href="#i-arrow-right"/></svg>打开接口</button>
+        </div>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<script src="assets/desk.js"></script>
+</body>
+</html>

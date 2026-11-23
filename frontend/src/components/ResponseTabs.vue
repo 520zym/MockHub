@@ -1,34 +1,48 @@
 <template>
   <div class="response-tabs">
-    <div class="response-mode-bar">
-      <span class="response-mode-label">选择方式</span>
-      <el-radio-group :model-value="normalizedSelectionMode" size="small" @change="changeSelectionMode">
-        <el-radio-button value="CONDITION">按条件匹配</el-radio-button>
-        <el-radio-button value="RANDOM">等概率随机</el-radio-button>
-      </el-radio-group>
-      <span class="response-mode-help">
-        {{ normalizedSelectionMode === 'RANDOM'
-          ? '每次从启用的返回体中等概率选择；已有条件会保留，但不会参与本模式的选择。'
-          : '按条件依次匹配；多个启用返回体时必须保留一个无条件兜底。' }}
-      </span>
+    <div v-if="readOnly" class="response-view-bar">
+      <span class="response-readonly">只读查看</span>
+      <el-button v-if="currentResponse && !isCurrentFileResponse" text @click="openFullEditor">全文查看</el-button>
     </div>
-    <!-- Tab 栏 -->
-    <div class="tabs-header">
+
+    <!-- 返回体区头：集合标题/数量 + 选择方式 + 新增/删除，合并原来四条零散工具行 -->
+    <div class="response-head">
+      <div class="response-head__title">
+        <h4>返回体</h4>
+        <span class="response-head__count">{{ responses.length }}</span>
+      </div>
+      <div class="response-mode-bar">
+        <span class="response-mode-label">选择方式</span>
+        <el-radio-group :model-value="normalizedSelectionMode" :disabled="readOnly" size="small" @change="changeSelectionMode">
+          <el-radio-button value="CONDITION">按条件匹配</el-radio-button>
+          <el-radio-button value="RANDOM">等概率随机</el-radio-button>
+        </el-radio-group>
+        <button type="button" class="match-guide-entry" @click="matchGuideVisible = true">图解用法 <span aria-hidden="true">↗</span></button>
+      </div>
+      <div v-if="!readOnly" class="response-head__actions">
+        <el-button class="tab-add" type="primary" @click="addResponse">
+          <el-icon><Plus /></el-icon>
+          新增返回体
+        </el-button>
+      </div>
+    </div>
+
+    <!-- Tab 栏 + 当前返回体启用状态 -->
+    <div class="response-tabbar">
+      <div ref="tabsHeader" class="tabs-header">
       <div
         v-for="(resp, idx) in responses"
         :key="idx"
         class="tab-item"
         :class="{
           active: activeIndex === idx,
-          disabled: !resp.isActive
+          inactive: !resp.isActive
         }"
+        role="button" tabindex="0" :aria-pressed="activeIndex === idx"
+        @keydown.enter="activeIndex = idx" @keydown.space.prevent="activeIndex = idx"
         @click="activeIndex = idx"
       >
-        <!-- 启用/禁用指示点：启用=绿，禁用=灰 -->
-        <span class="active-dot" :class="{ on: resp.isActive, off: !resp.isActive }"></span>
-        <!-- 序号角标 -->
-        <span class="tab-index">{{ ['①','②','③','④','⑤','⑥','⑦','⑧','⑨'][idx] || (idx + 1) }}</span>
-        <!-- 兜底 Tab ⭐ 标记（派生：启用且无规则，且总启用数>=2） -->
+        <!-- 兜底标记：其他条件都不命中时返回这条 -->
         <el-tooltip
           v-if="isFallbackTab(idx)"
           effect="dark"
@@ -37,9 +51,11 @@
         >
           <el-icon class="fallback-star"><StarFilled /></el-icon>
         </el-tooltip>
-        <span v-if="editingTabIndex !== idx" class="tab-name" @dblclick="startEditTabName(idx)">
+        <span v-if="editingTabIndex !== idx" class="tab-name" :title="resp.name || 'Response ' + (idx + 1)" @dblclick="startEditTabName(idx)">
           {{ resp.name || 'Response ' + (idx + 1) }}
         </span>
+        <span class="tab-status">{{ resp.responseCode || 200 }}</span>
+        <span v-if="conditionCount(resp.conditions) > 0" class="tab-cond">{{ conditionCount(resp.conditions) }} 条件</span>
         <span v-if="editingTabIndex !== idx && !resp.isActive" class="disabled-badge">未启用</span>
         <el-input
           v-if="editingTabIndex === idx"
@@ -50,32 +66,52 @@
           @keyup.enter="editingTabIndex = -1"
           autofocus
         />
+        <button
+          v-if="!readOnly"
+          type="button"
+          class="tab-remove"
+          :disabled="responses.length <= 1"
+          :aria-label="'删除返回体 ' + (resp.name || 'Response ' + (idx + 1))"
+          :title="responses.length <= 1 ? '至少保留一个返回体' : '删除此返回体'"
+          @click.stop="removeResponse(idx)"
+        >
+          <el-icon><Close /></el-icon>
+        </button>
       </div>
-      <div class="tab-add" @click="addResponse">
-        <el-icon><Plus /></el-icon>
+      </div>
+      <div v-if="currentResponse" class="response-enable-row">
+        <el-switch :model-value="currentResponse.isActive" :disabled="readOnly" aria-label="启用此返回体" @change="toggleEnabled(activeIndex)" />
+        <span>{{ currentResponse.isActive ? '已启用' : '未启用' }}</span>
       </div>
     </div>
 
     <!-- 当前 Tab 内容 -->
     <div v-if="currentResponse" class="tab-content">
+      <p v-if="selectionIssue" class="response-selection-warning" role="status">{{ selectionIssue }}</p>
       <!-- 响应规则面板：REST 按接口匹配，SOAP 按当前 operation 独立匹配 -->
-      <ConditionPanel
-        v-if="normalizedSelectionMode === 'CONDITION'"
-        v-model="currentResponse.conditions"
-        :body-sample-kind="operationName ? 'xml' : 'json'"
-        :team-id="teamId"
-        :api-context="apiContext"
-        :response-name="currentResponse.name"
-      />
-      <el-alert
-        v-else
-        type="info"
-        :closable="false"
-        show-icon
-        title="随机模式会忽略本返回体已保存的命中条件。切回按条件匹配时，原条件会继续保留。"
-        class="random-mode-alert"
-      />
-      <el-form label-position="top">
+      <!-- v-show keeps the local request samples alive when the team toggles the selection mode. -->
+      <div v-show="normalizedSelectionMode === 'CONDITION'" class="conditions-workspace">
+        <ConditionPanel
+          ref="conditionPanelRef"
+          hide-help
+          v-model="currentResponse.conditions"
+          :body-sample-kind="operationName ? 'xml' : 'json'"
+          :team-id="teamId"
+          :api-context="apiContext"
+          :response-name="currentResponse.name"
+          :read-only="readOnly"
+          :api-id="apiId"
+          :responses="responses"
+          :selected-response-index="activeIndex"
+          :selection-mode="normalizedSelectionMode"
+          :operation-name="operationName"
+          hide-return-preview
+        />
+      </div>
+      <div v-if="normalizedSelectionMode === 'RANDOM'" class="random-mode-summary"><span>{{ responses.filter(r => r.isActive).length }} 份已启用 · 等概率随机</span><button type="button" class="match-guide-entry" @click="conditionPanelRef?.openSamples('trial')">查看随机候选</button></div>
+      <section class="response-body-section">
+        <header class="response-body-heading"><h4>返回内容</h4></header>
+      <el-form label-position="top" :disabled="readOnly">
         <el-row :gutter="16">
           <!-- 名称 -->
           <el-col :span="6">
@@ -95,20 +131,21 @@
               />
             </el-form-item>
           </el-col>
-          <!-- Content-Type（REST 显示，SOAP 隐藏） -->
+          <!-- Content-Type（REST 显示，SOAP 隐藏）：单一控件，与同行输入框等高 -->
           <el-col :span="8" v-if="!operationName">
-            <el-form-item label="Content-Type">
-              <div class="content-type-bar">
-                <span class="content-type-auto">
-                  自动识别：{{ detectedContentType }}
-                  <el-icon v-if="detectedContentType !== '未知'" class="check-icon"><Check /></el-icon>
+            <el-form-item>
+              <template #label>
+                <span class="field-label">Content-Type
+                  <el-tooltip content="根据返回体内容自动识别，也可以手动指定" placement="top">
+                    <el-icon class="field-label__hint"><InfoFilled /></el-icon>
+                  </el-tooltip>
                 </span>
-                <el-radio-group v-model="manualContentType" size="small">
-                  <el-radio-button value="json">JSON</el-radio-button>
-                  <el-radio-button value="xml">XML</el-radio-button>
-                  <el-radio-button value="text">Text</el-radio-button>
-                </el-radio-group>
-              </div>
+              </template>
+              <el-radio-group v-model="manualContentType" class="content-type-group">
+                <el-radio-button value="json">JSON</el-radio-button>
+                <el-radio-button value="xml">XML</el-radio-button>
+                <el-radio-button value="text">Text</el-radio-button>
+              </el-radio-group>
             </el-form-item>
           </el-col>
           <!-- 延迟 -->
@@ -165,7 +202,7 @@
                 <el-icon style="margin-left: 2px"><ArrowDown /></el-icon>
               </el-button>
             </template>
-            <div class="dynamic-var-header">动态变量（点击插入）</div>
+            <div class="dynamic-var-header">动态变量</div>
             <el-input
               v-model="variableSearchKeyword"
               size="small"
@@ -212,12 +249,9 @@
             >
               无匹配变量
             </div>
-            <div class="dynamic-var-tip">
-              提示：在编辑器中输入 <code>{{ '{{' }}</code> 也会弹出补全建议
-            </div>
           </el-popover>
           <el-button
-            v-if="aiStore.capabilities.responseBody"
+            v-if="!readOnly && aiStore.capabilities.responseBody"
             size="small"
             class="ai-gen-btn"
             @click="aiDrawerVisible = true"
@@ -235,6 +269,7 @@
           v-model="currentResponse.responseBody"
           :language="currentEditorLanguage"
           :dynamic-variables="combinedVariablesForEditor"
+          :read-only="readOnly"
           class="response-editor"
         />
         <div v-else-if="!isCurrentFileResponse" class="oversize-preview">
@@ -247,7 +282,7 @@
           <div class="oversize-actions">
             <el-button type="primary" @click="openFullEditor">
               <el-icon><EditPen /></el-icon>
-              全文编辑
+              {{ readOnly ? '全文查看' : '全文编辑' }}
             </el-button>
           </div>
         </div>
@@ -280,6 +315,7 @@
           </el-form-item>
         </div>
       </el-form>
+      </section>
 
       <!-- 全文编辑 Dialog：使用草稿副本避免编辑过程中实时写回触发父页面重渲染 -->
       <el-dialog
@@ -292,7 +328,7 @@
         class="full-editor-dialog"
       >
         <div class="full-editor-toolbar">
-          <el-button size="small" @click="formatDraftBody">
+          <el-button v-if="!readOnly" size="small" @click="formatDraftBody">
             <el-icon><MagicStick /></el-icon>
             格式化
           </el-button>
@@ -306,11 +342,12 @@
           v-model="fullEditorDraft"
           :language="currentEditorLanguage"
           :dynamic-variables="combinedVariablesForEditor"
+          :read-only="readOnly"
           class="full-editor-monaco"
         />
         <template #footer>
           <el-button @click="cancelFullEditor">取消</el-button>
-          <el-button type="primary" @click="confirmFullEditor">保存</el-button>
+          <el-button v-if="!readOnly" type="primary" @click="confirmFullEditor">应用草稿</el-button>
         </template>
       </el-dialog>
 
@@ -340,7 +377,7 @@
         </div>
       </el-dialog>
 
-      <AiResponseDrawer
+      <AiResponseDrawer :read-only="readOnly"
         v-model="aiDrawerVisible"
         :team-id="teamId"
         :api-context="apiContext"
@@ -349,41 +386,8 @@
         @insert="handleAiInsert"
       />
 
-      <!-- 底部操作栏 -->
-      <div class="tab-actions">
-        <!-- 启用/禁用切换（取代原"设为生效"单选语义；多条可同时启用） -->
-        <el-button
-          v-if="!currentResponse.isActive"
-          type="success"
-          size="small"
-          plain
-          @click="toggleEnabled(activeIndex)"
-        >
-          <el-icon><Select /></el-icon>
-          启用此返回体
-        </el-button>
-        <el-button
-          v-else
-          type="warning"
-          size="small"
-          plain
-          @click="toggleEnabled(activeIndex)"
-        >
-          <el-icon><CircleClose /></el-icon>
-          禁用此返回体
-        </el-button>
-        <el-button
-          type="danger"
-          size="small"
-          plain
-          :disabled="responses.length <= 1"
-          @click="removeResponse(activeIndex)"
-        >
-          <el-icon><Delete /></el-icon>
-          删除此返回体
-        </el-button>
-      </div>
     </div>
+    <MatchGuide v-model="matchGuideVisible" :mode="normalizedSelectionMode" :body-sample-kind="operationName ? 'xml' : 'json'" />
   </div>
 </template>
 
@@ -395,21 +399,27 @@
  * REST 模式下 operationName 为 null，SOAP 模式下为对应的 operation 名称。
  * 支持添加、删除、切换、设为生效等操作。
  */
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import {
-  Plus, Check, MagicStick, Upload, Select, Delete, ArrowDown, Search,
-  StarFilled, CircleClose, WarningFilled, EditPen
+  Plus, Close, InfoFilled, MagicStick, Upload, ArrowDown, Search,
+  StarFilled, WarningFilled, EditPen
 } from '@element-plus/icons-vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import MonacoEditor from './MonacoEditor.vue'
 import ConditionPanel from './match/ConditionPanel.vue'
+import MatchGuide from './match/MatchGuide.vue'
 import AiResponseDrawer from '@/components/ai/AiResponseDrawer.vue'
 import { useAiStore } from '@/stores/ai'
 import { DYNAMIC_VARIABLES } from '@/constants/dynamicVariables'
+import { formatJsonBody } from '@/utils/json-placeholders'
 import { getTeamVariables } from '@/api/customVariable'
 import { uploadResponseFile } from '@/api/apis'
 
+const matchGuideVisible = ref(false), conditionPanelRef = ref(null)
+
 const props = defineProps({
+  apiId: { type: String, default: null },
+  readOnly: { type: Boolean, default: false },
   /** 返回体数组 (v-model) */
   modelValue: {
     type: Array,
@@ -448,6 +458,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update:modelValue', 'update:selectionMode'])
+function conditionCount(json) { try { const conditions = JSON.parse(json || '{}').conditions; return Array.isArray(conditions) ? conditions.length : 0 } catch { return 0 } }
 
 const aiStore = useAiStore()
 const aiDrawerVisible = ref(false)
@@ -456,7 +467,18 @@ const normalizedSelectionMode = computed(() =>
   props.selectionMode === 'RANDOM' ? 'RANDOM' : 'CONDITION'
 )
 
+// Only show guidance when the draft needs attention; no modal or permanent instructions.
+const selectionIssue = computed(() => {
+  const enabled = groupMates(activeIndex.value).filter(r => r.isActive)
+  if (!enabled.length) return '请至少启用一份返回体。'
+  if (normalizedSelectionMode.value === 'RANDOM' || enabled.length === 1) return ''
+  const defaults = enabled.filter(r => isEmptyConditions(r.conditions)).length
+  if (!defaults) return '启用的返回体都设置了匹配条件；请求都不命中时将没有内容可返回。请留一份不设条件的返回体作为默认返回。'
+  return defaults > 1 ? '有 ' + defaults + ' 份启用的返回体没有设置匹配条件，但只有一份能作为默认返回。请给其中 ' + (defaults - 1) + ' 份补充条件，或停用不需要的。' : ''
+})
+
 function changeSelectionMode(mode) {
+  if (props.readOnly) return
   emit('update:selectionMode', mode === 'RANDOM' ? 'RANDOM' : 'CONDITION')
 }
 
@@ -468,6 +490,8 @@ const variableSearchKeyword = ref('')
 
 // 团队自定义变量列表（从后端按 teamId 拉取，打开接口编辑页时加载一次）
 const customVariables = ref([])
+let variableRequest = 0, tabDisposed = false
+onBeforeUnmount(() => { tabDisposed = true; variableRequest++ })
 
 // 过滤后的内置变量
 const filteredBuiltin = computed(() => {
@@ -512,6 +536,7 @@ const combinedVariablesForEditor = computed(() => {
 // 选择分组的小对话框状态
 const showGroupPickDialog = ref(false)
 const pickingVariable = ref(null)
+watch(() => props.readOnly, value => { if (value) { aiDrawerVisible.value = false; showGroupPickDialog.value = false; editingTabIndex.value = -1 } })
 
 // Monaco 编辑器引用，用于调用 insertAtCursor
 const editorRef = ref(null)
@@ -537,6 +562,7 @@ const fullEditorRef = ref(null)
  * @param {string} name 变量名，如 'timestamp'
  */
 function insertVariable(name) {
+  if (props.readOnly) return
   const activeRef = (fullEditorVisible.value && fullEditorRef.value)
       ? fullEditorRef.value
       : editorRef.value
@@ -556,6 +582,7 @@ function insertVariable(name) {
  * 点击自定义变量：若有分组则弹对话框让用户选，否则直接插入 {{name}}
  */
 function handleCustomVariableClick(cv) {
+  if (props.readOnly) return
   if (cv.groups && cv.groups.length > 0) {
     pickingVariable.value = cv
     showGroupPickDialog.value = true
@@ -570,6 +597,7 @@ function handleCustomVariableClick(cv) {
  * @param groupName 分组名；null 表示插入 {{cv.name}}（全部值）
  */
 function insertCustomPick(cv, groupName) {
+  if (props.readOnly) return
   if (!cv) return
   const placeholder = groupName ? `${cv.name}.${groupName}` : cv.name
   insertVariable(placeholder)
@@ -581,15 +609,14 @@ function insertCustomPick(cv, groupName) {
  * 拉取团队自定义变量列表
  */
 async function loadCustomVariables() {
-  if (!props.teamId) {
-    customVariables.value = []
-    return
-  }
+  const teamId = props.teamId, sequence = ++variableRequest
+  customVariables.value = []
+  if (!teamId) return
   try {
-    customVariables.value = await getTeamVariables(props.teamId)
-  } catch (e) {
-    // 权限不足或其他错误时静默，响应拦截器已弹错
-    customVariables.value = []
+    const rows = await getTeamVariables(teamId)
+    if (sequence === variableRequest && teamId === props.teamId) customVariables.value = rows
+  } catch {
+    if (sequence === variableRequest) customVariables.value = []
   }
 }
 
@@ -605,6 +632,7 @@ watch(() => props.teamId, () => {
 
 // 当前选中的 Tab 索引
 const activeIndex = ref(0)
+watch(() => props.modelValue.length, length => { if (activeIndex.value >= length) activeIndex.value = Math.max(0, length - 1) })
 
 // 正在编辑名称的 Tab 索引
 const editingTabIndex = ref(-1)
@@ -625,6 +653,26 @@ const currentResponse = computed(() => {
   }
   return null
 })
+
+// Keep the current editing target visible when the tab strip overflows or resizes.
+const tabsHeader = ref(null)
+let tabStripObserver = null
+function revealCurrentTab() {
+  const strip = tabsHeader.value, selected = strip?.querySelector('.tab-item.active')
+  if (!strip || !selected) return
+  const bounds = strip.getBoundingClientRect(), item = selected.getBoundingClientRect()
+  if (item.left < bounds.left) strip.scrollLeft += item.left - bounds.left
+  else if (item.right > bounds.right) strip.scrollLeft += item.right - bounds.right
+}
+watch(() => [activeIndex.value, currentResponse.value?.name, props.readOnly], async () => { await nextTick(); revealCurrentTab() })
+onMounted(() => {
+  if (typeof ResizeObserver !== 'undefined' && tabsHeader.value) {
+    tabStripObserver = new ResizeObserver(revealCurrentTab)
+    tabStripObserver.observe(tabsHeader.value)
+  }
+  revealCurrentTab()
+})
+onBeforeUnmount(() => { tabStripObserver?.disconnect() })
 
 const isCurrentFileResponse = computed(() => {
   return !!currentResponse.value && currentResponse.value.bodyType === 'FILE'
@@ -696,6 +744,7 @@ function openFullEditor() {
 
 /** v1.4.4：保存草稿回写到当前响应体 */
 function confirmFullEditor() {
+  if (props.readOnly) return
   if (currentResponse.value) {
     currentResponse.value.responseBody = fullEditorDraft.value
     emit('update:modelValue', [...responses.value])
@@ -712,14 +761,16 @@ function cancelFullEditor() {
 
 /** v1.4.4：Dialog 内的格式化，目标是 fullEditorDraft（不是父组件的 responseBody） */
 function formatDraftBody() {
+  if (props.readOnly) return
   const body = (fullEditorDraft.value || '').trim()
   if (!body) return
   const type = props.operationName ? 'xml' : manualContentType.value
   if (type === 'json') {
-    try {
-      fullEditorDraft.value = JSON.stringify(JSON.parse(body), null, 2)
-    } catch (e) {
+    const formatted = formatJsonBody(body)
+    if (formatted === null) {
       ElMessage.warning('当前内容不是有效 JSON，无法格式化')
+    } else {
+      fullEditorDraft.value = formatted
     }
   } else if (type === 'xml') {
     if (!/<[^>]+>/.test(body)) {
@@ -751,6 +802,7 @@ watch(detectedContentType, (val) => {
 
 // 同步 manualContentType → currentResponse.contentType
 watch(manualContentType, (val) => {
+  if (props.readOnly) return
   if (!currentResponse.value || props.operationName) return
   if (isCurrentFileResponse.value) return
   const typeMap = { json: 'application/json', xml: 'application/xml', text: 'text/plain' }
@@ -769,6 +821,7 @@ watch(activeIndex, () => {
 
 /** AI 生成内容插入当前返回体 */
 function handleAiInsert(content) {
+  if (props.readOnly) return
   if (!currentResponse.value) return
   currentResponse.value.responseBody = content
   if (!props.operationName) {
@@ -783,11 +836,13 @@ function handleAiInsert(content) {
 
 /** 双击 Tab 名称开始编辑 */
 function startEditTabName(idx) {
+  if (props.readOnly) return
   editingTabIndex.value = idx
 }
 
 /** 添加新返回体 */
 function addResponse() {
+  if (props.readOnly) return
   const newResp = {
     id: null,
     soapOperationName: props.operationName,
@@ -841,49 +896,16 @@ function isEmptyConditions(json) {
  * - 禁用当前唯一兜底 Tab 时弹 warning 拦截
  */
 async function toggleEnabled(idx) {
+  if (props.readOnly) return
   const r = responses.value[idx]
   if (!r) return
-
-  // REST 按全部 Tab 聚合；SOAP 按 operation 聚合
-  const group = groupMates(idx)
-  const enabledCount = group.filter((x) => x.isActive).length
-
-  if (!r.isActive) {
-    // 启用
-    if (enabledCount === 1) {
-      // 即将成为第 2 个启用 → 弹解释对话框
-      try {
-        await ElMessageBox.confirm(
-          '再启用一个返回体将进入"条件匹配模式"：至少保留一个启用返回体无规则作为兜底，其他都需配置响应规则。系统会按 Tab 顺序匹配第一条命中的规则。',
-          '进入条件匹配模式',
-          {
-            confirmButtonText: '继续启用',
-            cancelButtonText: '取消',
-            type: 'info'
-          }
-        )
-      } catch {
-        return
-      }
-    }
-    r.isActive = true
-    emit('update:modelValue', [...responses.value])
-    return
+  const group = groupMates(idx), enabledCount = group.filter(x => x.isActive).length
+  if (r.isActive && enabledCount <= 1) { ElMessage.warning('至少保留一个启用的返回体'); return }
+  if (r.isActive && normalizedSelectionMode.value === 'CONDITION' && enabledCount > 2 && isEmptyConditions(r.conditions)) {
+    const otherFallback = group.some(x => x !== r && x.isActive && isEmptyConditions(x.conditions))
+    if (!otherFallback) { ElMessage.warning('请先为另一份启用的返回体留空条件，作为兜底'); return }
   }
-
-  // 禁用：检查是否是当前唯一的"启用+无规则"兜底 Tab
-  if (enabledCount >= 2 && isEmptyConditions(r.conditions)) {
-    // 看是否还有其他启用+无规则 Tab
-    const otherFallback = group.some((x, i) => {
-      const gIdx = responses.value.indexOf(x)
-      return gIdx !== idx && x.isActive && isEmptyConditions(x.conditions)
-    })
-    if (!otherFallback) {
-      ElMessage.warning('这是当前的兜底返回体，请先给它配规则或先禁用其他带规则的 Tab')
-      return
-    }
-  }
-  r.isActive = false
+  r.isActive = !r.isActive
   emit('update:modelValue', [...responses.value])
 }
 
@@ -898,6 +920,7 @@ function groupMates(idx) {
 
 /** 删除返回体 */
 function removeResponse(idx) {
+  if (props.readOnly) return
   if (responses.value.length <= 1) return
   responses.value.splice(idx, 1)
   // 调整 activeIndex
@@ -940,6 +963,7 @@ function formatXml(xml) {
  *       manualContentType 保持默认 'json' 永远不会变，不能作为判断依据。
  */
 function formatBody() {
+  if (props.readOnly) return
   if (!currentResponse.value) return
   if (isCurrentFileResponse.value) return
   const body = (currentResponse.value.responseBody || '').trim()
@@ -948,11 +972,11 @@ function formatBody() {
   const type = props.operationName ? 'xml' : manualContentType.value
 
   if (type === 'json') {
-    try {
-      const parsed = JSON.parse(body)
-      currentResponse.value.responseBody = JSON.stringify(parsed, null, 2)
-    } catch (e) {
+    const formatted = formatJsonBody(body)
+    if (formatted === null) {
       ElMessage.warning('当前内容不是有效 JSON，无法格式化')
+    } else {
+      currentResponse.value.responseBody = formatted
     }
   } else if (type === 'xml') {
     if (!/<[^>]+>/.test(body)) {
@@ -970,6 +994,7 @@ function formatBody() {
 }
 
 function handleBodyTypeChange(type) {
+  if (props.readOnly) return
   if (!currentResponse.value) return
   currentResponse.value.bodyType = type
   if (type === 'FILE') {
@@ -984,6 +1009,7 @@ function handleBodyTypeChange(type) {
 }
 
 function clearResponseFile(emitUpdate = true) {
+  if (props.readOnly) return
   if (!currentResponse.value) return
   currentResponse.value.fileName = ''
   currentResponse.value.filePath = ''
@@ -996,6 +1022,7 @@ function clearResponseFile(emitUpdate = true) {
 
 /** 从文件上传响应体内容；文本模式读为文本，文件模式上传到后端文件仓库。 */
 async function handleUploadFile(uploadFile) {
+  if (props.readOnly) return
   if (!uploadFile || !uploadFile.raw) return
   if (isCurrentFileResponse.value) {
     if (!props.teamId) {
@@ -1003,15 +1030,16 @@ async function handleUploadFile(uploadFile) {
       return
     }
     try {
-      const meta = await uploadResponseFile(props.teamId, uploadFile.raw)
-      if (!currentResponse.value) return
-      currentResponse.value.bodyType = 'FILE'
-      currentResponse.value.fileName = meta.fileName || uploadFile.name
-      currentResponse.value.filePath = meta.filePath || ''
-      currentResponse.value.downloadName = meta.downloadName || meta.fileName || uploadFile.name
-      currentResponse.value.fileSize = meta.fileSize || uploadFile.size || null
-      currentResponse.value.contentType = meta.contentType || uploadFile.raw.type || 'application/octet-stream'
-      currentResponse.value.responseBody = ''
+      const target = currentResponse.value, teamId = props.teamId
+      const meta = await uploadResponseFile(teamId, uploadFile.raw)
+      if (tabDisposed || props.readOnly || teamId !== props.teamId || !responses.value.includes(target) || target.bodyType !== 'FILE') return
+      target.bodyType = 'FILE'
+      target.fileName = meta.fileName || uploadFile.name
+      target.filePath = meta.filePath || ''
+      target.downloadName = meta.downloadName || meta.fileName || uploadFile.name
+      target.fileSize = meta.fileSize || uploadFile.size || null
+      target.contentType = meta.contentType || uploadFile.raw.type || 'application/octet-stream'
+      target.responseBody = ''
       emit('update:modelValue', [...responses.value])
       ElMessage.success('响应文件已上传')
     } catch (e) {
@@ -1019,10 +1047,10 @@ async function handleUploadFile(uploadFile) {
     }
     return
   }
-  const reader = new FileReader()
+  const reader = new FileReader(), target = currentResponse.value, teamId = props.teamId
   reader.onload = (e) => {
-    if (currentResponse.value) {
-      currentResponse.value.responseBody = e.target.result
+    if (!tabDisposed && !props.readOnly && teamId === props.teamId && responses.value.includes(target) && target.bodyType !== 'FILE') {
+      target.responseBody = e.target.result
     }
   }
   reader.readAsText(uploadFile.raw)
@@ -1030,299 +1058,100 @@ async function handleUploadFile(uploadFile) {
 </script>
 
 <style scoped>
-.response-tabs {
-  width: 100%;
-}
+.response-tabs { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 15px; }
+.response-view-bar { display: flex; justify-content: flex-end; align-items: center; gap: 10px; min-width: 0; }
+.response-readonly { color: var(--app-text-secondary); font-size: 12px; }
+.response-mode-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; min-width: 0; }
+/* Content-Type：一行文字标签 + 与同行输入框等高的分段控件，不再额外占一行"自动识别" */
+.field-label { display: inline-flex; align-items: center; gap: 4px; }
+.field-label__hint { color: var(--app-text-secondary); font-size: 12px; cursor: help; }
+/* 与同排 el-input / el-input-number 的实际高度对齐（38px token + 2px 内边距边框） */
+.content-type-group { display: flex; align-items: stretch; width: 100%; min-width: 0; height: calc(var(--el-component-size) + 2px); }
+.content-type-group :deep(.el-radio-button) { flex: 1 1 0; min-width: 0; display: flex; }
+.content-type-group :deep(.el-radio-button__inner) { flex: 1; width: 100%; padding: 0 4px; font-size: 12px; line-height: normal; display: flex; align-items: center; justify-content: center; }
+.response-mode-label { font-size: 12px; color: var(--app-text-secondary); }.response-mode-help { font-size: 12px; line-height: 1.6; color: var(--app-text-secondary); flex: 1; min-width: 180px; }
+.tabs-header { display: flex; gap: 7px; align-items: stretch; overflow-x: auto; min-width: 0; padding-bottom: 3px; }
+.tab-item { display: flex; align-items: center; gap: 6px; padding: 6px 5px 6px 9px; min-height: 38px; border: 2px solid transparent; color: var(--app-text-regular); background: var(--app-bg-control); border-radius: 9px; font-size: 12px; cursor: pointer; flex-shrink: 0; }
+.tab-remove { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; flex-shrink: 0; border: 0; border-radius: 7px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+.tab-remove:hover:not(:disabled) { background: var(--el-color-danger-light-9); color: var(--app-text-danger); }
+.tab-remove:disabled { color: var(--app-text-disabled); cursor: not-allowed; }
+.tab-item.active .tab-remove { color: var(--app-text-inverse); opacity: .75; }
+.tab-item.active .tab-remove:hover:not(:disabled) { background: rgba(255, 255, 255, .2); color: var(--app-text-inverse); opacity: 1; }
+.tab-item.active .tab-remove:disabled { color: var(--app-text-inverse); opacity: .35; }
+.tab-item:hover { border-color: var(--app-divider); }
+.tab-item:focus-visible { outline: 2px solid var(--app-focus-color); outline-offset: 2px; }
+/* Editing selection is independent from runtime enablement. Never fade the selected draft. */
+.tab-item.active { color: var(--app-text-inverse); background: var(--app-accent); border-color: var(--app-accent); font-weight: 600; }
+.tab-item.inactive { opacity: 1; }
+.tab-item.active .tab-status, .tab-item.active .disabled-badge, .tab-item.active .fallback-star { color: var(--app-text-inverse); }
+.tab-item.active .tab-cond { color: var(--app-text-inverse); background: transparent; }
+.tab-item.active .active-dot { outline: 1px solid var(--app-text-inverse); outline-offset: 1px; }
+.tab-name { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.tab-status { font: 11px var(--app-font-mono); color: var(--app-text-success); }.disabled-badge { font-size: 11px; color: var(--app-text-secondary); }.tab-name-input { width: 125px; }
+.tab-cond { font-size: var(--app-font-micro); color: var(--app-text-secondary); background: var(--app-bg-hover); border-radius: 6px; padding: 1px 5px; }
+.fallback-star { color: var(--app-accent); font-size: 12px; }
+/* 区头：标题/数量 + 选择方式 + 删除/新增，替代原先四条各自成行的零散工具行 */
+.response-head { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 16px; min-width: 0; }
+.response-head__title { display: flex; align-items: baseline; gap: 7px; flex: none; }
+.response-head__title h4 { margin: 0; font-size: 14px; font-weight: 600; color: var(--app-text-primary); }
+.response-head__count { font: 11px var(--app-font-mono); color: var(--app-text-secondary); background: var(--app-bg-control); border-radius: 6px; padding: 2px 6px; }
+.response-head__actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+.response-head__actions .el-button { margin: 0; }
 
-.response-mode-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
+/* Tab 栏与启用状态同一行，启用开关紧挨它作用的返回体集合 */
+.response-tabbar { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.response-tabbar .tabs-header { flex: 1; }
+.response-tabbar .response-enable-row { flex: none; padding-left: 12px; border-left: 1px solid var(--app-divider); white-space: nowrap; }
+.tab-content { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 15px; }
+.response-body-section { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; padding-top: 16px; border-top: 1px solid var(--app-divider); }
+.response-body-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+.response-body-heading h4 { margin: 0; font-size: 13px; font-weight: 600; }
+.response-body-heading span { font-size: var(--app-font-caption); color: var(--app-text-secondary); }
+.response-mode-bar > .match-guide-entry { margin-left: auto; }
+.match-guide-entry { border: 0; background: transparent; color: var(--app-text-accent); font: inherit; font-size: 12px; cursor: pointer; min-height: 34px; padding: 0 4px; }
+.response-selection-warning { margin: 0; padding: 8px 10px; border-radius: 7px; background: var(--app-bg-control); color: var(--app-text-warning); font-size: 12px; line-height: 1.6; }
+.response-enable-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--app-text-secondary); }
+.random-mode-summary { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--app-text-secondary); }
+.response-tabs { gap: 12px; }
+.tab-content :deep(.el-form-item) { margin-bottom: 16px; }.tab-content :deep(.el-form-item__label) { color: var(--app-text-secondary); font-size: 12px; }
+.body-toolbar,.editor-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; margin-bottom: 10px; }
+.editor-container { width: 100%; height: 420px; min-width: 0; background: var(--app-bg-control); border-radius: 12px; overflow: hidden; }
+.content-type-badge,.body-type-badge { color: var(--app-text-secondary); font: 11px var(--app-font-mono); background: var(--app-bg-control); border-radius: 7px; padding: 4px 7px; }
+.file-info,.file-response-card { padding: 14px; background: var(--app-bg-control); border-radius: 10px; min-width: 0; overflow-wrap: anywhere; }.file-info code { word-break: break-all; }
+.file-hint,.upload-hint,.variable-hint,.editor-size-hint { color: var(--app-text-secondary); font-size: 12px; line-height: 1.6; }
+.variable-list { display: flex; flex-wrap: wrap; gap: 7px; }.variable-item,.group-pick-item { display: flex; align-items: center; gap: 9px; padding: 8px 10px; border-radius: 8px; background: var(--app-bg-control); cursor: pointer; font-size: 12px; }.variable-item code,.group-pick-item code { color: var(--app-accent); }.variable-item:hover,.group-pick-item:hover { background: var(--app-bg-selected); }
+.full-editor-toolbar { display: flex; align-items: center; gap: 12px; padding-bottom: 12px; }.full-editor-meta { font-size: 12px; color: var(--app-text-secondary); }.full-editor-monaco { flex: 1; min-height: 0; }.group-pick-list { display: grid; gap: 8px; }
+.condition-return-preview { padding: 16px; border-radius: 12px; background: var(--app-bg-control); margin-top: 18px; min-width: 0; }.condition-return-preview > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; }.condition-return-preview b { font-size: 12px; }.condition-return-preview p,.condition-return-preview small { color: var(--app-text-secondary); font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }.condition-return-preview pre { white-space: pre-wrap; word-break: break-word; font: 12px/1.8 var(--app-font-mono); max-height: 230px; overflow: auto; }
+@media(max-width: 1100px) { .tab-content :deep(.el-col) { flex: 0 0 50%; max-width: 50%; } }
+@media(max-width: 760px) {
+  .response-mode-help { min-width: 0; flex-basis: 100%; }
+  .response-readonly { display: none; }
+  .editor-container { height: 360px; }
+  .response-head { align-items: flex-start; }
+  .response-head__actions { margin-left: 0; }
+  .response-tabbar { flex-wrap: wrap; }
+  .response-tabbar .response-enable-row { width: 100%; padding-left: 0; border-left: 0; }
 }
+@media(max-width: 500px) { .tab-item.active .tab-name { max-width: 120px; }.tab-content :deep(.el-col) { flex: 0 0 100%; max-width: 100%; }.condition-return-preview > div { align-items: flex-start; flex-wrap: wrap; }.response-head__actions { width: 100%; justify-content: flex-start; }.response-head__actions .el-button { flex: 1; } }
 
-.response-mode-label {
-  font-size: 13px;
-  color: #334155;
-  white-space: nowrap;
-}
+/* 返回内容设置行按容器宽度折行。四列用 el-col 固定百分比时，右栏变窄后
+   input-number / Content-Type 的固有宽度会把卡片撑出横向滚动（编辑器被裁切）。 */
+.response-body-section :deep(.el-row) { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr)); gap: 0 16px; margin: 0 !important; }
+.response-body-section :deep(.el-col) { width: auto; max-width: none; flex: none; min-width: 0; padding: 0 !important; }
 
-.response-mode-help {
-  font-size: 12px;
-  color: #64748B;
+/* 右栏宽度由布局决定，用容器查询而不是视口断点：卡片窄时区头自动变成
+   「标题 + 操作」一行、「选择方式」一行，避免出现三行拼盘。 */
+@container response-card (max-width: 660px) {
+  .response-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px 12px; }
+  .response-head__title { grid-column: 1; grid-row: 1; }
+  .response-head__actions { grid-column: 2; grid-row: 1; margin-left: 0; justify-self: end; }
+  .response-mode-bar { grid-column: 1 / -1; grid-row: 2; }
 }
-
-.random-mode-alert {
-  margin-bottom: 16px;
-}
-
-/* Tab 栏 */
-.tabs-header {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  border-bottom: 2px solid #F1F5F9;
-  padding-bottom: 0;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
-}
-
-.tab-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  cursor: pointer;
-  border-radius: 10px 10px 0 0;
-  font-size: 14px;
-  color: #A3AED0;
-  transition: all 0.2s;
-  border: 2px solid transparent;
-  border-bottom: none;
-  position: relative;
-  bottom: -2px;
-}
-
-.tab-item:hover {
-  color: #1B2559;
-  background: #F8FAFC;
-}
-
-.tab-item.active {
-  color: #1B2559;
-  background: #fff;
-  border-color: #F1F5F9;
-  font-weight: 500;
-}
-
-.active-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  transition: background 0.2s;
-}
-.active-dot.on { background: #22C55E; }
-.active-dot.off { background: #D1D5DB; }
-
-/* v1.4.3：序号角标 */
-.tab-index {
-  font-size: 11px;
-  color: #6366F1;
-  font-weight: 600;
-  user-select: none;
-}
-
-/* v1.4.3：兜底 ⭐ */
-.fallback-star {
-  color: #F59E0B;
-  font-size: 14px;
-}
-
-/* v1.4.3：未启用 Tab 视觉 */
-.tab-item.disabled .tab-name {
-  color: #9CA3AF;
-  text-decoration: line-through dashed;
-  text-decoration-color: #D1D5DB;
-}
-.disabled-badge {
-  font-size: 10px;
-  padding: 1px 6px;
-  background: #F3F4F6;
-  color: #9CA3AF;
-  border-radius: 8px;
-  margin-left: 2px;
-}
-
-.tab-name {
-  user-select: none;
-}
-
-.tab-name-input {
-  width: 120px;
-}
-
-.tab-add {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  cursor: pointer;
-  border-radius: 8px;
-  color: #A3AED0;
-  transition: all 0.2s;
-}
-
-.tab-add:hover {
-  background: #F1F5F9;
-  color: #6366F1;
-}
-
-/* Tab 内容区 */
-.tab-content {
-  padding: 0;
-}
-
-/* Content-Type 栏 */
-.content-type-bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.content-type-auto {
-  font-size: 13px;
-  color: #A3AED0;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.check-icon {
-  color: #22C55E;
-}
-
-/* 编辑器工具栏 */
-.editor-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-  flex-wrap: wrap;
-}
-
-/* Monaco 编辑器 */
-.response-editor {
-  height: 350px;
-}
-
-.file-response-panel {
-  display: grid;
-  gap: 14px;
-}
-
-.file-response-card {
-  min-height: 76px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
-  border: 1px solid #D1D5DB;
-  border-radius: 6px;
-  background: #F8FAFC;
-}
-
-.file-response-card.empty {
-  border-style: dashed;
-  color: #64748B;
-}
-
-.file-response-main {
-  min-width: 0;
-  flex: 1;
-}
-
-.file-response-name {
-  color: #111827;
-  font-size: 14px;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.file-response-meta {
-  margin-top: 4px;
-  color: #64748B;
-  font-size: 12px;
-}
-
-/* v1.4.4：超大响应体降级预览卡 */
-.oversize-preview {
-  border: 2px dashed #F1F5F9;
-  border-radius: 10px;
-  padding: 16px;
-  background: #F8FAFC;
-}
-
-.oversize-meta {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: #B45309;
-  margin-bottom: 12px;
-}
-
-.oversize-head {
-  max-height: 200px;
-  overflow: auto;
-  margin: 0 0 12px 0;
-  padding: 12px;
-  background: #fff;
-  border: 1px solid #E2E8F0;
-  border-radius: 8px;
-  font-family: 'SFMono-Regular', Consolas, Menlo, monospace;
-  font-size: 12px;
-  color: #1B2559;
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-
-.oversize-actions {
-  display: flex;
-  gap: 8px;
-}
-
-/* v1.4.4：全屏 Dialog 内的编辑器 */
-.full-editor-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.full-editor-meta {
-  font-size: 12px;
-  color: #A3AED0;
-}
-
-.full-editor-monaco {
-  /* 填充 Dialog 剩余高度：Dialog 默认内容区有自己的滚动容器，
-     这里显式指定高度保证 Monaco 正确 layout */
-  height: calc(100vh - 180px);
-  min-height: 400px;
-}
-
-/* AI 生成按钮：白底 + 淡紫描边，避免与普通工具按钮混淆 */
-.ai-gen-btn {
-  background: #fff;
-  border: 1px solid #E7E3FD;
-  color: #4F46E5;
-}
-
-.ai-gen-btn:hover,
-.ai-gen-btn:focus {
-  background: #F5F3FF;
-  border-color: #C7D2FE;
-  color: #4F46E5;
-}
-
-/* 底部操作栏 */
-.tab-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid #F1F5F9;
-}
-
-.active-tag {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+@container response-card (max-width: 380px) {
+  .response-head__actions { grid-column: 1 / -1; grid-row: 2; justify-self: stretch; }
+  .response-head__actions .el-button { flex: 1; }
+  .response-mode-bar { grid-row: 3; }
+  .response-tabbar { flex-wrap: wrap; }
+  .response-tabbar .response-enable-row { width: 100%; padding-left: 0; border-left: 0; }
 }
 </style>
 
@@ -1330,9 +1159,9 @@ async function handleUploadFile(uploadFile) {
 <style>
 .dynamic-var-popover .dynamic-var-header {
   font-size: 12px;
-  color: #A3AED0;
+  color: var(--app-text-secondary);
   padding: 4px 8px 8px;
-  border-bottom: 1px solid #F1F5F9;
+  border-bottom: 1px solid var(--app-divider);
   margin-bottom: 4px;
 }
 
@@ -1343,14 +1172,14 @@ async function handleUploadFile(uploadFile) {
 
 .dynamic-var-popover .dynamic-var-empty {
   font-size: 12px;
-  color: #A3AED0;
+  color: var(--app-text-secondary);
   text-align: center;
   padding: 12px 0;
 }
 
 .dynamic-var-popover .dynamic-var-section {
   font-size: 11px;
-  color: #A3AED0;
+  color: var(--app-text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   padding: 6px 10px 2px;
@@ -1375,18 +1204,18 @@ async function handleUploadFile(uploadFile) {
 }
 
 .group-pick-item:hover {
-  background: #F1F5F9;
+  background: var(--app-bg-hover);
 }
 
 .group-pick-item code {
   font-family: 'SFMono-Regular', Consolas, Menlo, monospace;
   font-size: 13px;
-  color: #6366F1;
+  color: var(--app-accent);
 }
 
 .group-pick-item span {
   font-size: 12px;
-  color: #64748B;
+  color: var(--app-text-secondary);
 }
 
 .dynamic-var-popover .dynamic-var-item {
@@ -1401,37 +1230,22 @@ async function handleUploadFile(uploadFile) {
 }
 
 .dynamic-var-popover .dynamic-var-item:hover {
-  background: #F1F5F9;
+  background: var(--app-bg-hover);
 }
 
 .dynamic-var-popover .dynamic-var-name {
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
   font-size: 13px;
-  color: #6366F1;
+  color: var(--app-accent);
   background: transparent;
   padding: 0;
 }
 
 .dynamic-var-popover .dynamic-var-desc {
   font-size: 12px;
-  color: #64748B;
+  color: var(--app-text-secondary);
   text-align: right;
   flex: 1;
 }
 
-.dynamic-var-popover .dynamic-var-tip {
-  font-size: 11px;
-  color: #A3AED0;
-  padding: 8px 10px 2px;
-  margin-top: 4px;
-  border-top: 1px solid #F1F5F9;
-}
-
-.dynamic-var-popover .dynamic-var-tip code {
-  background: #F1F5F9;
-  padding: 1px 4px;
-  border-radius: 3px;
-  font-family: 'SFMono-Regular', Consolas, monospace;
-  color: #6366F1;
-}
 </style>

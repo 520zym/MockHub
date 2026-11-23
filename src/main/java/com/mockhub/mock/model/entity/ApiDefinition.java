@@ -10,6 +10,18 @@ package com.mockhub.mock.model.entity;
 public class ApiDefinition {
 
     /** 接口 ID（UUID） */
+    private String deletedAt;
+    private String deletedBy;
+    private String purgeAfter;
+    public String getDeletedAt() { return deletedAt; }
+    public void setDeletedAt(String value) { deletedAt=value; }
+    public String getDeletedBy() { return deletedBy; }
+    public void setDeletedBy(String value) { deletedBy=value; }
+    public String getPurgeAfter() { return purgeAfter; }
+    public void setPurgeAfter(String value) { purgeAfter=value; }
+    private long revision = 1;
+    public long getRevision() { return revision; }
+    public void setRevision(long revision) { this.revision = revision; }
     private String id;
 
     /** 所属团队 ID */

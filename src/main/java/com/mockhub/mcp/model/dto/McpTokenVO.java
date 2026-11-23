@@ -13,7 +13,19 @@ public class McpTokenVO {
     private String createdAt;
     private String lastUsedAt;
     private String expiresAt;
+    private java.util.List<String> teamIds;
+    private java.util.List<String> scopes;
+    private java.util.Map<String,java.util.List<String>> teamScopes;
+    public java.util.List<String> getTeamIds(){return teamIds;}
+    public void setTeamIds(java.util.List<String> value){teamIds=value;}
+    public java.util.List<String> getScopes(){return scopes;}
+    public void setScopes(java.util.List<String> value){scopes=value;}
+    public java.util.Map<String,java.util.List<String>> getTeamScopes(){return teamScopes;}
+    public void setTeamScopes(java.util.Map<String,java.util.List<String>> value){teamScopes=value;}
     private boolean revoked;
+    private boolean legacy;
+    public boolean isLegacy(){return legacy;}
+    public void setLegacy(boolean value){legacy=value;}
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }

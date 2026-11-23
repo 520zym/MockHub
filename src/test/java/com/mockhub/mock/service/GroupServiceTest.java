@@ -47,6 +47,7 @@ class GroupServiceTest {
     void setUp() {
         groupRepository = mock(GroupRepository.class);
         apiRepository = mock(ApiRepository.class);
+        when(apiRepository.write(org.mockito.ArgumentMatchers.any())).thenAnswer(invocation -> ((java.util.function.Supplier<?>)invocation.getArgument(0)).get());
         permissionChecker = mock(PermissionChecker.class);
         groupService = new GroupService(groupRepository, apiRepository, permissionChecker);
     }
@@ -69,7 +70,7 @@ class GroupServiceTest {
         assertEquals(0, result.get(1).getApiCount());
         // 读操作走的是访问权限校验，而不是管理员校验
         verify(permissionChecker, times(1)).checkTeamAccess("team-1");
-        verify(permissionChecker, never()).checkTeamAdmin(anyString());
+        verify(permissionChecker, never()).checkTeamWrite(anyString());
     }
 
     @Test
@@ -85,11 +86,11 @@ class GroupServiceTest {
     // ============ 写：create —— 仅团队管理员可执行 ============
 
     @Test
-    void create_shouldRejectNonAdmin() {
+    void create_shouldRejectReadOnly() {
         ApiGroup input = newGroup(null, "team-1", "新分组", 1);
         // 模拟普通成员：checkTeamAdmin 抛出 40101
         doThrow(new BizException(40101, "无操作权限"))
-                .when(permissionChecker).checkTeamAdmin("team-1");
+                .when(permissionChecker).checkTeamWrite("team-1");
 
         BizException ex = assertThrows(BizException.class, () -> groupService.create(input));
         assertEquals(40101, ex.getCode());
@@ -100,7 +101,7 @@ class GroupServiceTest {
     @Test
     void create_shouldGenerateIdAndPersist_whenAdmin() {
         ApiGroup input = newGroup(null, "team-1", "支付模块", 5);
-        doNothing().when(permissionChecker).checkTeamAdmin("team-1");
+        doNothing().when(permissionChecker).checkTeamWrite("team-1");
 
         ApiGroup created = groupService.create(input);
 
@@ -114,11 +115,11 @@ class GroupServiceTest {
     // ============ 写：update —— 仅团队管理员可执行 ============
 
     @Test
-    void update_shouldRejectNonAdmin() {
+    void update_shouldRejectReadOnly() {
         ApiGroup existing = newGroup("g-1", "team-1", "旧名", 1);
         when(groupRepository.findById("g-1")).thenReturn(existing);
         doThrow(new BizException(40101, "无操作权限"))
-                .when(permissionChecker).checkTeamAdmin("team-1");
+                .when(permissionChecker).checkTeamWrite("team-1");
 
         ApiGroup patch = newGroup(null, null, "新名", 9);
 
@@ -134,14 +135,14 @@ class GroupServiceTest {
                 () -> groupService.update("missing", newGroup(null, null, "x", 1)));
         assertEquals(40501, ex.getCode());
         // 分组不存在的早返回路径不触发权限校验
-        verify(permissionChecker, never()).checkTeamAdmin(anyString());
+        verify(permissionChecker, never()).checkTeamWrite(anyString());
     }
 
     @Test
     void update_shouldPersistNameAndOrder_whenAdmin() {
         ApiGroup existing = newGroup("g-1", "team-1", "旧名", 1);
         when(groupRepository.findById("g-1")).thenReturn(existing);
-        doNothing().when(permissionChecker).checkTeamAdmin("team-1");
+        doNothing().when(permissionChecker).checkTeamWrite("team-1");
 
         ApiGroup patch = newGroup(null, null, "新名", 9);
         ApiGroup result = groupService.update("g-1", patch);
@@ -154,11 +155,11 @@ class GroupServiceTest {
     // ============ 写：delete —— 仅团队管理员可执行 ============
 
     @Test
-    void delete_shouldRejectNonAdmin() {
+    void delete_shouldRejectReadOnly() {
         ApiGroup existing = newGroup("g-1", "team-1", "x", 1);
         when(groupRepository.findById("g-1")).thenReturn(existing);
         doThrow(new BizException(40101, "无操作权限"))
-                .when(permissionChecker).checkTeamAdmin("team-1");
+                .when(permissionChecker).checkTeamWrite("team-1");
 
         assertThrows(BizException.class, () -> groupService.delete("g-1"));
         // 拒绝后既不清理关联接口，也不删分组
@@ -170,7 +171,7 @@ class GroupServiceTest {
     void delete_shouldClearApiGroupIdBeforeDeleting_whenAdmin() {
         ApiGroup existing = newGroup("g-1", "team-1", "x", 1);
         when(groupRepository.findById("g-1")).thenReturn(existing);
-        doNothing().when(permissionChecker).checkTeamAdmin("team-1");
+        doNothing().when(permissionChecker).checkTeamWrite("team-1");
 
         groupService.delete("g-1");
 
@@ -186,7 +187,7 @@ class GroupServiceTest {
 
         BizException ex = assertThrows(BizException.class, () -> groupService.delete("missing"));
         assertEquals(40501, ex.getCode());
-        verify(permissionChecker, never()).checkTeamAdmin(anyString());
+        verify(permissionChecker, never()).checkTeamWrite(anyString());
     }
 
     // ============ 边界 ============

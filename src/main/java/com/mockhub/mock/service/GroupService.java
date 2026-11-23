@@ -65,8 +65,11 @@ public class GroupService {
      * @return 创建后的分组对象（含生成的 ID 和创建时间）
      */
     public ApiGroup create(ApiGroup group) {
+        return apiRepository.write(() -> createInternal(group));
+    }
+    private ApiGroup createInternal(ApiGroup group) {
         // 写操作（创建/更新/删除）按 CLAUDE.md 权限模型对齐"修改/删除标签"——仅团队管理员/超管可执行
-        permissionChecker.checkTeamAdmin(group.getTeamId());
+        permissionChecker.checkTeamWrite(group.getTeamId());
 
         group.setId(UUID.randomUUID().toString());
         group.setCreatedAt(new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss").format(new Date()));
@@ -85,17 +88,23 @@ public class GroupService {
      * @return 更新后的分组对象
      */
     public ApiGroup update(String id, ApiGroup group) {
+        return apiRepository.write(() -> updateInternal(id,group));
+    }
+    private ApiGroup updateInternal(String id, ApiGroup group) {
         ApiGroup existing = groupRepository.findById(id);
         if (existing == null) {
             throw new BizException(40501, "分组不存在");
         }
 
-        permissionChecker.checkTeamAdmin(existing.getTeamId());
+        permissionChecker.checkTeamWrite(existing.getTeamId());
 
+        List<com.mockhub.mock.model.entity.ApiDefinition> affected=apiRepository.findByGroupIncludingDeleted(id);
+        apiRepository.claimMetadataRevisions(affected,existing.getTeamId());
         existing.setName(group.getName());
         existing.setSortOrder(group.getSortOrder());
 
         groupRepository.update(existing);
+        apiRepository.appendMetadataRevisions(affected,"GROUP_UPDATE");
         log.info("更新分组: id={}, name={}, sortOrder={}", id, existing.getName(), existing.getSortOrder());
 
         return existing;
@@ -109,18 +118,24 @@ public class GroupService {
      * @param id 分组 ID
      */
     public void delete(String id) {
+        apiRepository.write(() -> { deleteInternal(id);return null; });
+    }
+    private void deleteInternal(String id) {
         ApiGroup group = groupRepository.findById(id);
         if (group == null) {
             throw new BizException(40501, "分组不存在");
         }
 
-        permissionChecker.checkTeamAdmin(group.getTeamId());
+        permissionChecker.checkTeamWrite(group.getTeamId());
 
+        List<com.mockhub.mock.model.entity.ApiDefinition> affected=apiRepository.findByGroupIncludingDeleted(id);
+        apiRepository.claimMetadataRevisions(affected,group.getTeamId());
         // 将关联接口的 groupId 置为 null
         apiRepository.clearGroupId(id);
         log.info("清除分组关联: groupId={}", id);
 
         groupRepository.deleteById(id);
+        apiRepository.appendMetadataRevisions(affected,"GROUP_DELETE");
         log.info("删除分组: id={}, name={}", id, group.getName());
     }
 }

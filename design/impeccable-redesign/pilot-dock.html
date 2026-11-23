@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440, initial-scale=1">
+<title>接口 · 工作台 · MockHub</title>
+<link rel="stylesheet" href="assets/desk.css">
+<style>
+  /* ============ 壳：没有侧栏，一条浮起的 Dock ============ */
+  body.app { display: block; overflow: hidden; }
+  /* deeper, more chromatic stage so the glass has something to refract */
+  body.canvas {
+    background-image:
+      radial-gradient(1100px 720px at 8% -14%, rgba(255,255,255,.98) 0%, rgba(255,255,255,0) 58%),
+      radial-gradient(900px 620px at 96% -8%, rgba(86,132,232,.30) 0%, rgba(86,132,232,0) 60%),
+      radial-gradient(820px 620px at 2% 104%, rgba(255,166,138,.24) 0%, rgba(255,166,138,0) 60%),
+      radial-gradient(760px 540px at 78% 110%, rgba(138,118,255,.20) 0%, rgba(138,118,255,0) 58%),
+      linear-gradient(158deg, #F3F7FD 0%, #E3EBF8 54%, #D6E1F3 100%);
+  }
+
+  .dock {
+    position: fixed; top: 14px; left: 16px; right: 16px; z-index: 40;
+    display: flex; align-items: center; gap: 14px;
+    height: 62px; padding: 0 12px 0 18px;
+    background: var(--glass-strong);
+    -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur);
+    border-radius: 20px;
+    box-shadow: var(--shadow-float), var(--rim);
+  }
+  .dock__brand { display: flex; align-items: center; gap: 9px; font-size: 14px; font-weight: 600; letter-spacing: -.01em; }
+  .dock__brand svg { width: 20px; height: 20px; color: var(--signal); }
+  .dock__sep { width: 1px; height: 22px; background: var(--line); flex: 0 0 auto; }
+
+  .dock__nav {
+    display: flex; align-items: center; gap: 2px;
+    height: 40px; padding: 4px;
+    background: rgba(255,255,255,.42);
+    box-shadow: inset 0 1px 2px rgba(18,26,40,.06), inset 0 0 0 1px rgba(255,255,255,.5);
+    border-radius: 14px;
+  }
+  .dock__item {
+    display: inline-flex; align-items: center; gap: 7px;
+    height: 32px; padding: 0 13px; border-radius: 10px;
+    font-size: 12.5px; color: var(--ink-3); white-space: nowrap;
+    transition: background .16s ease, color .16s ease, box-shadow .16s ease;
+  }
+  .dock__item svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.7; }
+  .dock__item:hover { color: var(--ink); background: rgba(255,255,255,.5); }
+  .dock__item.is-active {
+    color: var(--ink); font-weight: 600;
+    background: linear-gradient(180deg, #fff, rgba(255,255,255,.82));
+    box-shadow: 0 6px 14px -10px rgba(17,30,54,.55), inset 0 1px 0 #fff, 0 0 0 1px rgba(255,255,255,.7);
+  }
+  .dock__item .n { font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); font-weight: 400; }
+
+  .dock__spacer { flex: 1 1 auto; }
+  .dock__status { display: inline-flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--ink-2); white-space: nowrap; }
+  .dock__status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px var(--ok-wash); }
+  .dock__base {
+    display: inline-flex; align-items: center; gap: 7px;
+    height: 30px; padding: 0 9px; border: 0; border-radius: 9px;
+    background: rgba(255,255,255,.5); box-shadow: inset 0 0 0 1px rgba(255,255,255,.7);
+    font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-2); cursor: pointer;
+  }
+  .dock__base svg { width: 12px; height: 12px; stroke: var(--ink-3); fill: none; stroke-width: 1.6; }
+  .dock__base:hover { background: #fff; color: var(--ink); }
+
+  .dock__search {
+    display: flex; align-items: center; gap: 8px;
+    width: 230px; height: 34px; padding: 0 7px 0 11px;
+    border-radius: 10px; background: rgba(255,255,255,.5);
+    box-shadow: inset 0 1px 2px rgba(18,26,40,.05), inset 0 0 0 1px rgba(255,255,255,.6);
+    color: var(--ink-3); font-size: 12px;
+  }
+  .dock__search svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.7; flex: 0 0 auto; }
+  .dock__search input { flex: 1; min-width: 0; border: 0; background: none; outline: none; font-size: 12px; color: var(--ink); }
+  .dock__search .kbd { flex: 0 0 auto; }
+  .avatar {
+    width: 30px; height: 30px; border: 0; border-radius: 50%;
+    display: grid; place-items: center;
+    background: linear-gradient(180deg, #3A4456, #1D2431);
+    color: #fff; font-size: 11px; cursor: pointer;
+  }
+
+  /* ============ 舞台：全宽 ============ */
+  .stage {
+    height: 100vh; padding: 90px 16px 18px;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .stage__head { flex: 0 0 auto; display: flex; align-items: flex-end; gap: 18px; padding: 0 6px; }
+  .stage__title { display: flex; align-items: baseline; gap: 10px; }
+  .stage__title h1 { font-size: 34px; line-height: 1.05; letter-spacing: -.035em; font-weight: 600; }
+  .stage__title .count { font-family: var(--font-mono); font-size: 13px; color: var(--ink-3); }
+  .stage__meta { margin-top: 8px; display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--ink-3); }
+  .stage__meta .sep { width: 1px; height: 10px; background: var(--line-strong); }
+  .stage__actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
+  /* ============ 工作台 ============ */
+  .wb {
+    flex: 1 1 auto; min-height: 0;
+    display: flex; flex-direction: column;
+    background: var(--glass);
+    -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur);
+    border-radius: 24px;
+    box-shadow: var(--shadow-panel), var(--rim);
+    overflow: hidden;
+  }
+  .wb__bar { flex: 0 0 58px; display: flex; align-items: center; gap: 14px; padding: 0 18px; border-bottom: 1px solid var(--line); }
+  .wb__tabs { display: flex; align-items: center; gap: 18px; align-self: stretch; }
+  .wb__tab {
+    position: relative; display: inline-flex; align-items: center; gap: 7px;
+    border: 0; background: none; padding: 0; height: 100%;
+    font-size: 13px; color: var(--ink-3); cursor: pointer;
+  }
+  .wb__tab .n { font-family: var(--font-mono); font-size: 11px; }
+  .wb__tab.is-active { color: var(--ink); font-weight: 600; }
+  .wb__tab.is-active::after {
+    content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px;
+    background: var(--signal); border-radius: 2px; box-shadow: 0 2px 8px -2px rgba(53,104,212,.6);
+  }
+  .wb__tools { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+
+  .wb__scroll { flex: 1 1 auto; min-height: 0; overflow: auto; }
+
+  .wbt { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  .wbt thead th {
+    position: sticky; top: 0; z-index: 3;
+    height: 40px; padding: 0 12px;
+    background: rgba(255,255,255,.72);
+    -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--line);
+    font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--ink-3); text-align: left; white-space: nowrap;
+  }
+  .wbt th.c-method { width: 92px; padding-left: 18px; }
+  .wbt th.c-name { width: auto; }
+  .wbt th.c-var { width: 96px; }
+  .wbt th.c-calls { width: 108px; text-align: right; }
+  .wbt th.c-last { width: 132px; }
+  .wbt th.c-act { width: 132px; text-align: right; padding-right: 18px; }
+
+  .wbt tbody td { height: 54px; padding: 0 12px; border-bottom: 1px solid var(--line-soft); font-size: 13px; color: var(--ink-2); vertical-align: middle; }
+  .wbt tbody td.c-method { padding-left: 18px; }
+  .wbt tbody td.c-act { padding-right: 18px; }
+  .wbt tbody tr.wbrow { cursor: pointer; transition: background .14s ease; }
+  .wbt tbody tr.wbrow:hover { background: rgba(255,255,255,.55); }
+  .wbt tbody tr.wbrow.is-open { background: linear-gradient(90deg, rgba(53,104,212,.10), rgba(53,104,212,.03)); }
+  .wbt tbody tr.wbrow.is-open td { border-bottom-color: transparent; }
+  .wbt tbody tr.wbrow.is-open td:first-child { box-shadow: inset 2px 0 0 var(--signal); }
+
+  .ifc { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  .ifc__name { font-size: 14px; font-weight: 500; color: var(--ink); line-height: 1.4; display: flex; align-items: center; gap: 7px; }
+  .ifc__path { font-family: var(--font-mono); font-size: 12px; color: var(--ink-3); line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ifc__path .param { color: var(--signal-deep); }
+  .calls { text-align: right; font-family: var(--font-mono); font-size: 13px; color: var(--ink); }
+  .calls small { display: block; font-family: var(--font-sans); font-size: 11px; color: var(--ink-3); }
+  .last { font-size: 12px; color: var(--ink-3); }
+  .chev { width: 14px; height: 14px; stroke: var(--ink-3); fill: none; stroke-width: 1.8; transition: transform .18s ease; }
+  tr.is-open .chev { transform: rotate(180deg); }
+  .rowtake { display: inline-flex; align-items: center; gap: 2px; justify-content: flex-end; width: 100%; }
+
+  /* ---- 展开的工作台 ---- */
+  .wbt tbody tr.wbpanel > td { padding: 0 12px 12px; border-bottom: 1px solid var(--line-soft); }
+  .ws {
+    display: grid; grid-template-columns: 292px minmax(0,1fr) 348px;
+    min-height: 292px;
+    background: var(--glass-strong);
+    -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur);
+    border-radius: 20px;
+    box-shadow: var(--shadow-float), var(--rim);
+    overflow: hidden;
+  }
+  .ws__col { min-width: 0; padding: 15px 16px 16px; display: flex; flex-direction: column; gap: 9px; }
+  .ws__col + .ws__col { border-left: 1px solid var(--line); }
+  .ws__label {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 11px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; color: var(--ink-3);
+  }
+  .ws__label .spacer { flex: 1; }
+  .ws__label .hint { font-size: 11px; font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--ink-3); }
+
+  .kv { display: grid; grid-template-columns: 64px minmax(0,1fr); gap: 5px 10px; font-size: 12px; }
+  .kv dt { color: var(--ink-3); }
+  .kv dd { margin: 0; color: var(--ink); min-width: 0; }
+  .kv dd.mono { font-family: var(--font-mono); font-size: 11.5px; }
+
+  .danger-zone { margin-top: auto; padding-top: 10px; border-top: 1px solid var(--line); display: flex; align-items: center; gap: 8px; }
+  .danger-zone p { flex: 1; font-size: 11px; line-height: 1.5; color: var(--ink-3); }
+  .link-danger { border: 0; background: none; padding: 0; font-size: 11.5px; color: var(--danger-deep); cursor: pointer; white-space: nowrap; }
+
+  .vlist { display: flex; flex-direction: column; gap: 5px; }
+  .vrow {
+    display: grid; grid-template-columns: 22px minmax(0,1fr) 54px; gap: 9px; align-items: center;
+    min-height: 40px; padding: 5px 9px;
+    border-radius: 11px; background: rgba(255,255,255,.42);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.55);
+  }
+  .vrow.is-hit { background: rgba(53,104,212,.10); box-shadow: inset 0 0 0 1px rgba(53,104,212,.16); }
+  .vrow__n { font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); text-align: center; }
+  .vrow.is-hit .vrow__n { color: var(--signal-deep); font-weight: 600; }
+  .vrow__name { font-size: 12px; font-weight: 500; color: var(--ink); line-height: 1.35; }
+  .vrow__cond { font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); line-height: 1.45; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .vrow__share { font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); text-align: right; }
+  .vrow.is-hit .vrow__share { color: var(--signal-deep); }
+
+  .try { display: flex; flex-direction: column; gap: 8px; }
+  .try__line { display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-2); }
+  .try__params { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; border-radius: 12px; background: rgba(255,255,255,.5); box-shadow: inset 0 1px 2px rgba(18,26,40,.05); }
+  .try__param { display: grid; grid-template-columns: 84px minmax(0,1fr); gap: 8px; font-family: var(--font-mono); font-size: 11px; }
+  .try__param span:first-child { color: var(--ink-3); }
+  .try__result { padding: 9px 11px; border-radius: 12px; background: var(--ok-wash); box-shadow: inset 0 0 0 1px rgba(44,122,94,.16); }
+  .try__result-line { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--ink); }
+  .try__result-line b { font-weight: 600; }
+  .try__result-meta { margin-top: 3px; font-family: var(--font-mono); font-size: 11px; color: var(--ink-2); }
+
+  .code-line { display: flex; gap: 10px; }
+  .code .ln { padding-right: 10px; }
+  .code pre { padding: 9px 11px; line-height: 1.55; font-size: 11px; }
+
+  .wb__foot {
+    flex: 0 0 42px; display: flex; align-items: center; gap: 12px;
+    padding: 0 18px; border-top: 1px solid var(--line);
+    font-size: 11px; color: var(--ink-3);
+  }
+  .wb__foot .spacer { flex: 1; }
+  .pager { display: flex; align-items: center; gap: 2px; }
+  .pager button {
+    min-width: 24px; height: 24px; padding: 0 6px; border: 0; border-radius: 8px;
+    background: none; font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); cursor: pointer;
+  }
+  .pager button:hover { background: rgba(255,255,255,.7); color: var(--ink); }
+  .pager button[aria-current="page"] { background: var(--ink); color: #fff; }
+  .pager button[disabled] { opacity: .4; cursor: default; }
+  .pager svg { width: 12px; height: 12px; margin: 0 auto; stroke: currentColor; fill: none; stroke-width: 1.6; }
+
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  .ifc__path .dim { color: var(--ink-3); }
+  .bulk {
+    position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 30;
+    display: flex; align-items: center; gap: 12px;
+    height: 46px; padding: 0 8px 0 16px; border-radius: 14px;
+    background: linear-gradient(180deg, rgba(38,45,58,.96), rgba(18,22,30,.97));
+    -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+    color: #fff; box-shadow: 0 26px 50px -26px rgba(10,18,34,.8), inset 0 1px 0 rgba(255,255,255,.14);
+    font-size: 12px;
+  }
+  .bulk .btn { background: rgba(255,255,255,.12); color: #fff; box-shadow: inset 0 0 0 1px rgba(255,255,255,.16); }
+  .bulk .btn:hover { background: rgba(255,255,255,.2); }
+</style>
+</head>
+<body class="app canvas">
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-api" viewBox="0 0 16 16"><path d="M5.5 3 2.5 8l3 5M10.5 3l3 5-3 5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-log" viewBox="0 0 16 16"><path d="M3 3.5h10M3 8h10M3 12.5h6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-stats" viewBox="0 0 16 16"><path d="M3 13V8M8 13V3M13 13V6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-team" viewBox="0 0 16 16"><path d="M2 13c0-2.2 1.8-3.5 4-3.5s4 1.3 4 3.5M11 4.2a2.2 2.2 0 0 1 0 4.2M11.5 13c0-1.6-.6-2.6-1.5-3.2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 16 16"><path d="M8 1.8v1.6M8 12.6v1.6M1.8 8h1.6M12.6 8h1.6M3.7 3.7l1.1 1.1M11.2 11.2l1.1 1.1M12.3 3.7l-1.1 1.1M4.8 11.2l-1.1 1.1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="m10.2 10.2 3.3 3.3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 5.5v-3h-8v8h3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 16 16"><path d="m10.5 2.5 3 3-8 8-3.5 1 1-3.5z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 16 16"><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="i-filter" viewBox="0 0 16 16"><path d="M2.5 4h11M4.5 8h7M6.5 12h3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="i-send" viewBox="0 0 16 16"><path d="M2 8h9M8 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-left" viewBox="0 0 16 16"><path d="m10 4-4 4 4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-right" viewBox="0 0 16 16"><path d="m6 4 4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</svg>
+
+<header class="dock">
+  <div class="dock__brand">
+    <svg viewBox="0 0 18 18" aria-hidden="true"><rect x="1" y="1" width="16" height="16" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M4 12.5 6.5 5l3 7 2.5-7 2 7.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+    MockHub
+  </div>
+  <span class="dock__sep" aria-hidden="true"></span>
+  <nav class="dock__nav" aria-label="主导航">
+    <a class="dock__item is-active" href="#" aria-current="page"><svg aria-hidden="true"><use href="#i-api"/></svg>接口<span class="n">128</span></a>
+    <a class="dock__item" href="#"><svg aria-hidden="true"><use href="#i-log"/></svg>日志</a>
+    <a class="dock__item" href="#"><svg aria-hidden="true"><use href="#i-stats"/></svg>统计</a>
+    <a class="dock__item" href="#"><svg aria-hidden="true"><use href="#i-team"/></svg>团队</a>
+    <a class="dock__item" href="#"><svg aria-hidden="true"><use href="#i-spark"/></svg>助手</a>
+  </nav>
+  <div class="dock__spacer"></div>
+  <span class="dock__status">运行中 · 今日 1,284 次</span>
+  <button class="dock__base" type="button" aria-label="复制 Mock 基地址 /t/acme">/t/acme<svg aria-hidden="true"><use href="#i-copy"/></svg></button>
+  <label class="dock__search">
+    <svg aria-hidden="true"><use href="#i-search"/></svg>
+    <input type="search" placeholder="搜索接口、路径、返回体" aria-label="搜索接口">
+    <span class="kbd" aria-hidden="true">⌘K</span>
+  </label>
+  <button class="avatar" type="button" aria-label="账号：张一鸣">张</button>
+</header>
+
+<main class="stage">
+  <header class="stage__head">
+    <div>
+      <div class="stage__title"><h1>接口</h1><span class="count">128</span></div>
+      <div class="stage__meta"><span>交易中台</span><span class="sep"></span><span>REST 96 · SOAP 32</span><span class="sep"></span><span>演示数据</span></div>
+    </div>
+    <div class="stage__actions">
+      <button class="btn btn--quiet" type="button">导入</button>
+      <button class="btn btn--primary" type="button"><svg aria-hidden="true"><use href="#i-plus"/></svg>新建接口</button>
+    </div>
+  </header>
+
+  <section class="wb" aria-label="接口工作台">
+    <div class="wb__bar">
+      <div class="wb__tabs" role="tablist" aria-label="接口筛选">
+        <button class="wb__tab is-active" role="tab" aria-selected="true" type="button">全部<span class="n">128</span></button>
+        <button class="wb__tab" role="tab" aria-selected="false" type="button">REST<span class="n">96</span></button>
+        <button class="wb__tab" role="tab" aria-selected="false" type="button">SOAP<span class="n">32</span></button>
+        <button class="wb__tab" role="tab" aria-selected="false" type="button">已停用<span class="n">3</span></button>
+      </div>
+      <div class="wb__tools">
+        <button class="btn btn--sm btn--quiet" type="button"><svg aria-hidden="true"><use href="#i-filter"/></svg>筛选</button>
+        <button class="btn btn--sm btn--quiet" type="button">最近调用</button>
+      </div>
+    </div>
+
+    <div class="wb__scroll">
+      <table class="wbt">
+        <thead>
+          <tr>
+            <th class="c-method" scope="col">方法</th>
+            <th class="c-name" scope="col">接口 / 路径</th>
+            <th class="c-var" scope="col">返回体</th>
+            <th class="c-calls" scope="col">今日调用</th>
+            <th class="c-last" scope="col">最近命中</th>
+            <th class="c-act" scope="col"><span class="sr-only">行操作</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="wbrow" data-row="1">
+            <td class="c-method"><span class="method"><i class="method__lamp"></i>GET</span></td>
+            <td><div class="ifc"><span class="ifc__name">订单详情</span><span class="ifc__path">/api/order/<span class="param">{orderId}</span></span></div></td>
+            <td><span class="chip chip--code">2</span></td>
+            <td class="calls">421<small>96% 命中</small></td>
+            <td class="last">刚刚 · 变体 1</td>
+            <td class="c-act"><span class="rowtake"><button class="icon-btn" type="button" aria-label="复制 订单详情 的 cURL"><svg aria-hidden="true"><use href="#i-copy"/></svg></button><button class="icon-btn" type="button" aria-label="编辑 订单详情"><svg aria-hidden="true"><use href="#i-edit"/></svg></button><svg class="chev" aria-hidden="true"><use href="#i-chev"/></svg></span></td>
+          </tr>
+
+          <tr class="wbrow is-open" data-row="2" aria-expanded="true">
+            <td class="c-method"><span class="method method--write"><i class="method__lamp"></i>POST</span></td>
+            <td><div class="ifc"><span class="ifc__name">支付回调</span><span class="ifc__path">/api/payment/callback</span></div></td>
+            <td><span class="chip chip--code">3</span></td>
+            <td class="calls">86<small>97% 命中</small></td>
+            <td class="last">12 秒前 · 变体 1</td>
+            <td class="c-act"><span class="rowtake"><button class="icon-btn" type="button" aria-label="复制 支付回调 的 cURL"><svg aria-hidden="true"><use href="#i-copy"/></svg></button><button class="icon-btn" type="button" aria-label="停用 支付回调"><svg aria-hidden="true"><use href="#i-edit"/></svg></button><svg class="chev" aria-hidden="true"><use href="#i-chev"/></svg></span></td>
+          </tr>
+          <tr class="wbpanel">
+            <td colspan="6">
+              <div class="ws">
+                <div class="ws__col">
+                  <div class="ws__label">接口身份<span class="spacer"></span><span class="hint">交易中台</span></div>
+                  <dl class="kv">
+                    <dt>方法</dt><dd class="mono">POST</dd>
+                    <dt>路径</dt><dd class="mono">/api/payment/callback</dd>
+                    <dt>创建人</dt><dd>张一鸣 · 2025-09-12</dd>
+                    <dt>最近修改</dt><dd>3 天前 · 李维</dd>
+                    <dt>今日调用</dt><dd>86 次 · 失败 2 次</dd>
+                  </dl>
+                  <div class="danger-zone">
+                    <p>停用后调用返回 503，配置保留；删除后 30 天内可在回收站恢复。</p>
+                    <button class="link-danger" type="button">停用</button>
+                  </div>
+                </div>
+
+                <div class="ws__col">
+                  <div class="ws__label">返回体 · 3 个变体<span class="spacer"></span><span class="hint">条件全部满足才命中，按顺序取第一个</span></div>
+                  <div class="vlist">
+                    <div class="vrow is-hit">
+                      <span class="vrow__n">1</span>
+                      <span><span class="vrow__name">成功（默认）</span><span class="vrow__cond">amount &gt; 0 AND channel = wechat</span></span>
+                      <span class="vrow__share">62%</span>
+                    </div>
+                    <div class="vrow">
+                      <span class="vrow__n">2</span>
+                      <span><span class="vrow__name">余额不足</span><span class="vrow__cond">code = 5001 AND retry = false</span></span>
+                      <span class="vrow__share">21%</span>
+                    </div>
+                    <div class="vrow">
+                      <span class="vrow__n">3</span>
+                      <span><span class="vrow__name">兜底 · 未命中以上</span><span class="vrow__cond">无条件 · 必须唯一且排在最后</span></span>
+                      <span class="vrow__share">17%</span>
+                    </div>
+                  </div>
+                  <div class="code" style="margin-top:2px">
+                    <pre><span class="punct">{</span> <span class="key">"code"</span><span class="punct">:</span> <span class="num">0</span><span class="punct">,</span> <span class="key">"msg"</span><span class="punct">:</span> <span class="str">"ok"</span><span class="punct">,</span> <span class="key">"data"</span><span class="punct">:</span> <span class="punct">{</span> <span class="key">"tradeNo"</span><span class="punct">:</span> <span class="str">"T20251004"</span> <span class="punct">}</span> <span class="punct">}</span></pre>
+                  </div>
+                </div>
+
+                <div class="ws__col">
+                  <div class="ws__label">试配<span class="spacer"></span><span class="hint">不写入日志</span></div>
+                  <div class="try">
+                    <div class="try__line"><span class="method method--write"><i class="method__lamp"></i>POST</span>/api/payment/callback</div>
+                    <div class="try__params">
+                      <div class="try__param"><span>orderId</span><span>20251004-88</span></div>
+                      <div class="try__param"><span>channel</span><span>wechat</span></div>
+                      <div class="try__param"><span>amount</span><span>199.00</span></div>
+                    </div>
+                    <button class="btn btn--primary btn--block" type="button"><svg aria-hidden="true"><use href="#i-send"/></svg>发送请求</button>
+                    <div class="try__result">
+                      <div class="try__result-line">命中<b>变体 1 · 成功（默认）</b></div>
+                      <div class="try__result-meta">200 · 12ms · 条件 2/2 满足</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </td>
+          </tr>
+
+          <tr class="wbrow" data-row="3">
+            <td class="c-method"><span class="method method--write"><i class="method__lamp"></i>POST</span></td>
+            <td><div class="ifc"><span class="ifc__name">创建订单</span><span class="ifc__path">/api/order/create</span></div></td>
+            <td><span class="chip chip--code">2</span></td>
+            <td class="calls">203<small>88% 命中</small></td>
+            <td class="last">2 分钟前 · 变体 1</td>
+            <td class="c-act"><span class="rowtake"><button class="icon-btn" type="button" aria-label="复制 创建订单 的 cURL"><svg aria-hidden="true"><use href="#i-copy"/></svg></button><button class="icon-btn" type="button" aria-label="编辑 创建订单"><svg aria-hidden="true"><use href="#i-edit"/></svg></button><svg class="chev" aria-hidden="true"><use href="#i-chev"/></svg></span></td>
+          </tr>
+          <tr class="wbrow" data-row="4">
+            <td class="c-method"><span class="method"><i class="method__lamp"></i>GET</span></td>
+            <td><div class="ifc"><span class="ifc__name">订单列表<span class="chip chip--code">分页</span></span><span class="ifc__path">/api/order/list<span class="dim">?page=1&amp;size=20</span></span></div></td>
+            <td><span class="chip chip--code">2</span></td>
+            <td class="calls">318<small>99% 命中</small></td>
+            <td class="last">1 分钟前 · 变体 2</td>
+            <td class="c-act"><span class="rowtake"><button class="icon-btn" type="button" aria-label="复制 订单列表 的 cURL"><svg aria-hidden="true"><use href="#i-copy"/></svg></button><button class="icon-btn" type="button" aria-label="编辑 订单列表"><svg aria-hidden="true"><use href="#i-edit"/></svg></button><svg class="chev" aria-hidden="true"><use href="#i-chev"/></svg></span></td>
+          </tr>
+          <tr class="wbrow" data-row="5">
+            <td class="c-method"><span class="method method--write"><i class="method__lamp"></i>SOAP</span></td>
+            <td><div class="ifc"><span class="ifc__name">订单服务（SOAP）</span><span class="ifc__path">/ws/OrderService <span class="dim">?wsdl</span></span></div></td>
+            <td><span class="chip chip--code">3</span></td>
+            <td class="calls">39<small>—</small></td>
+            <td class="last">1 小时前 · Operation 2</td>
+            <td class="c-act"><span class="rowtake"><button class="icon-btn" type="button" aria-label="复制 订单服务 的地址"><svg aria-hidden="true"><use href="#i-copy"/></svg></button><button class="icon-btn" type="button" aria-label="编辑 订单服务"><svg aria-hidden="true"><use href="#i-edit"/></svg></button><svg class="chev" aria-hidden="true"><use href="#i-chev"/></svg></span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <footer class="wb__foot">
+      <span>1—5 / 128 个接口</span>
+      <span aria-hidden="true">·</span>
+      <span>选中行在下方展开，不跳页</span>
+      <span class="spacer"></span>
+      <span class="pager">
+        <button type="button" disabled aria-label="上一页"><svg aria-hidden="true"><use href="#i-left"/></svg></button>
+        <button type="button" aria-current="page">1</button>
+        <button type="button">2</button>
+        <button type="button">3</button>
+        <button type="button" aria-label="下一页"><svg aria-hidden="true"><use href="#i-right"/></svg></button>
+      </span>
+    </footer>
+  </section>
+</main>
+
+<div class="bulk" hidden aria-hidden="true"></div>
+</body>
+</html>

@@ -1,5 +1,9 @@
 # MockHub 应用配置
 
+# 应用版本：Maven 构建时由 pom.xml 的 project.version 过滤注入
+app:
+  version: "@project.version@"
+
 server:
   # 默认 18080，与启动脚本 mockhub.sh / mockhub.bat 保持一致；8080 容易被占用
   port: 18080

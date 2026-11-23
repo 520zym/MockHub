@@ -1,6 +1,14 @@
 # Changelog
 
-本项目遵循 [Semantic Versioning](https://semver.org/)。
+本项目自 `2026.11.22` 起使用 CalVer（`YYYY.MM.DD`，同一天多次发布追加 `.1`、`.2`）；此前版本继续使用 [Semantic Versioning](https://semver.org/)，历史条目保留原编号。
+
+## [2026.11.22] - 2026-11-22
+
+### 变更
+
+- 版本号改为日期版本（CalVer），发布 tag 形如 `v2026.11.22`；同日再次发布使用 `v2026.11.22.1`。
+- 应用版本号改为从 `pom.xml` 统一注入：健康检查、MCP `serverInfo` 与界面侧栏展示同一个版本。
+- 接口管理、接口编辑、返回体编辑与 SOAP 详情的布局和文案优化。
 
 ## [1.4.5] - 2026-06-21
 

@@ -36,6 +36,9 @@ public class TeamRepository {
             team.setName(rs.getString("name"));
             team.setIdentifier(rs.getString("identifier"));
             team.setColor(rs.getString("color"));
+            team.setDescription(rs.getString("description"));
+            team.setStatus(rs.getString("status"));
+            team.setCreatedBy(rs.getString("created_by"));
             team.setCreatedAt(rs.getString("created_at"));
             return team;
         }
@@ -45,12 +48,14 @@ public class TeamRepository {
     private static final RowMapper<TeamMemberVO> MEMBER_ROW_MAPPER = new RowMapper<TeamMemberVO>() {
         @Override
         public TeamMemberVO mapRow(ResultSet rs, int rowNum) throws SQLException {
-            return new TeamMemberVO(
+            TeamMemberVO member = new TeamMemberVO(
                     rs.getString("id"),
                     rs.getString("username"),
                     rs.getString("display_name"),
                     rs.getString("role")
             );
+            member.setStatus(rs.getString("status"));
+            return member;
         }
     };
 
@@ -145,11 +150,14 @@ public class TeamRepository {
     public void insert(Team team) {
         log.debug("插入团队：name={}, identifier={}", team.getName(), team.getIdentifier());
         jdbcTemplate.update(
-                "INSERT INTO team (id, name, identifier, color, created_at) VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO team (id, name, identifier, color, description, status, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 team.getId(),
                 team.getName(),
                 team.getIdentifier(),
                 team.getColor(),
+                team.getDescription(),
+                team.getStatus(),
+                team.getCreatedBy(),
                 team.getCreatedAt()
         );
     }
@@ -162,9 +170,9 @@ public class TeamRepository {
     public void update(Team team) {
         log.debug("更新团队：id={}, name={}", team.getId(), team.getName());
         jdbcTemplate.update(
-                "UPDATE team SET name = ?, identifier = ?, color = ? WHERE id = ?",
+                "UPDATE team SET name = ?, description = ?, color = ? WHERE id = ?",
                 team.getName(),
-                team.getIdentifier(),
+                team.getDescription(),
                 team.getColor(),
                 team.getId()
         );
@@ -175,6 +183,10 @@ public class TeamRepository {
      *
      * @param id 团队 ID
      */
+    public void updateStatus(String id, String status) {
+        jdbcTemplate.update("UPDATE team SET status=? WHERE id=?", status, id);
+    }
+
     public void deleteById(String id) {
         log.debug("删除团队：id={}", id);
         jdbcTemplate.update("DELETE FROM team WHERE id = ?", id);
@@ -188,7 +200,7 @@ public class TeamRepository {
      */
     public List<TeamMemberVO> findMembers(String teamId) {
         return jdbcTemplate.query(
-                "SELECT u.id, u.username, u.display_name, ut.role FROM user u INNER JOIN user_team ut ON u.id = ut.user_id WHERE ut.team_id = ? ORDER BY ut.role ASC, u.username ASC",
+                "SELECT u.id, u.username, u.display_name, u.status, ut.role FROM user u INNER JOIN user_team ut ON u.id = ut.user_id WHERE ut.team_id = ? ORDER BY ut.role ASC, u.username ASC",
                 MEMBER_ROW_MAPPER,
                 teamId
         );

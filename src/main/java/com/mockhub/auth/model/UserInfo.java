@@ -25,11 +25,16 @@ public class UserInfo {
     /** 是否首次登录（true 时前端强制跳转修改密码页） */
     private boolean firstLogin;
 
+    private String status;
+
     /** 用户所属团队及角色列表 */
     private List<TeamRole> teams;
 
     public UserInfo() {
     }
+
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
 
     public String getId() {
         return id;

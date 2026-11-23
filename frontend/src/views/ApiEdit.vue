@@ -1,168 +1,119 @@
 <template>
   <!-- 接口编辑/新建页面：分区式卡片布局 -->
   <div class="page-api-edit" v-loading="pageLoading">
-    <!-- 页面标题 -->
-    <div class="page-header">
-      <el-button class="back-button" text @click="goBack">
-        <el-icon><ArrowLeft /></el-icon>
-      </el-button>
-      <span class="page-title">{{ isEdit ? '编辑接口' : '新建接口' }}</span>
+    <header class="editor-page-header">
+      <div class="editor-page-heading">
+        <el-button text class="back-button" aria-label="返回接口列表" @click="goBack"><el-icon><ArrowLeft /></el-icon></el-button>
+        <div class="editor-heading-text">
+          <div class="editor-title-row">
+            <h1 :title="form.name || (isEdit ? '接口详情' : '新建接口')">{{ form.name || (isEdit ? '接口详情' : '新建接口') }}</h1>
+            <code class="editor-route" :title="form.method + ' ' + (form.path || '/path')">{{ form.method }} {{ form.path || '/path' }}</code>
+            <span v-if="loadedRevision" class="editor-version">v{{ loadedRevision }}</span>
+            <span class="editor-path" :class="{ 'editor-unsaved': isDirty, 'editor-readonly': readOnly }">{{ readOnly ? (isDirty ? '只读 · 保留未提交草稿' : '只读查看') : (isDirty ? '未保存' : '可编辑') }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="editor-page-actions">
+        <el-button v-if="isDirty && !saving" @click="downloadDraft">导出草稿</el-button>
+        <el-button v-if="saving" @click="copyDraft">复制草稿</el-button>
+        <el-button v-if="loadedApiId" :disabled="saving" @click="historyVisible = true"><FilledIcon name="history" :size="14" />变更记录</el-button>
+        <el-button v-if="!readOnly" type="primary" :loading="saving" :disabled="saving || wsdlUploading || pageLoading || !!detailError || (isEdit && !loadedApiId)" @click="handleSave"><el-icon><DocumentChecked /></el-icon>{{ isEdit ? '保存' : '创建接口' }}</el-button>
+      </div>
+    </header>
+    <div v-if="revisionConflict || saving" class="editor-notices">
+      <el-alert v-if="revisionConflict" title="版本已变化，当前草稿仍然保留" type="warning" :closable="false" show-icon>
+        <p>请先复制需要保留的编辑，再重新加载最新版本。不会自动用新版本号覆盖队友的修改。</p>
+        <el-button size="small" @click="copyDraft">复制当前草稿</el-button><el-button size="small" :disabled="saving" @click="reloadCurrentVersion">重新加载</el-button>
+      </el-alert>
+      <el-alert v-if="saving" title="正在保存；离开页面不会撤销本次保存。" type="info" :closable="false" show-icon />
+    </div>
+    <el-result v-if="detailError" class="editor-error" icon="warning" title="接口详情暂时不可用" :sub-title="detailError"><template #extra><el-button :disabled="saving" @click="reloadCurrentVersion">重新加载</el-button><el-button @click="goBack">返回列表</el-button></template></el-result>
+    <div v-else class="editor-body">
+    <div class="editor-column editor-column--main">
+    <section class="soft-card section-card basic-card">
+      <h2 class="section-title"><span></span>基础信息</h2>
+      <el-form :model="form" label-position="top">
+        <el-form-item label="接口名称" required><el-input v-model="form.name" :readonly="editLocked" placeholder="如：订单详情" /></el-form-item>
+        <div class="basic-pair">
+          <el-form-item label="所属团队" required><el-select v-model="form.teamId" :disabled="isEdit || editLocked" placeholder="选择团队"><el-option v-for="team in (isEdit ? appStore.teams : writableTeams)" :key="team.id" :label="team.name" :value="team.id" /></el-select></el-form-item>
+          <el-form-item label="分组"><el-select v-model="form.groupId" :disabled="editLocked || !form.teamId" clearable placeholder="未分组" @change="handleGroupSelectChange"><el-option v-for="g in availableGroups" :key="g.id" :label="g.name" :value="g.id" /><el-option v-if="canCreateGroup" key="__new__" label="+ 新建分组" value="__new__" /></el-select></el-form-item>
+        </div>
+        <div class="basic-pair">
+          <el-form-item label="接口类型" :class="{ 'basic-pair__full': form.type === 'SOAP' }"><el-radio-group v-model="form.type" :disabled="editLocked || pageLoading"><el-radio-button value="REST">REST</el-radio-button><el-radio-button value="SOAP">SOAP</el-radio-button></el-radio-group></el-form-item>
+          <!-- SOAP 固定 POST，没有可选方法，因此整个方法字段不渲染 -->
+          <el-form-item v-if="form.type !== 'SOAP'" label="HTTP 方法"><el-select v-model="form.method" :disabled="editLocked || pageLoading"><el-option v-for="method in ['GET','POST','PUT','DELETE','PATCH','HEAD','OPTIONS']" :key="method" :label="method" :value="method" /></el-select></el-form-item>
+        </div>
+        <el-form-item label="路径" required :error="pathConflictError"><el-input v-model="form.path" :readonly="editLocked" placeholder="/api/order 或 /service.asmx"><template #suffix><el-icon v-if="pathChecking" class="path-status-icon"><Loading /></el-icon><el-icon v-else-if="pathConflictError" class="path-status-icon path-status-icon--error"><CircleClose /></el-icon><el-icon v-else-if="pathChecked" class="path-status-icon path-status-icon--ok"><CircleCheck /></el-icon></template></el-input></el-form-item>
+        <el-form-item v-if="form.path" label="Mock 地址"><div class="mock-url-display"><code class="mock-url">{{ mockUrl }}</code><CopyButton :text="mockUrl" :show-label="false" /></div></el-form-item>
+        <div class="editor-enable"><div><b title="保存接口后生效">接口启用</b></div><el-switch v-model="form.enabled" :disabled="editLocked || pageLoading" aria-label="接口启用状态" /></div>
+      </el-form>
+    </section>
+
+    <!-- 卡片：标签 -->
+    <div class="soft-card section-card tags-card">
+      <h3 class="section-title">标签</h3>
+      <TagInput v-model="form.tagIds" :team-id="form.teamId" :read-only="editLocked" />
     </div>
 
-    <!-- 卡片 1：基本信息 -->
-    <div class="soft-card section-card">
-      <h3 class="section-title">基本信息</h3>
+    <!-- 卡片：高级配置 -->
+    <div class="soft-card section-card advanced-card">
+      <h3 class="section-title">响应头覆盖</h3>
 
-      <el-form :model="form" label-width="100px" label-position="top">
-        <!-- 接口类型切换 -->
-        <el-form-item label="接口类型">
-          <el-radio-group v-model="form.type">
-            <el-radio-button value="REST">REST</el-radio-button>
-            <el-radio-button value="SOAP">SOAP</el-radio-button>
-          </el-radio-group>
-        </el-form-item>
-
-        <el-row :gutter="20">
-          <!-- 接口名称 -->
-          <el-col :span="16">
-            <el-form-item label="接口名称" required>
-              <el-input v-model="form.name" placeholder="如：获取用户信息" />
-            </el-form-item>
-          </el-col>
-
-          <!-- 所属团队 -->
-          <el-col :span="8">
-            <el-form-item label="所属团队" required>
-              <el-select
-                v-model="form.teamId"
-                placeholder="选择团队"
-                style="width: 100%"
-              >
-                <el-option
-                  v-for="team in appStore.teams"
-                  :key="team.id"
-                  :label="team.name"
-                  :value="team.id"
-                >
-                  <span style="display: flex; align-items: center; gap: 8px">
-                    <TeamTag :identifier="team.identifier" :color="team.color" />
-                    {{ team.name }}
-                  </span>
-                </el-option>
-              </el-select>
-            </el-form-item>
-          </el-col>
-
-        </el-row>
-
-        <!-- 分组（可选）：选择已有分组或就地新建；切换团队后会重置并重新加载 -->
-        <el-row :gutter="20">
-          <el-col :span="8">
-            <el-form-item label="分组">
-              <el-select
-                v-model="form.groupId"
-                placeholder="未分组"
-                clearable
-                :disabled="!form.teamId"
-                style="width: 100%"
-                @change="handleGroupSelectChange"
-              >
-                <el-option
-                  v-for="g in availableGroups"
-                  :key="g.id"
-                  :label="g.name"
-                  :value="g.id"
-                />
-                <!-- 就地新建（仅团队管理员/超管可见） -->
-                <el-option
-                  v-if="canCreateGroup"
-                  key="__new__"
-                  label="+ 新建分组..."
-                  value="__new__"
-                >
-                  <span style="color: #6366F1; font-weight: 500;">+ 新建分组...</span>
-                </el-option>
-              </el-select>
-            </el-form-item>
-          </el-col>
-        </el-row>
-
-        <!-- REST 模式下的方法 + 路径 -->
-        <el-row :gutter="20" v-if="form.type === 'REST'">
-          <el-col :span="4">
-            <el-form-item label="HTTP 方法" required>
-              <el-select v-model="form.method" style="width: 100%">
-                <el-option v-for="m in httpMethods" :key="m" :label="m" :value="m" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="20">
-            <el-form-item label="路径" required :error="pathConflictError">
-              <el-input v-model="form.path" placeholder="/api/user/{id}">
-                <template #prepend>/mock/{{ currentTeamIdentifier }}</template>
-                <template #suffix>
-                  <el-icon v-if="pathChecking" class="path-check-icon"><Loading /></el-icon>
-                  <el-icon v-else-if="pathConflictError" class="path-check-icon path-check-icon--error"><CircleClose /></el-icon>
-                  <el-icon v-else-if="form.path && pathChecked" class="path-check-icon path-check-icon--ok"><CircleCheck /></el-icon>
-                </template>
-              </el-input>
-            </el-form-item>
-          </el-col>
-        </el-row>
-
-        <!-- SOAP 模式下的路径 -->
-        <el-row :gutter="20" v-if="form.type === 'SOAP'">
-          <el-col :span="24">
-            <el-form-item label="路径" required :error="pathConflictError">
-              <el-input v-model="form.path" placeholder="/ws/notice">
-                <template #prepend>/mock/{{ currentTeamIdentifier }}</template>
-                <template #suffix>
-                  <el-icon v-if="pathChecking" class="path-check-icon"><Loading /></el-icon>
-                  <el-icon v-else-if="pathConflictError" class="path-check-icon path-check-icon--error"><CircleClose /></el-icon>
-                  <el-icon v-else-if="form.path && pathChecked" class="path-check-icon path-check-icon--ok"><CircleCheck /></el-icon>
-                </template>
-              </el-input>
-            </el-form-item>
-          </el-col>
-        </el-row>
-
-        <!-- Mock 地址展示 -->
-        <el-form-item label="Mock 地址" v-if="form.path">
-          <div class="mock-url-display">
-            <code class="mock-url">{{ mockUrl }}</code>
-            <CopyButton :text="mockUrl" />
+      <el-form label-position="top" :disabled="readOnly || pageLoading">
+        <!-- 全局响应头覆盖 -->
+        <el-form-item label="全局响应头覆盖">
+          <div class="header-overrides">
+            <div
+              v-for="(item, idx) in headerOverrideList"
+              :key="idx"
+              class="header-row"
+            >
+              <el-input v-model="item.key" :readonly="editLocked" placeholder="Header Name" class="header-key" />
+              <el-input v-model="item.value" :readonly="editLocked" placeholder="Header Value" class="header-value" />
+              <el-button text type="danger" :disabled="editLocked" @click="removeHeaderOverride(idx)">
+                <el-icon><Delete /></el-icon>
+              </el-button>
+            </div>
+            <el-button size="small" :disabled="editLocked" @click="addHeaderOverride">
+              <el-icon><Plus /></el-icon>
+              添加响应头覆盖
+            </el-button>
           </div>
         </el-form-item>
       </el-form>
     </div>
 
+        </div>
+
+<div class="editor-column editor-column--work">
     <!-- 卡片：接口描述（REST 和 SOAP 都显示） -->
-    <div class="soft-card section-card">
-      <h3 class="section-title">接口描述</h3>
-      <RichTextEditor v-model="form.description" placeholder="输入接口描述..." />
+    <div class="soft-card section-card description-card">
+      <h3 class="section-title"><span></span>接口描述</h3>
+      <RichTextEditor v-model="form.description" :read-only="editLocked" :height="200" placeholder="输入接口描述..." />
     </div>
 
     <!-- SOAP 模式：WSDL 上传及 Operation 配置 -->
-    <div class="soft-card section-card" v-if="form.type === 'SOAP'">
+    <div class="soft-card section-card response-card soap-card" v-if="form.type === 'SOAP'">
       <h3 class="section-title">SOAP / WSDL 配置</h3>
 
       <!-- WSDL 上传 -->
-      <el-form label-position="top">
+      <el-form label-position="top" :disabled="readOnly || pageLoading">
         <el-form-item label="WSDL 文件">
           <div class="wsdl-upload-row">
             <el-upload
+              :disabled="editLocked || pageLoading"
               :auto-upload="false"
               :limit="1"
               accept=".wsdl,.xml"
               :on-change="handleWsdlFileChange"
               :show-file-list="false"
             >
-              <el-button>
+              <el-button :disabled="editLocked">
                 <el-icon><Upload /></el-icon>
                 选择 WSDL 文件
               </el-button>
             </el-upload>
-            <el-button type="primary" :loading="wsdlUploading" @click="handleUploadWsdl" :disabled="!wsdlFile">
+            <el-button type="primary" :loading="wsdlUploading" @click="handleUploadWsdl" :disabled="editLocked || wsdlUploading || !wsdlFile">
               上传并解析
             </el-button>
             <span v-if="form.soapConfig && form.soapConfig.wsdlFileName" class="wsdl-filename">
@@ -189,8 +140,8 @@
         <div class="operations-toolbar">
           <h4 class="operations-title">Operations（{{ form.soapConfig.operations.length }} 个）</h4>
           <div class="operations-actions">
-            <el-button text size="small" @click="expandAllOps">全部展开</el-button>
-            <el-button text size="small" @click="collapseAllOps">全部折叠</el-button>
+            <el-button text size="small" :disabled="saving" @click="expandAllOps">全部展开</el-button>
+            <el-button text size="small" :disabled="saving" @click="collapseAllOps">全部折叠</el-button>
           </div>
         </div>
         <div
@@ -200,7 +151,7 @@
           :class="{ 'operation-card--collapsed': isOpCollapsed(op) }"
         >
           <!-- 标题行可点击整行切换折叠（编辑响应体前必须先展开） -->
-          <div class="operation-header" @click="toggleOpCollapsed(op)">
+          <div class="operation-header" @click="!saving && toggleOpCollapsed(op)">
             <el-icon class="operation-chevron">
               <ArrowDown v-if="isOpCollapsed(op)" />
               <ArrowUp v-else />
@@ -219,9 +170,10 @@
           <template v-if="!isOpCollapsed(op)">
             <el-input
               v-model="op.description"
+              :readonly="editLocked"
               type="textarea"
               :autosize="{ minRows: 1, maxRows: 4 }"
-              placeholder="接口描述（选填，建议 200 字内说明用途 / 参数 / 注意事项）"
+              placeholder="接口描述（选填）"
               class="operation-description"
             />
             <ResponseTabs
@@ -230,6 +182,8 @@
               :operation-name="op.operationName"
               :team-id="form.teamId"
               :api-context="aiApiContext"
+        :api-id="loadedApiId"
+        :read-only="editLocked"
               default-content-type="text/xml"
               editor-language="xml"
             />
@@ -243,57 +197,20 @@
     </div>
 
     <!-- 卡片：返回体配置（REST 模式，使用 ResponseTabs 组件） -->
-    <div class="soft-card section-card" v-if="form.type === 'REST'">
-      <h3 class="section-title">返回体配置</h3>
+    <div class="soft-card section-card response-card" v-if="form.type === 'REST'">
       <ResponseTabs
         v-model="form.responses"
         v-model:selection-mode="form.responseMode"
         :team-id="form.teamId"
         :api-context="aiApiContext"
+        :api-id="loadedApiId"
+        :read-only="editLocked"
       />
     </div>
 
-    <!-- 卡片：标签 -->
-    <div class="soft-card section-card">
-      <h3 class="section-title">标签</h3>
-      <TagInput v-model="form.tagIds" :team-id="form.teamId" />
     </div>
-
-    <!-- 卡片：高级配置 -->
-    <div class="soft-card section-card">
-      <h3 class="section-title">高级配置</h3>
-
-      <el-form label-position="top">
-        <!-- 全局响应头覆盖 -->
-        <el-form-item label="全局响应头覆盖">
-          <div class="header-overrides">
-            <div
-              v-for="(item, idx) in headerOverrideList"
-              :key="idx"
-              class="header-row"
-            >
-              <el-input v-model="item.key" placeholder="Header Name" class="header-key" />
-              <el-input v-model="item.value" placeholder="Header Value" class="header-value" />
-              <el-button text type="danger" @click="removeHeaderOverride(idx)">
-                <el-icon><Delete /></el-icon>
-              </el-button>
-            </div>
-            <el-button size="small" @click="addHeaderOverride">
-              <el-icon><Plus /></el-icon>
-              添加响应头覆盖
-            </el-button>
-          </div>
-        </el-form-item>
-      </el-form>
     </div>
-
-    <!-- 底部操作栏 -->
-    <div class="bottom-actions">
-      <el-button @click="goBack">取消</el-button>
-      <el-button type="primary" :loading="saving" :disabled="saving" @click="handleSave">
-        {{ isEdit ? '保存' : '创建' }}
-      </el-button>
-    </div>
+    <ApiHistoryDrawer v-model="historyVisible" :api-id="loadedApiId" :team-id="form.teamId" :current-revision="loadedRevision" :read-only="editLocked || isDirty" @changed="historyChanged" />
   </div>
 </template>
 
@@ -308,9 +225,11 @@
  * 每个返回体有独立的名称、状态码、Content-Type、延迟和响应体。
  */
 import { ref, computed, onMounted, onBeforeUnmount, reactive, watch } from 'vue'
-import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
+import { useRoute, useRouter, onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAppStore } from '@/stores/app'
+import FilledIcon from '@/components/FilledIcon.vue'
+import ApiHistoryDrawer from '@/components/ApiHistoryDrawer.vue'
 import { useUserStore } from '@/stores/user'
 import { getApiDetail, createApi, updateApi, checkApiPath } from '@/api/apis'
 import { getGroups, createGroup } from '@/api/groups'
@@ -334,13 +253,42 @@ const availableGroups = ref([])
 
 /** 当前用户在所选团队是否有创建分组的权限（团队管理员/超管） */
 const canCreateGroup = computed(() => {
-  return form.teamId ? userStore.isTeamAdmin(form.teamId) : false
+  return form.teamId ? userStore.canWriteTeam(form.teamId) : false
 })
 
 // 是否为编辑模式
-const isEdit = computed(() => !!route.params.id)
+const isEdit = computed(() => !!route.params.id || !!createdApiId.value)
 const pageLoading = ref(false)
 const saving = ref(false)
+const loadedRevision = ref(null)
+const revisionConflict = ref(false)
+const loadedApiId = ref(null)
+const createdApiId = ref(null) // A committed create must not be submitted as another create if navigation is blocked.
+const detailError = ref('')
+let detailRequest = 0, disposed = false
+const readOnly = computed(() => !userStore.hasCapability(form.teamId, 'read') || !userStore.canWriteTeam(form.teamId))
+const editLocked = computed(() => readOnly.value || saving.value)
+let editorEpoch = 0, navigationEpoch = 0, activeSave = null
+
+function invalidateEditorContext() {
+  editorEpoch++
+  activeSave = null
+  saving.value = false
+}
+
+function editorContext() {
+  return { epoch: editorEpoch, id: route.params.id, path: route.fullPath, teamId: form.teamId, currentTeamId: appStore.currentTeamId }
+}
+
+function isEditorContextCurrent(context) {
+  return !disposed && context.epoch === editorEpoch
+    && context.id === route.params.id && context.path === route.fullPath
+    && context.teamId === form.teamId && context.currentTeamId === appStore.currentTeamId
+    && userStore.hasCapability(context.teamId, 'read')
+}
+
+const writableTeams = computed(() => appStore.teams.filter(team => userStore.canWriteTeam(team.id)))
+const historyVisible = ref(false)
 
 /**
  * v1.4.4 性能：SOAP operation 折叠态管理。
@@ -358,6 +306,7 @@ function isOpCollapsed(op) {
 }
 
 function toggleOpCollapsed(op) {
+  if (saving.value) return
   if (collapsedOps.has(op.operationName)) {
     collapsedOps.delete(op.operationName)
   } else {
@@ -371,6 +320,7 @@ function collapseAllOps() {
 }
 
 function expandAllOps() {
+  if (saving.value) return
   collapsedOps.clear()
 }
 
@@ -517,12 +467,18 @@ watch(() => [form.teamId, form.method, form.path, form.type], () => {
   schedulePathConflictCheck()
 })
 
+// SOAP 固定 POST：切换类型时同步表单值，页头与保存结果保持一致。
+watch(() => form.type, type => { if (type === 'SOAP') form.method = 'POST' })
+
 // --- 未保存离开提示 ---
 // 在初始化（loadApiDetail 完成 / 新建模式 onMounted）之后立即拍快照，
 // 之后任意修改都让 isDirty 变 true。保存成功后重置快照让用户能正常导航。
 const formSnapshot = ref('')
 const headerSnapshot = ref('')
-const skipLeaveGuard = ref(false) // 保存成功后绕过守卫
+// Invalidate synchronously, including A → B → A changes within one Vue tick.
+watch(() => [route.params.id, route.fullPath, form.teamId, appStore.currentTeamId,
+  userStore.hasCapability(form.teamId, 'read'), userStore.canWriteTeam(form.teamId)],
+invalidateEditorContext, { flush: 'sync' })
 
 function captureSnapshot() {
   formSnapshot.value = JSON.stringify(form)
@@ -530,13 +486,13 @@ function captureSnapshot() {
 }
 
 const isDirty = computed(() => {
-  if (skipLeaveGuard.value) return false
+  if (!formSnapshot.value) return false
   return JSON.stringify(form) !== formSnapshot.value
       || JSON.stringify(headerOverrideList.value) !== headerSnapshot.value
 })
 
 function beforeUnloadHandler(e) {
-  if (isDirty.value) {
+  if (saving.value || isDirty.value) {
     // 现代浏览器忽略自定义文案，但仍需 preventDefault + returnValue 触发原生提示
     e.preventDefault()
     e.returnValue = ''
@@ -544,23 +500,24 @@ function beforeUnloadHandler(e) {
   }
 }
 
-onBeforeRouteLeave(async (to, from, next) => {
-  if (!isDirty.value) {
-    next()
-    return
-  }
+async function confirmEditorLeave() {
+  const pending = saving.value && !activeSave?.committed
+  // Navigation intent suppresses auto-navigation, not the already submitted server operation.
+  // If the user cancels the dialog, a genuine success can still acknowledge this exact draft.
+  navigationEpoch++
+  if ((!pending && !isDirty.value) || (form.teamId && !userStore.hasCapability(form.teamId, 'read'))) return true
   try {
     await ElMessageBox.confirm(
-      '当前接口有未保存的修改，确定离开吗？',
-      '未保存提示',
-      { confirmButtonText: '离开', cancelButtonText: '继续编辑', type: 'warning' }
+      pending ? '保存请求已发送，离开不会撤销服务端保存，结果可能仍会生效。确定离开吗？' : '当前接口有未保存的修改，确定离开吗？',
+      pending ? '保存进行中' : '未保存提示',
+      { confirmButtonText: '离开', cancelButtonText: '留在此页', type: 'warning' }
     )
-    next()
-  } catch (e) {
-    next(false)
-  }
-})
+    return true
+  } catch { return false }
+}
 
+onBeforeRouteLeave(() => confirmEditorLeave())
+onBeforeRouteUpdate((to, from) => to.params.id === from.params.id ? true : confirmEditorLeave())
 // --- 计算属性 ---
 
 /** 当前选中团队的 identifier */
@@ -569,9 +526,9 @@ const currentTeamIdentifier = computed(() => {
   return team ? team.identifier : '{team}'
 })
 
-/** 完整 Mock 地址（优先使用服务器局域网地址） */
+/** 使用当前可访问来源，兼容 loopback 监听和反向代理；不生成不可达的内网链接。 */
 const mockUrl = computed(() => {
-  const base = serverAddress.value || window.location.origin
+  const base = window.location.origin
   return `${base}/mock/${currentTeamIdentifier.value}${normalizeApiPathInput(form.path) || '/'}`
 })
 
@@ -592,10 +549,19 @@ const wsdlHostUrl = computed(() => {
 // --- 数据加载（编辑模式） ---
 
 async function loadApiDetail() {
-  if (!route.params.id) return
-  pageLoading.value = true
+  if (disposed || saving.value || !route.params.id) return false
+  pageLoading.value = true; detailError.value = ''
+  const id = route.params.id, sequence = ++detailRequest, epoch = editorEpoch
+  let attaching = false
   try {
-    const data = await getApiDetail(route.params.id)
+    const data = await getApiDetail(id)
+    if (disposed || epoch !== editorEpoch || sequence !== detailRequest || route.params.id !== id) return false
+    if (data.id !== id) { detailError.value = '接口详情与当前路由不一致，请重新加载'; return false }
+    attaching = true
+    loadedApiId.value = id
+    loadedRevision.value = data.revision
+    appStore.setFilter(data.teamId)
+    revisionConflict.value = false
 
     // 填充基本信息
     Object.assign(form, {
@@ -734,10 +700,14 @@ async function loadApiDetail() {
     headerOverrideList.value = Object.entries(overridesObj).map(
       ([key, value]) => ({ key, value })
     )
+    captureSnapshot()
+    return true
   } catch (e) {
-    ElMessage.error('加载接口详情失败')
+    if (disposed || (!attaching && epoch !== editorEpoch) || sequence !== detailRequest || route.params.id !== id) return false
+    detailError.value = e.msg || '无法读取接口详情，请检查当前团队权限或稍后重试'
+    loadedApiId.value = null
   } finally {
-    pageLoading.value = false
+    if (!disposed && sequence === detailRequest) pageLoading.value = false
   }
 }
 
@@ -787,17 +757,23 @@ function createDefaultSoapResponse(operationName, suggestedResponseBody) {
 
 // --- WSDL 上传 ---
 function handleWsdlFileChange(uploadFile) {
+  if (disposed || editLocked.value) return
   wsdlFile.value = uploadFile.raw
 }
 
 async function handleUploadWsdl() {
+  if (disposed || editLocked.value || wsdlUploading.value) return
+  const context = editorContext()
   if (!wsdlFile.value) return
 
   wsdlUploading.value = true
   try {
     const formData = new FormData()
+    const teamId = form.teamId
     formData.append('file', wsdlFile.value)
+    formData.append('teamId', teamId)
     const res = await uploadWsdl(formData)
+    if (!isEditorContextCurrent(context) || editLocked.value || teamId !== form.teamId || form.type !== 'SOAP') return
 
     // 合并策略：
     // - 已存在且有 responses（用户编辑过）→ 保留原 responses，只更新 soapAction
@@ -849,10 +825,12 @@ async function handleUploadWsdl() {
 // --- 全局响应头覆盖 ---
 
 function addHeaderOverride() {
+  if (disposed || editLocked.value) return
   headerOverrideList.value.push({ key: '', value: '' })
 }
 
 function removeHeaderOverride(idx) {
+  if (disposed || editLocked.value) return
   headerOverrideList.value.splice(idx, 1)
 }
 
@@ -906,8 +884,34 @@ function isConditionsEmptyLocal(json) {
   }
 }
 
+function downloadDraft() {
+  const blob = new Blob([JSON.stringify({ ...form, expectedRevision: loadedRevision.value, _note: '本地未提交草稿，不是完整备份' }, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob), link = document.createElement('a')
+  link.href = url; link.download = 'mockhub-api-draft.json'; link.click(); URL.revokeObjectURL(url)
+}
+async function historyChanged(change) {
+  if (disposed || saving.value) return
+  if (change.apiId !== loadedApiId.value || change.teamId !== form.teamId) return
+  if (isDirty.value) { revisionConflict.value = true; return }
+  if (await loadApiDetail()) appStore.bumpApiRevision()
+}
+async function copyDraft() {
+  try { await navigator.clipboard.writeText(JSON.stringify({ ...form, expectedRevision: loadedRevision.value }, null, 2)); ElMessage.success('当前草稿已复制') }
+  catch { ElMessage.warning('浏览器未授权剪贴板，请手动复制需要保留的内容') }
+}
+async function reloadCurrentVersion() {
+  if (disposed || saving.value) return
+  const context = editorContext()
+  try {
+    await ElMessageBox.confirm('重新加载将丢弃未提交编辑，是否继续？', '重新加载', { type: 'warning' })
+    if (!isEditorContextCurrent(context) || saving.value) return
+    await loadApiDetail()
+  } catch {}
+}
 async function handleSave() {
-  if (saving.value) return
+  if (disposed || saving.value || wsdlUploading.value || pageLoading.value || detailError.value) return
+  if (isEdit.value && loadedApiId.value !== (route.params.id || createdApiId.value)) { ElMessage.warning('详情尚未就绪，无法将旧草稿写入其它接口'); return }
+  if (!userStore.hasCapability(form.teamId, 'read') || !userStore.canWriteTeam(form.teamId)) { ElMessage.warning('当前团队角色不可修改接口'); return }
 
   // 基本校验
   if (!form.name.trim()) {
@@ -947,6 +951,12 @@ async function handleSave() {
     return
   }
 
+  // Own both the request and the exact submitted draft, never a later reactive object.
+  editorEpoch++
+  const context = editorContext(), request = { committed: false, navigationEpoch }
+  const submittedForm = JSON.stringify(form), submittedHeaders = JSON.stringify(headerOverrideList.value)
+  const expectedRevision = loadedRevision.value, apiId = route.params.id || createdApiId.value
+  activeSave = request
   saving.value = true
   try {
     // 将 headerOverrideList 转回对象
@@ -992,7 +1002,7 @@ async function handleSave() {
       }
     }
 
-    const payload = {
+    const payload = JSON.parse(JSON.stringify({
       type: form.type,
       name: form.name,
       description: form.description,
@@ -1010,28 +1020,37 @@ async function handleSave() {
       soapConfig: soapConfigPayload,
       responseMode: form.responseMode === 'RANDOM' ? 'RANDOM' : 'CONDITION',
       responses: allResponses
-    }
+    }))
 
-    if (isEdit.value) {
-      await updateApi(route.params.id, payload)
-      ElMessage.success('保存成功')
-    } else {
-      await createApi(payload)
-      ElMessage.success('创建成功')
+    const saved = apiId
+      ? await updateApi(apiId, { ...payload, expectedRevision })
+      : await createApi(payload)
+    if (activeSave !== request || !isEditorContextCurrent(context) || !userStore.canWriteTeam(context.teamId)) return
+    request.committed = true
+    ElMessage.success(apiId ? '保存成功' : '创建成功')
+    formSnapshot.value = submittedForm
+    headerSnapshot.value = submittedHeaders
+    if (!apiId && saved?.id) { createdApiId.value = saved.id; loadedApiId.value = saved.id }
+    if (saved?.revision) loadedRevision.value = saved.revision
+    // A delayed child event must not silently discard a newer local draft, despite the UI freeze.
+    if (isDirty.value) {
+      ElMessage.warning('提交的版本已保存，但本地草稿又有变化，已保留在当前页面；请先导出，再到列表核对服务端版本。')
+      return
     }
-    // 保存成功后清空脏检测，避免离开时弹"未保存"提示
-    skipLeaveGuard.value = true
-    // 刷新团队数据（apiCount 可能变化）
-    appStore.loadTeams()
-    router.push('/apis')
+    if (request.navigationEpoch !== navigationEpoch) return
+    // Refresh counts without converting a refresh/navigation failure into a false save failure.
+    appStore.loadTeams().catch(() => {})
+    try { await router.push('/apis') } catch { /* The committed save remains committed. */ }
   } catch (e) {
+    if (activeSave !== request || !isEditorContextCurrent(context) || !userStore.canWriteTeam(context.teamId)) return
+    if (Number(e?.code) === 40921 || Number(e?.code) === 40920) revisionConflict.value = true
     if (e?.isTimeout || e?.isNetworkError) {
       ElMessage.warning('保存请求超时或网络异常，服务端可能已经保存成功。请返回接口列表确认后再决定是否重试，避免重复提交。')
     } else if (e?.response && e.response.status !== 401) {
       ElMessage.error('保存失败，请稍后重试')
     }
   } finally {
-    saving.value = false
+    if (activeSave === request) { activeSave = null; saving.value = false }
   }
 }
 
@@ -1070,7 +1089,9 @@ watch(
       form.groupId = null
     }
     loadGroups()
-  }
+  },
+  // Reset immediately on user team changes, before detail hydration assigns its own groupId.
+  { flush: 'sync' }
 )
 
 /**
@@ -1078,12 +1099,14 @@ watch(
  * 仅团队管理员/超管能看到该选项。
  */
 async function handleGroupSelectChange(val) {
+  if (disposed || editLocked.value) return
   if (val !== '__new__') return
 
   // 立即把 select 值还原为 null（弹窗未确认前不应保留 sentinel）
   form.groupId = null
 
   try {
+    const context = editorContext()
     const { value: name } = await ElMessageBox.prompt('请输入分组名', '新建分组', {
       confirmButtonText: '创建',
       cancelButtonText: '取消',
@@ -1097,6 +1120,7 @@ async function handleGroupSelectChange(val) {
       }
     })
 
+    if (!isEditorContextCurrent(context) || editLocked.value) return
     const trimmed = name.trim()
     // sortOrder 取最大值 + 1，新分组排在末尾
     const maxOrder = availableGroups.value.reduce((m, g) => Math.max(m, g.sortOrder || 0), 0)
@@ -1105,6 +1129,7 @@ async function handleGroupSelectChange(val) {
       name: trimmed,
       sortOrder: maxOrder + 1
     })
+    if (!isEditorContextCurrent(context) || editLocked.value) return
     ElMessage.success('分组已创建')
     // 加入本地列表并选中
     availableGroups.value.push(created)
@@ -1115,10 +1140,28 @@ async function handleGroupSelectChange(val) {
 }
 
 // --- 初始化 ---
-watch(() => appStore.apiRevision, () => {
-  if (isEdit.value) {
-    loadApiDetail()
-  }
+watch(() => route.params.id, async (id, previous) => {
+  if (id === previous || disposed) return
+  detailRequest++
+  createdApiId.value = null
+  loadedApiId.value = null
+  loadedRevision.value = null
+  revisionConflict.value = false
+  historyVisible.value = false
+  formSnapshot.value = ''; headerSnapshot.value = ''
+  if (id) await loadApiDetail()
+})
+
+watch(() => appStore.apiRevision, async () => {
+  if (disposed || saving.value || !isEdit.value || pageLoading.value || !loadedApiId.value) return
+  const id = loadedApiId.value, sequence = detailRequest
+  try {
+    const latest = await getApiDetail(id)
+    if (disposed || saving.value || sequence !== detailRequest || loadedApiId.value !== id || route.params.id !== id) return
+    if (latest.revision === loadedRevision.value) return
+    if (isDirty.value) { revisionConflict.value = true; return }
+    await loadApiDetail()
+  } catch { /* Keep the draft; the request layer reports lost access. */ }
 })
 
 onMounted(async () => {
@@ -1142,237 +1185,72 @@ onMounted(async () => {
       form.teamId = appStore.currentTeamId
     }
   }
-  // 拍下初始快照，作为脏检测基线
-  captureSnapshot()
+  // 编辑详情由成功加载本身拍快照，旧初始化回调不能清理新页面的草稿。
+  if (disposed) return
+  if (!isEdit.value) captureSnapshot()
   // 关浏览器/刷新时拦截
   window.addEventListener('beforeunload', beforeUnloadHandler)
 })
 
 onBeforeUnmount(() => {
+  disposed = true; invalidateEditorContext(); detailRequest++; pathCheckSeq++
   window.removeEventListener('beforeunload', beforeUnloadHandler)
   if (pathCheckTimer) clearTimeout(pathCheckTimer)
 })
 </script>
 
 <style lang="scss" scoped>
-.page-api-edit {
-  max-width: 960px;
-  margin: 0 auto;
+.page-api-edit { display: flex; flex-direction: column; gap: 12px; min-width: 0; width: 100%; height: 100%; min-height: 0; padding: 7px 2px 0; overflow: hidden; }
+.editor-page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; padding: 2px 6px 0; flex: none; }
+.editor-page-heading { display: flex; align-items: flex-start; gap: 10px; min-width: 0; flex: 1; }
+.back-button { padding: 6px; height: 32px; min-width: 32px; flex-shrink: 0; margin-top: 1px; }
+.editor-heading-text { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.editor-title-row { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; min-width: 0; }
+.editor-title-row h1 { font-size: 24px; font-weight: 600; line-height: 1.25; letter-spacing: -.4px; overflow-wrap: anywhere; margin: 0; }
+.editor-route { padding: 4px 9px; border-radius: 7px; background: var(--app-bg-control); color: var(--app-text-regular); font: 12px/1.6 var(--app-font-mono); overflow-wrap: anywhere; }
+.editor-version { font: 11px var(--app-font-mono); color: var(--app-text-accent); background: var(--app-bg-control); border-radius: 6px; padding: 4px 7px; }
+.editor-path { font-size: 12px; color: var(--app-text-secondary); white-space: nowrap; }.editor-path.editor-unsaved { color: var(--app-text-accent); }.editor-path.editor-readonly { color: var(--app-text-secondary); }
+.editor-page-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex-shrink: 0; padding-top: 2px; }.editor-page-actions .el-button { margin: 0; font-size: 13px; gap: 5px; }
+.editor-notices { flex: none; display: flex; flex-direction: column; gap: 8px; }.editor-notices :deep(.el-alert) { margin: 0; }
+.editor-error { flex: 1; min-height: 0; overflow: auto; }
+.editor-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(300px, 360px) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: 14px; align-items: stretch; }
+.editor-column { display: flex; flex-direction: column; gap: 14px; min-width: 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding: 0 2px 18px 0; }
+/* 固定高度的滚动列里，卡片默认会被 flex 压缩到 min-height，内容仍按自然高度溢出卡片边界。 */
+.editor-column > * { flex: 0 0 auto; }
+.editor-column::-webkit-scrollbar { width: 7px; }.editor-column::-webkit-scrollbar-thumb { background: var(--app-divider); border-radius: 4px; }.editor-column::-webkit-scrollbar-track { background: transparent; }
+.section-card { border: 0; padding: 20px; margin: 0; border-radius: 16px; min-width: 0; box-shadow: none; background: var(--app-bg-surface); }.response-card { min-height: 640px; container-type: inline-size; container-name: response-card; }
+.section-title { font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 7px; margin: 0 0 17px; }.section-title > span { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: var(--app-accent); }.section-title small { margin-left: 3px; color: var(--app-text-secondary); letter-spacing: .08em; font: 11px var(--app-font-mono); }
+.basic-card :deep(.el-form-item__label),.advanced-card :deep(.el-form-item__label) { color: var(--app-text-secondary); font-size: 12px; line-height: 1.6; padding-bottom: 6px; }.basic-card :deep(.el-form-item) { margin-bottom: 15px; }.basic-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; min-width: 0; }.basic-pair > * { min-width: 0; }.basic-pair :deep(.el-radio-button__inner) { padding: 8px 9px; font-size: 12px; min-height: 32px; display: inline-flex; align-items: center; }
+.basic-pair :deep(.el-radio-button) { min-height: 32px; display: inline-flex; align-items: center; }
+.basic-pair__full { grid-column: 1 / -1; }
+.content-type-bar label { display: inline-flex; align-items: center; min-height: 28px; }.field-hint { color: var(--app-text-secondary); font-size: 12px; line-height: 1.6; margin: 7px 0 0; }.description-hint { margin: -6px 0 12px; }.editor-enable { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding-top: 7px; }.editor-enable b { font-size: 12px; font-weight: 500; }.editor-enable small { display: block; font-size: 12px; color: var(--app-text-secondary); margin-top: 4px; }
+.mock-url-display { display: flex; align-items: center; gap: 5px; width: 100%; padding: 9px; background: var(--app-bg-control); border-radius: 10px; min-width: 0; }.mock-url { font: 12px/1.7 var(--app-font-mono); color: var(--app-text-secondary); word-break: break-all; flex: 1; min-width: 0; }
+.header-overrides { display: grid; gap: 9px; width: 100%; }.header-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 6px; min-width: 0; }.header-row > * { min-width: 0; }.header-row :deep(.el-input__inner) { font-size: 12px; }.header-overrides > .el-button { margin: 0; justify-self: start; font-size: 12px; }
+.wsdl-upload-row { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; min-width: 0; }.wsdl-filename { color: var(--app-text-secondary); font-size: 12px; max-width: 100%; overflow-wrap: anywhere; }.operations-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; }.operations-title { font-size: 12px; margin: 0; }.operations-actions { display: flex; gap: 5px; }.operation-card { background: var(--app-bg-control); border-radius: 12px; padding: 14px; margin-bottom: 12px; }.operation-header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; cursor: pointer; margin-bottom: 10px; }.operation-name { font: 600 12px var(--app-font-mono); }.soap-action,.op-desc-preview { font-size: 12px; color: var(--app-text-secondary); overflow-wrap: anywhere; }.op-desc-preview { flex: 1; }.operation-description { margin-bottom: 12px; }.operation-card .operation-card { background: var(--app-bg-surface); }.empty-operations { padding: 35px; text-align: center; color: var(--app-text-secondary); font-size: 12px; }
+.path-status-icon { font-size: 13px; color: var(--app-text-secondary); animation: path-spin 1.2s linear infinite; }.path-status-icon--error { color: var(--app-text-danger); animation: none; }.path-status-icon--ok { color: var(--app-text-success); animation: none; }@keyframes path-spin { to { transform: rotate(360deg); } }
+@media(max-width: 1150px) { .editor-body { grid-template-columns: minmax(270px, 320px) minmax(0, 1fr); }.section-card { padding: 16px; }.editor-title-row h1 { font-size: 22px; }.editor-page-actions { max-width: 42%; justify-content: flex-end; } }
+@media(max-width: 960px) {
+  .page-api-edit { height: auto; min-height: 100%; overflow: visible; gap: 10px; }
+  .editor-page-header { position: sticky; top: 0; z-index: 5; flex-wrap: wrap; gap: 10px; padding: 8px 6px; margin: 0 -2px; background: var(--app-bg-page); }
+  .editor-page-actions { max-width: none; }
+  .editor-body { display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+  .editor-column { display: contents; }
+  .section-card { width: 100%; }
+  .response-card { order: 2; min-height: 0; }
+  .basic-card { order: 1; }
+  .description-card { order: 3; }
+  .tags-card { order: 4; }
+  .advanced-card { order: 5; }
 }
-
-.page-header {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-bottom: 24px;
-}
-
-.back-button {
-  flex-shrink: 0;
-  font-size: 20px;
-  color: #4A5568;
-  padding: 0;
-  height: auto;
-  line-height: 1;
-  vertical-align: middle;
-
-  &:hover {
-    color: #6366F1;
-  }
-}
-
-.page-title {
-  font-size: 22px;
-  font-weight: 700;
-  color: #1B2559;
-  margin: 0;
-  padding: 0;
-  line-height: 1;
-}
-
-// 分区卡片
-.section-card {
-  margin-bottom: 24px;
-  padding: 24px;
-}
-
-.section-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: #1B2559;
-  margin: 0 0 20px 0;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #F1F5F9;
-}
-
-// 路径输入框右侧的实时校验图标
-.path-check-icon {
-  font-size: 16px;
-
-  // 加载中：转圈
-  animation: path-check-spin 1.2s linear infinite;
-
-  &--ok {
-    color: #10B981;
-    animation: none;
-  }
-  &--error {
-    color: #EF4444;
-    animation: none;
-  }
-}
-
-@keyframes path-check-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-// Mock 地址展示
-.mock-url-display {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: #F7F8FA;
-  padding: 8px 12px;
-  border-radius: 10px;
-}
-
-.mock-url {
-  font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
-  font-size: 13px;
-  color: #6366F1;
-  word-break: break-all;
-}
-
-// SOAP Operation 相关
-.wsdl-upload-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.wsdl-filename {
-  font-size: 13px;
-  color: #10B981;
-}
-
-.operations-list {
-  margin-top: 16px;
-}
-
-.operations-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #4A5568;
-  margin-bottom: 0;
-}
-
-/* v1.4.4：Operations 区头部工具条（标题 + 展开/折叠全部） */
-.operations-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
-.operations-actions {
-  display: flex;
-  gap: 4px;
-}
-
-.operation-card {
-  margin-bottom: 16px;
-  padding: 16px;
-  transition: padding 0.2s ease;
-}
-
-/* v1.4.4：折叠态的卡片内边距减小，视觉更紧凑 */
-.operation-card--collapsed {
-  padding: 12px 16px;
-}
-
-.operation-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
-  cursor: pointer;
-  user-select: none;
-}
-
-/* 折叠态下 header 本身就是唯一可见区，去掉 margin-bottom 避免额外空白 */
-.operation-card--collapsed .operation-header {
-  margin-bottom: 0;
-}
-
-/* 展开/折叠指示箭头 */
-.operation-chevron {
-  color: #8392AB;
-  font-size: 14px;
-}
-
-.operation-name {
-  font-weight: 600;
-  color: #1B2559;
-  font-size: 14px;
-}
-
-.operation-action {
-  font-size: 12px;
-  color: #A3AED0;
-  font-family: monospace;
-  flex-shrink: 0;
-}
-
-/* v1.4.4：折叠态下标题行右侧的描述首行预览 */
-.operation-desc-preview {
-  color: #8392AB;
-  font-size: 12px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  flex: 1;
-  min-width: 0;
-}
-
-/* v1.4.4：operation 级描述输入区 */
-.operation-description {
-  margin-bottom: 12px;
-}
-
-.empty-operations {
-  padding: 20px;
-  text-align: center;
-  color: #A3AED0;
-  font-size: 13px;
-}
-
-// 全局响应头覆盖
-.header-overrides {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.header-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.header-key {
-  width: 200px;
-}
-
-.header-value {
-  flex: 1;
-}
-
-// 底部操作栏
-.bottom-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  padding: 20px 0 40px;
+@media(max-width: 560px) {
+  .editor-page-header { padding: 8px 2px; }
+  .editor-page-actions { width: 100%; justify-content: flex-start; }
+  .editor-page-actions .el-button { padding: 8px 10px; }
+  .editor-title-row h1 { font-size: 20px; }
+  .section-card { padding: 14px; }
+  .basic-pair { grid-template-columns: minmax(0, 1fr); }
+  .header-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .header-value { grid-column: 1; grid-row: 2; }
+  .header-row .el-button { grid-column: 2; grid-row: 1 / span 2; }
 }
 </style>

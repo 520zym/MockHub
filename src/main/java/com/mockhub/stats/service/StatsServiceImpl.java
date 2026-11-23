@@ -1,6 +1,7 @@
 package com.mockhub.stats.service;
 
 import com.mockhub.common.model.BizException;
+import com.mockhub.common.model.enums.TeamRoleType;
 import com.mockhub.common.util.SecurityContextUtil;
 import com.mockhub.stats.model.dto.StatsOverviewVO;
 import com.mockhub.stats.model.dto.TopApiVO;
@@ -25,8 +26,8 @@ import java.util.Map;
  * 权限规则：
  * <ul>
  *   <li>超管：teamId 任意（含 null=全部团队）</li>
- *   <li>团队管理员：仅可看自己 role=TEAM_ADMIN 的团队，必须传具体 teamId</li>
- *   <li>其他（含普通成员）：所有方法 403</li>
+ *   <li>团队成员：可查看自己所属团队的统计，必须传具体 teamId</li>
+ *   <li>非成员或无效角色：所有方法 403</li>
  * </ul>
  *
  * 时间窗口处理：days 参数为正整数；起始时间 = 当前日期减去 days 天的 00:00:00；
@@ -133,9 +134,9 @@ public class StatsServiceImpl implements StatsService {
 
         String userId = SecurityContextUtil.getCurrentUserId();
         String role = userRepository.findUserTeamRole(userId, teamId);
-        if (!"TEAM_ADMIN".equals(role)) {
+        if (TeamRoleType.fromStored(role) == null) {
             log.warn("非团队管理员查询统计：userId={}, teamId={}, role={}", userId, teamId, role);
-            throw new BizException(40101, "仅超级管理员或团队管理员可查看统计");
+            throw new BizException(40101, "无权查看该团队统计");
         }
         return teamId;
     }

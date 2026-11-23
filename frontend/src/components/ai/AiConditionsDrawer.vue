@@ -2,7 +2,7 @@
   <el-drawer
     v-model="visible"
     :with-header="false"
-    size="600px"
+    size="min(600px, 100vw)"
     append-to-body
     destroy-on-close
     :modal="false"
@@ -18,7 +18,6 @@
             AI 生成响应规则
             <span class="ai-beta">Beta</span>
           </div>
-          <div class="ai-rules__desc">把自然语言描述转成现有 conditions 结构，应用前可逐条确认</div>
         </div>
         <el-button text circle class="ai-rules__close" @click="visible = false">
           <el-icon><Close /></el-icon>
@@ -28,7 +27,6 @@
       <div class="ai-rules__ctx">
         <span class="ctx-chip">{{ responseName }}</span>
         <span class="ctx-chip">{{ bodySample ? 'Body 示例已提供' : '未提供 Body 示例' }}</span>
-        <span class="ctx-chip">支持 Body / Query / Header</span>
       </div>
 
       <div class="ai-rules__body">
@@ -49,7 +47,7 @@
 
         <div class="ai-rules__hint">
           <el-icon><InfoFilled /></el-icon>
-          支持 BODY / QUERY / HEADER 三类来源；Header 条件填写请求头名称（不区分大小写）。
+          Header 条件填写请求头名称（不区分大小写）。
         </div>
 
         <div class="ai-preview-head">
@@ -116,7 +114,6 @@
               <el-icon><MagicStick /></el-icon>
             </div>
             <div class="ai-rule-empty__title">描述命中条件</div>
-            <div class="ai-rule-empty__desc">生成后可逐条勾选，未通过校验的规则默认不应用</div>
           </div>
         </div>
 
@@ -169,7 +166,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   MagicStick, Close, Refresh, InfoFilled, Warning
@@ -178,6 +175,7 @@ import { generateAiConditions } from '@/api/ai'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
+  readOnly: { type: Boolean, default: false },
   teamId: { type: String, default: null },
   apiContext: { type: Object, default: () => ({}) },
   responseName: { type: String, default: '默认返回体' },
@@ -202,6 +200,10 @@ const error = ref('')
 const result = ref(null)
 const checked = ref([])
 const applyMode = ref('append')
+let generationVersion = 0, disposed = false
+const contextKey = () => JSON.stringify([props.teamId, props.apiContext, props.responseName, props.conditions])
+watch(() => [props.readOnly, props.teamId, props.responseName, props.conditions], () => { generationVersion++; result.value = null; checked.value = []; loading.value = false; if (props.readOnly) visible.value = false })
+onBeforeUnmount(() => { disposed = true; generationVersion++ })
 
 const selectedCount = computed(() => checked.value.filter(Boolean).length)
 const invalidRules = computed(() => (result.value?.rules || []).filter((rule) => !rule.valid))
@@ -216,6 +218,7 @@ const footerNote = computed(() => {
 })
 
 watch(() => props.modelValue, (open) => {
+  generationVersion++
   if (open) {
     instruction.value = ''
     loading.value = false
@@ -237,6 +240,7 @@ function parseExisting() {
 }
 
 async function generate() {
+  if (props.readOnly || disposed) return
   if (!props.teamId) {
     ElMessage.warning('请先选择团队')
     return
@@ -245,10 +249,11 @@ async function generate() {
     ElMessage.warning('请先描述命中条件')
     return
   }
+  const version = ++generationVersion, context = contextKey()
   loading.value = true
   error.value = ''
   try {
-    result.value = await generateAiConditions({
+    const generated = await generateAiConditions({
       teamId: props.teamId,
       apiType: props.apiContext?.type || 'REST',
       apiName: props.apiContext?.name || '',
@@ -259,15 +264,19 @@ async function generate() {
       bodySample: props.bodySample || '',
       currentConditions: props.conditions || ''
     })
+    if (disposed || props.readOnly || version !== generationVersion || context !== contextKey() || !props.modelValue) return
+    result.value = generated
     checked.value = (result.value.rules || []).map((rule) => !!rule.valid)
   } catch (e) {
-    error.value = e?.msg || '生成失败，请稍后重试'
+    if (!disposed && version === generationVersion) error.value = e?.msg || '生成失败，请稍后重试'
   } finally {
-    loading.value = false
+    if (version === generationVersion) loading.value = false
   }
 }
 
 async function apply() {
+  if (props.readOnly || disposed || !props.modelValue) return
+  const version = generationVersion, context = contextKey()
   const rules = (result.value?.rules || [])
     .filter((rule, idx) => checked.value[idx])
     .map((rule) => ({
@@ -292,6 +301,7 @@ async function apply() {
       return
     }
   }
+  if (props.readOnly || disposed || version !== generationVersion || context !== contextKey() || !props.modelValue) return
   const existing = applyMode.value === 'append' ? parseExisting() : []
   const merged = existing.concat(rules)
   emit('apply', {
@@ -347,12 +357,12 @@ function displayValue(rule) {
   width: 36px;
   height: 36px;
   border-radius: 10px;
-  background: var(--ai-soft, #F5F3FF);
-  border: 1px solid var(--ai-border, #E7E3FD);
+  background: var(--app-bg-control);
+  border: 1px solid var(--app-divider);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--ai-accent, #8B5CF6);
+  color: var(--app-accent);
   font-size: 19px;
   flex-shrink: 0;
 }
@@ -365,31 +375,25 @@ function displayValue(rule) {
 .ai-rules__title {
   font-size: 16px;
   font-weight: 700;
-  color: #1B2559;
+  color: var(--app-text-primary);
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
 .ai-beta {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
-  color: var(--ai-accent, #8B5CF6);
-  background: var(--ai-soft, #F5F3FF);
-  border: 1px solid var(--ai-border, #E7E3FD);
+  color: var(--app-text-accent);
+  background: #F4F6F9;
+  border: 1px solid #e5e9f0;
   border-radius: 6px;
   padding: 0 6px;
   line-height: 18px;
 }
 
-.ai-rules__desc {
-  font-size: 12.5px;
-  color: #A3AED0;
-  margin-top: 2px;
-}
-
 .ai-rules__close {
-  color: #A3AED0;
+  color: var(--app-text-secondary);
 }
 
 .ai-rules__ctx {
@@ -403,9 +407,9 @@ function displayValue(rule) {
 }
 
 .ctx-chip {
-  font-size: 11.5px;
-  color: #4A5568;
-  background: #F7F8FA;
+  font-size: 12px;
+  color: var(--app-text-regular);
+  background: var(--app-bg-control);
   border-radius: 6px;
   padding: 2px 8px;
 }
@@ -426,18 +430,18 @@ function displayValue(rule) {
 }
 
 .ai-field__label {
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
-  color: #4A5568;
+  color: var(--app-text-regular);
 }
 
 .ai-rules__hint {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11.5px;
-  color: #8A93A8;
-  background: #F8FAFC;
+  font-size: 12px;
+  color: var(--app-text-secondary);
+  background: var(--app-bg-control);
   border-radius: 8px;
   padding: 7px 10px;
 }
@@ -446,16 +450,16 @@ function displayValue(rule) {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
-  color: #4A5568;
+  color: var(--app-text-regular);
   margin-top: 2px;
 }
 
 .ai-preview-meta {
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 400;
-  color: #A3AED0;
+  color: var(--app-text-secondary);
 }
 
 .ai-preview-spacer {
@@ -490,14 +494,14 @@ function displayValue(rule) {
   height: 34px;
   background: #FBFBFD;
   border-bottom: 1px solid #F1F5F9;
-  font-size: 11.5px;
-  color: #A3AED0;
+  font-size: 11px;
+  color: var(--app-text-secondary);
 }
 
 .ai-rule-row {
   min-height: 44px;
   border-bottom: 1px solid #F8FAFC;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .ai-rule-row:last-child {
@@ -510,15 +514,15 @@ function displayValue(rule) {
 
 .ai-rule-row--invalid .ai-rule-path,
 .ai-rule-row--invalid .ai-rule-value {
-  color: #A3AED0;
+  color: var(--app-text-muted);
   text-decoration: line-through;
 }
 
 .ai-rule-src {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 600;
-  color: #4A5568;
-  background: #F7F8FA;
+  color: var(--app-text-regular);
+  background: var(--app-bg-control);
   border-radius: 5px;
   text-align: center;
   padding: 1px 0;
@@ -526,8 +530,8 @@ function displayValue(rule) {
 
 .ai-rule-path {
   font-family: 'SF Mono', Menlo, Monaco, Consolas, monospace;
-  font-size: 11.5px;
-  color: #1B2559;
+  font-size: 13px;
+  color: var(--app-text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -535,8 +539,8 @@ function displayValue(rule) {
 
 .ai-rule-op {
   font-size: 11px;
-  color: #4F46E5;
-  background: #EEF0FF;
+  color: var(--app-text-accent);
+  background: var(--app-bg-selected);
   border-radius: 5px;
   text-align: center;
   padding: 1px 0;
@@ -544,8 +548,8 @@ function displayValue(rule) {
 
 .ai-rule-value {
   font-family: 'SF Mono', Menlo, Monaco, Consolas, monospace;
-  font-size: 11.5px;
-  color: #4A5568;
+  font-size: 13px;
+  color: var(--app-text-regular);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -555,17 +559,17 @@ function displayValue(rule) {
   display: flex;
   gap: 6px;
   align-items: flex-start;
-  font-size: 11.5px;
-  color: #B45309;
-  background: #FFFBEB;
+  font-size: 12px;
+  color: var(--app-text-warning);
+  background: var(--el-color-warning-light-9);
   border-top: 1px solid #FDE8B9;
   padding: 8px 12px;
   line-height: 1.6;
 }
 
 .ai-rule-warn--soft {
-  color: #4A5568;
-  background: #F7F8FA;
+  color: var(--app-text-regular);
+  background: var(--app-bg-control);
   border-top-color: #F1F5F9;
 }
 
@@ -575,15 +579,15 @@ function displayValue(rule) {
   align-items: center;
   gap: 8px;
   font-size: 12px;
-  color: #A3AED0;
+  color: var(--app-text-secondary);
 }
 
 .ai-spinner {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  border: 2px solid #E0E7FF;
-  border-top-color: #6366F1;
+  border: 2px solid var(--app-bg-selected);
+  border-top-color: var(--app-accent);
   animation: ai-spin 0.8s linear infinite;
 }
 
@@ -611,9 +615,9 @@ function displayValue(rule) {
   height: 40px;
   border-radius: 12px;
   margin: 0 auto 8px;
-  background: var(--ai-soft, #F5F3FF);
-  border: 1px solid var(--ai-border, #E7E3FD);
-  color: var(--ai-accent, #8B5CF6);
+  background: var(--app-bg-control);
+  border: 1px solid var(--app-divider);
+  color: var(--app-accent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -621,15 +625,9 @@ function displayValue(rule) {
 }
 
 .ai-rule-empty__title {
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
-  color: #1B2559;
-}
-
-.ai-rule-empty__desc {
-  font-size: 11px;
-  color: #A3AED0;
-  margin-top: 3px;
+  color: var(--app-text-primary);
 }
 
 .ai-apply {
@@ -652,7 +650,7 @@ function displayValue(rule) {
 }
 
 .ai-apply__item--on {
-  border-color: #C7D2FE;
+  border-color: #cbd8f0;
   background: #FBFCFF;
 }
 
@@ -667,20 +665,20 @@ function displayValue(rule) {
 }
 
 .ai-radio--on {
-  border: 4px solid #6366F1;
+  border: 4px solid var(--app-accent);
 }
 
 .ai-apply__title {
   display: block;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
-  color: #1B2559;
+  color: var(--app-text-primary);
 }
 
 .ai-apply__desc {
   display: block;
-  font-size: 11px;
-  color: #A3AED0;
+  font-size: 12px;
+  color: var(--app-text-secondary);
   line-height: 1.55;
   margin-top: 1px;
 }
@@ -700,8 +698,8 @@ function displayValue(rule) {
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: 11.5px;
-  color: #A3AED0;
+  font-size: 12px;
+  color: var(--app-text-secondary);
 }
 
 :deep(.el-drawer.ai-rules-drawer) {
@@ -712,4 +710,9 @@ function displayValue(rule) {
   padding: 0;
   overflow: hidden;
 }
+:global(.el-drawer.ai-rules-drawer) { box-shadow: none; background: #fff; border-left: 1px solid #e6e9ef; }
+.ai-rules :deep(.el-textarea__inner), .ai-rules :deep(.el-input__wrapper) { box-shadow: none; background: #F4F6F9; border: 1px solid #e7eaf0; }
+.ai-rules :deep(.el-button) { box-shadow: none; }
+.ai-rules :deep(.el-button--primary) { background: #17191D; border-color: #17191D; }
+@media (max-width: 768px) { .ai-rules__head { padding: 16px; } .ai-rules__body { padding: 16px; } .ai-rules__foot { padding: 12px 16px; flex-wrap: wrap; } .ai-rules__note { flex-basis: 100%; } }
 </style>

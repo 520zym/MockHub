@@ -26,6 +26,9 @@ public interface UserService {
      */
     User findById(String id);
 
+    /** Super-admin only; status mutation, administrator validation and credential revocation are atomic. */
+    User updateStatus(String id, com.mockhub.system.model.dto.UpdateUserStatusRequest request);
+
     /**
      * 更新用户的 firstLogin 标志
      *
@@ -33,6 +36,15 @@ public interface UserService {
      * @param firstLogin 新值
      */
     void updateFirstLogin(String userId, boolean firstLogin);
+
+    /**
+     * 超级管理员重置用户密码，并要求用户下次登录修改密码。
+     * 权限校验先于密码校验和目标用户查询。
+     *
+     * @param userId      目标用户 ID
+     * @param newPassword 新密码（明文）
+     */
+    void resetPassword(String userId, String newPassword);
 
     /**
      * 更新用户密码

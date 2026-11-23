@@ -1,206 +1,754 @@
-// ========== Element Plus 组件级覆盖样式 ==========
-
-// ========== 表格 ==========
-.el-table {
-  --el-table-border-color: transparent;
-  --el-table-header-bg-color: transparent;
-  --el-table-row-hover-bg-color: #F7F8FF;
-  background-color: transparent;
-
-  &::before,
-  &::after {
-    display: none;
-  }
-
-  th.el-table__cell {
-    background-color: transparent;
-    color: var(--el-text-color-secondary);
-    font-size: 13px;
-    font-weight: 500;
-    border-bottom: none;
-  }
-
-  td.el-table__cell {
-    border-bottom: none;
-  }
-
-  .el-table__row {
-    transition: background-color 0.2s ease;
-  }
-
-  .el-table__inner-wrapper::before {
-    display: none;
-  }
-
-  // 去除固定列阴影的硬边
-  .el-table-fixed-column--left,
-  .el-table-fixed-column--right {
-    &::before {
-      box-shadow: none;
-    }
-  }
-}
-
-// ========== 按钮 ==========
+// Element Plus 2.x: opaque, borderless surfaces and no elevation.
+// Keep functional control outlines, keyboard focus and validation visible.
 .el-button {
-  border-radius: 12px;
+  --el-button-text-color: var(--app-accent);
+  --el-button-bg-color: var(--app-bg-control);
+  --el-button-border-color: transparent;
+  --el-button-hover-text-color: var(--app-accent-hover);
+  --el-button-hover-bg-color: var(--app-bg-hover);
+  --el-button-hover-border-color: transparent;
+  --el-button-active-text-color: var(--app-accent-hover);
+  --el-button-active-bg-color: #DCE3EE;
+  --el-button-active-border-color: transparent;
+  --el-button-disabled-text-color: var(--app-text-disabled);
+  --el-button-disabled-bg-color: var(--app-bg-disabled);
+  --el-button-disabled-border-color: transparent;
+  border-radius: var(--app-radius-control);
   font-weight: 500;
-  transition: all 0.2s ease;
+  box-shadow: none;
+  transition: color 0.15s ease, background-color 0.15s ease;
+
+  &:hover,
+  &:focus,
+  &:active {
+    box-shadow: none;
+    transform: none;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--app-focus-color);
+    outline-offset: 3px;
+  }
 
   &--primary {
-    &:hover,
-    &:focus {
-      transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
-    }
-
-    &:active {
-      transform: translateY(0);
-    }
+    --el-button-text-color: #FFFFFF;
+    --el-button-bg-color: var(--app-primary);
+    --el-button-border-color: transparent;
+    --el-button-hover-text-color: #FFFFFF;
+    --el-button-hover-bg-color: var(--app-primary-hover);
+    --el-button-hover-border-color: transparent;
+    --el-button-active-text-color: #FFFFFF;
+    --el-button-active-bg-color: var(--app-primary-active);
+    --el-button-active-border-color: transparent;
   }
 
-  &--default {
-    background-color: transparent;
+  &--primary.is-plain {
+    --el-button-text-color: var(--app-accent);
+    --el-button-bg-color: var(--app-bg-selected);
+    --el-button-border-color: transparent;
+    --el-button-hover-text-color: var(--app-accent-hover);
+    --el-button-hover-bg-color: #DFE8FB;
+    --el-button-hover-border-color: transparent;
+    --el-button-active-text-color: var(--app-accent-hover);
+    --el-button-active-bg-color: #D4E0FA;
+    --el-button-active-border-color: transparent;
+  }
+
+  &.is-text,
+  &.is-link {
+    background: transparent;
     border-color: transparent;
-    color: var(--el-color-primary);
-
-    &:hover,
-    &:focus {
-      background-color: #E0E7FF;
-      border-color: transparent;
-      color: var(--el-color-primary);
-    }
   }
-}
 
-// ========== 输入框 ==========
-.el-input {
-  .el-input__wrapper {
-    background-color: #F7F8FA;
-    border: 2px solid transparent;
-    border-radius: 10px;
-    box-shadow: none;
-    transition: all 0.2s ease;
+  &:where(:not(.el-button--danger, .el-button--success, .el-button--warning, .el-button--info)).is-text,
+  &:where(:not(.el-button--danger, .el-button--success, .el-button--warning, .el-button--info)).is-link {
+    color: var(--app-accent);
 
     &:hover {
-      box-shadow: none;
+      color: var(--app-accent-hover);
     }
+  }
 
-    &.is-focus {
-      background-color: #FFFFFF;
-      border-color: var(--el-color-primary);
-      box-shadow: none;
-    }
+  &.is-disabled,
+  &.is-disabled:hover,
+  &.is-disabled:focus {
+    color: var(--app-text-disabled);
+    background: var(--app-bg-disabled);
+    border-color: transparent;
+    opacity: 1;
+  }
+
+  &.is-disabled.is-link,
+  &.is-disabled.is-text {
+    background: transparent;
+  }
+
+  &.is-circle {
+    border-radius: 50%;
   }
 }
 
-.el-textarea {
-  .el-textarea__inner {
-    background-color: #F7F8FA;
-    border: 2px solid transparent;
-    border-radius: 10px;
+// Explicit opt-in for a filled auxiliary action; the main action remains graphite.
+.el-button.app-button--blue {
+  --el-button-text-color: #FFFFFF;
+  --el-button-bg-color: var(--app-accent);
+  --el-button-border-color: transparent;
+  --el-button-hover-text-color: #FFFFFF;
+  --el-button-hover-bg-color: var(--app-accent-hover);
+  --el-button-hover-border-color: transparent;
+  --el-button-active-text-color: #FFFFFF;
+  --el-button-active-bg-color: #22458F;
+  --el-button-active-border-color: transparent;
+}
+
+.el-link.el-link--primary {
+  --el-link-text-color: var(--app-accent);
+  --el-link-hover-text-color: var(--app-accent-hover);
+}
+
+// Modern Select uses .el-select__wrapper, not the old nested input wrapper.
+.el-input__wrapper,
+.el-textarea__inner,
+.el-select__wrapper,
+.el-textarea.is-disabled .el-textarea__inner,
+.el-input.is-disabled .el-input__wrapper,
+.el-range-editor.el-input__wrapper,
+.el-cascader .el-input__wrapper {
+  background: var(--app-bg-control);
+  border: 1px solid transparent;
+  border-radius: var(--app-radius-control);
+  // Element Plus implements borders as inset shadows, including hover/error states.
+  box-shadow: none !important;
+  transition: background-color 0.15s ease, border-color 0.15s ease, outline-color 0.15s ease;
+}
+
+.el-input__wrapper,
+.el-select__wrapper {
+  min-height: var(--el-component-size);
+}
+
+.el-input--small .el-input__wrapper,
+.el-select__wrapper.el-select__wrapper--small {
+  min-height: var(--el-component-size-small);
+}
+
+.el-input--large .el-input__wrapper,
+.el-select__wrapper.el-select__wrapper--large {
+  min-height: var(--el-component-size-large);
+}
+
+.el-input__wrapper:hover,
+.el-textarea__inner:hover,
+.el-select__wrapper:hover {
+  background: #EEF1F6;
+}
+
+.el-input__wrapper.is-focus,
+.el-input__wrapper:focus-within,
+.el-textarea__inner:focus,
+.el-select__wrapper.is-focused,
+.el-select__wrapper:focus-within,
+.el-range-editor.is-active,
+.el-cascader.is-focus .el-input__wrapper {
+  background: var(--app-bg-surface);
+  outline: 2px solid var(--app-focus-color);
+  // Draw the ring inside the control; page/dialog scroll containers commonly clip overflow.
+  outline-offset: -2px;
+}
+
+// The wrapper supplies a complete focus ring; do not draw a second ring around inner text.
+.el-input__inner:focus-visible,
+.el-select__input:focus-visible,
+.el-range-input:focus-visible,
+.el-cascader__search-input:focus-visible {
+  outline: none;
+}
+
+.el-form-item.is-error {
+  .el-input__wrapper,
+  .el-textarea__inner,
+  .el-select__wrapper,
+  .el-range-editor {
+    border-color: var(--el-color-danger);
+  }
+}
+
+.el-form-item__error {
+  color: var(--el-color-danger);
+  line-height: 1.4;
+}
+
+.el-input.is-disabled .el-input__wrapper,
+.el-textarea.is-disabled .el-textarea__inner,
+.el-select__wrapper.is-disabled,
+.el-range-editor.is-disabled,
+.el-range-editor.is-disabled input {
+  color: var(--app-text-disabled);
+  background: var(--app-bg-disabled);
+  cursor: not-allowed;
+  outline: none;
+}
+
+.el-input.is-disabled .el-input__inner,
+.el-textarea.is-disabled .el-textarea__inner,
+.el-select__wrapper.is-disabled .el-select__selected-item,
+.el-range-editor.is-disabled input {
+  color: var(--app-text-disabled);
+  -webkit-text-fill-color: var(--app-text-disabled);
+}
+
+.el-input-group__append,
+.el-input-group__prepend {
+  background: #E9EDF3;
+  color: var(--app-text-regular);
+  border: 0;
+  box-shadow: none;
+}
+
+.el-input-group--prepend .el-input__wrapper {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.el-input-group--append .el-input__wrapper {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.el-input-number__increase,
+.el-input-number__decrease {
+  background: #E9EDF3;
+  border-color: transparent;
+}
+
+.el-select,
+.el-cascader,
+.el-date-editor {
+  --el-select-input-focus-border-color: var(--app-accent);
+  --el-input-focus-border-color: var(--app-accent);
+}
+
+// Tables preserve Element Plus's fixed columns, native scroll regions, borders when requested,
+// expansion controls and row selection. Only decoration is changed.
+.el-table {
+  --el-table-border-color: var(--app-divider);
+  --el-table-header-bg-color: var(--app-bg-control);
+  --el-table-header-text-color: var(--app-text-secondary);
+  --el-table-text-color: var(--app-text-regular);
+  --el-table-row-hover-bg-color: #F6F8FB;
+  --el-table-current-row-bg-color: var(--app-bg-selected);
+  --el-table-fixed-box-shadow: none;
+  --el-table-fixed-left-column: none;
+  --el-table-fixed-right-column: none;
+  border-radius: var(--app-radius-control);
+
+  th.el-table__cell {
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  th.el-table__cell,
+  td.el-table__cell {
+    padding-block: 12px;
+  }
+
+  &:not(.el-table--border) {
+    th.el-table__cell,
+    td.el-table__cell {
+      border-bottom-color: transparent;
+    }
+
+    .el-table__inner-wrapper::before {
+      height: 0;
+    }
+  }
+
+  .el-table-fixed-column--left::before,
+  .el-table-fixed-column--right::before,
+  .el-table__fixed::before,
+  .el-table__fixed-right::before {
     box-shadow: none;
-    transition: all 0.2s ease;
-
-    &:hover {
-      box-shadow: none;
-    }
-
-    &:focus {
-      background-color: #FFFFFF;
-      border-color: var(--el-color-primary);
-      box-shadow: none;
-    }
   }
 }
 
-// ========== 选择器 ==========
-.el-select {
-  .el-input__wrapper {
-    background-color: #F7F8FA;
-    border: 2px solid transparent;
-    border-radius: 10px;
-    box-shadow: none;
-
-    &.is-focus {
-      background-color: #FFFFFF;
-      border-color: var(--el-color-primary);
-      box-shadow: none;
-    }
+.el-table--small {
+  th.el-table__cell,
+  td.el-table__cell {
+    padding-block: 8px;
   }
 }
 
-// ========== 对话框 ==========
+.el-pagination {
+  flex-wrap: wrap;
+  gap: 8px;
+  white-space: normal;
+  --el-pagination-button-bg-color: var(--app-bg-control);
+  --el-pagination-hover-color: var(--app-accent);
+
+  .el-pager li,
+  .btn-prev,
+  .btn-next {
+    border-radius: var(--app-radius-small);
+  }
+
+  .el-pager li.is-active {
+    color: #FFFFFF;
+    background: var(--app-primary);
+  }
+
+  &.is-background .el-pager li.is-active {
+    background: var(--app-primary);
+  }
+}
+
+.el-card {
+  --el-card-border-radius: var(--app-radius-panel);
+  --el-card-padding: var(--app-space-panel);
+  background: var(--app-bg-surface);
+  border: 0;
+  box-shadow: none !important;
+
+  .el-card__header {
+    border-bottom: 0;
+    padding-bottom: 0;
+  }
+}
+
+// Dialogs stay within the real viewport. Long content scrolls inside the body; actions remain visible.
 .el-dialog {
-  border-radius: 16px;
-  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.08);
-  overflow: hidden;
+  --el-dialog-border-radius: var(--app-radius-shell);
+  --el-dialog-padding-primary: 24px;
+  display: flex;
+  flex-direction: column;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
+  padding: 24px;
+  margin-bottom: 16px;
+  background: var(--app-bg-surface);
+  border: 0;
+  box-shadow: none;
+
+  &:not(.is-fullscreen) {
+    margin-top: clamp(16px, var(--el-dialog-margin-top, 8vh), 64px);
+    max-height: calc(100dvh - clamp(16px, var(--el-dialog-margin-top, 8vh), 64px) - 16px);
+  }
+
+  &.is-fullscreen {
+    max-width: 100vw;
+    max-height: 100vh;
+    max-height: 100dvh;
+    border-radius: 0;
+    margin: 0;
+  }
 
   .el-dialog__header {
-    padding: 20px 24px 16px;
+    flex-shrink: 0;
+    padding: 0 28px 20px 0;
     margin-right: 0;
   }
 
+  .el-dialog__title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--app-text-primary);
+  }
+
+  .el-dialog__headerbtn {
+    top: 16px;
+    right: 16px;
+    width: 32px;
+    height: 32px;
+    border-radius: var(--app-radius-small);
+  }
+
   .el-dialog__body {
-    padding: 0 24px 24px;
+    min-width: 0;
+    min-height: 0;
+    // A small horizontal gutter keeps control focus rings and rounded edges away from the
+    // dialog's scroll/clip boundary; the negative margin preserves the original content width.
+    padding: 0 4px;
+    margin: 0 -4px;
+    overflow: auto;
+    overscroll-behavior: contain;
+    overflow-wrap: anywhere;
   }
 
   .el-dialog__footer {
-    padding: 0 24px 20px;
+    flex-shrink: 0;
+    padding: 20px 0 0;
   }
 }
 
-// ========== 抽屉 ==========
-.el-drawer {
-  border-radius: 16px 0 0 16px;
-  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.08);
+// The API detail dialog opts into `align-center`, whose `margin: auto` is beaten by the
+// viewport-fit rule above (it pins every non-fullscreen dialog toward the top). Restore
+// centring for this dialog only; long content keeps scrolling inside the body.
+.el-dialog.api-detail-dialog {
+  margin: auto;
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
+
+  .el-dialog__body {
+    max-height: calc(100vh - 240px);
+    max-height: calc(100dvh - 240px);
+    overflow: auto;
+  }
 }
 
-// ========== 卡片 ==========
-// 扁平化：去阴影 + 去边框，靠页面底色与卡片色差区分；圆角统一收紧到 12px
-.el-card {
-  border: none;
-  border-radius: 12px;
+.el-drawer {
+  max-width: 100vw;
+  max-height: 100vh;
+  max-height: 100dvh;
+  background: var(--app-bg-surface);
+  border: 0;
   box-shadow: none;
 
-  .el-card__body {
-    padding: 20px;
+  &.rtl {
+    border-radius: 20px 0 0 20px;
+  }
+
+  &.ltr {
+    border-radius: 0 20px 20px 0;
+  }
+
+  &.ttb {
+    border-radius: 0 0 20px 20px;
+  }
+
+  &.btt {
+    border-radius: 20px 20px 0 0;
+  }
+
+  .el-drawer__header {
+    margin-bottom: 0;
+    padding: 24px;
+    color: var(--app-text-primary);
+  }
+
+  .el-drawer__body {
+    min-width: 0;
+    min-height: 0;
+    padding: 0 24px 24px;
+    overflow: auto;
   }
 }
 
-// ========== 消息提示 ==========
-.el-message {
-  border-radius: 12px;
-  border: none;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+.el-message-box {
+  width: min(420px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
+  padding: 24px;
+  overflow: auto;
+  border: 0;
+  border-radius: var(--app-radius-shell);
+  box-shadow: none;
 }
 
-// ========== 标签 ==========
+// Teleported poppers must receive the same theme (not scoped to #app).
+.el-popper,
+.el-select__popper,
+.el-cascader__dropdown,
+.el-picker__popper,
+.el-dropdown__popper,
+.el-popover.el-popper,
+.el-autocomplete__popper {
+  --el-popper-border-radius: var(--app-radius-control);
+  border: 0 !important;
+  border-radius: var(--app-radius-control);
+  box-shadow: none !important;
+}
+
+.el-popper.is-light,
+.el-popover.el-popper {
+  background: var(--app-bg-surface);
+}
+
+.el-popper.is-dark {
+  background: var(--app-primary);
+  color: #FFFFFF;
+}
+
+.el-popper.is-light .el-popper__arrow::before {
+  background: var(--app-bg-surface);
+  border: 0;
+  box-shadow: none;
+}
+
+.el-popper.is-dark .el-popper__arrow::before {
+  background: var(--app-primary);
+  border: 0;
+}
+
+.el-dropdown-menu {
+  padding: 6px;
+  background: var(--app-bg-surface);
+  border-radius: var(--app-radius-control);
+}
+
+.el-dropdown-menu__item,
+.el-select-dropdown__item,
+.el-cascader-node,
+.el-autocomplete-suggestion li {
+  border-radius: var(--app-radius-small);
+
+  &:not(.is-disabled):hover,
+  &:not(.is-disabled):focus {
+    color: var(--app-accent-hover);
+    background: var(--app-bg-selected);
+  }
+}
+
+.el-select-dropdown__item.is-selected,
+.el-cascader-node.in-active-path,
+.el-cascader-node.is-active {
+  color: var(--app-accent);
+}
+
+.el-picker-panel {
+  --el-datepicker-active-color: var(--app-accent);
+  --el-datepicker-hover-text-color: var(--app-accent);
+  --el-datepicker-inrange-bg-color: var(--app-bg-selected);
+}
+
+.el-select-dropdown__item.is-disabled,
+.el-dropdown-menu__item.is-disabled {
+  color: var(--app-text-disabled);
+  cursor: not-allowed;
+}
+
+.el-message,
+.el-notification {
+  max-width: calc(100vw - 32px);
+  border: 0;
+  border-radius: var(--app-radius-panel);
+  box-shadow: none;
+}
+
+.el-notification {
+  background: var(--app-bg-surface);
+}
+
+.el-message {
+  // Status is communicated by text/icon as well as color, never low-contrast white on a pale fill.
+  --el-message-text-color: var(--app-text-regular);
+
+  .el-message__content {
+    color: var(--app-text-regular);
+  }
+}
+
 .el-tag {
-  border: none;
-  border-radius: 20px;
+  border: 0;
+  border-radius: var(--app-radius-small);
   font-weight: 500;
 }
 
-// ========== 开关 ==========
 .el-switch {
-  --el-switch-on-color: var(--el-color-primary);
-  // 全局 --el-border-color 被设为 transparent，Element 关闭态开关会因此透明不可见
-  --el-switch-off-color: #DCDFE6;
-}
+  --el-switch-on-color: var(--app-accent);
+  --el-switch-off-color: #B7C0CC;
 
-// ========== 分页 ==========
-.el-pagination {
-  .el-pager li {
-    border-radius: 8px;
-
-    &.is-active {
-      background-color: var(--el-color-primary);
-    }
+  .el-switch__action {
+    box-shadow: none;
   }
 
-  .btn-prev,
-  .btn-next {
-    border-radius: 8px;
+  &.is-disabled {
+    opacity: 1;
+    --el-switch-on-color: #6F85B1;
+    --el-switch-off-color: #CAD1DC;
+  }
+}
+
+.el-checkbox,
+.el-radio {
+  --el-checkbox-checked-bg-color: var(--app-accent);
+  --el-checkbox-checked-input-border-color: var(--app-accent);
+  --el-checkbox-checked-text-color: var(--app-text-regular);
+  --el-checkbox-input-border-color-hover: var(--app-accent);
+  --el-radio-input-border-color-hover: var(--app-accent);
+  --el-radio-input-border-color: #AEB8C6;
+  --el-radio-input-bg-color: var(--app-bg-surface);
+}
+
+.el-checkbox {
+  // A compact checkbox must remain a square, distinguishable from the circular radio.
+  --el-checkbox-border-radius: 4px;
+}
+
+.el-radio__input.is-checked .el-radio__inner {
+  background: var(--app-accent);
+  border-color: var(--app-accent);
+}
+
+.el-radio__input.is-checked + .el-radio__label {
+  color: var(--app-text-regular);
+}
+
+.el-checkbox__input.is-indeterminate .el-checkbox__inner {
+  background: var(--app-accent);
+  border-color: var(--app-accent);
+}
+
+.el-checkbox__input.is-focus .el-checkbox__inner,
+.el-checkbox__input:has(input:focus-visible) .el-checkbox__inner,
+.el-radio__input.is-focus .el-radio__inner,
+.el-radio__input:has(input:focus-visible) .el-radio__inner,
+.el-switch:has(input:focus-visible) .el-switch__core {
+  outline: 2px solid var(--app-focus-color);
+  outline-offset: 3px;
+}
+
+.el-radio-button__inner {
+  box-shadow: none !important;
+}
+
+.el-tabs {
+  --el-tabs-header-height: 40px;
+
+  .el-tabs__item.is-active,
+  .el-tabs__item:hover {
+    color: var(--app-accent);
+  }
+
+  .el-tabs__active-bar {
+    background: var(--app-accent);
+  }
+}
+
+.el-upload-dragger {
+  background: var(--app-bg-control);
+  border-color: #B7C0CC;
+  border-radius: var(--app-radius-panel);
+}
+
+@media (max-width: 600px) {
+  .el-dialog,
+  .el-message-box {
+    padding: 20px;
+  }
+
+  .el-dialog .el-dialog__footer .el-button {
+    margin-top: 8px;
+  }
+
+  .el-drawer .el-drawer__header {
+    padding: 20px;
+  }
+
+  .el-drawer .el-drawer__body {
+    padding: 0 20px 20px;
+  }
+
+  // An explicitly wide desktop form must still fit inside a narrow dialog.
+  .el-dialog .el-form-item__content,
+  .el-drawer .el-form-item__content {
+    min-width: 0;
+  }
+}
+
+// Element Plus tints plain/text buttons with the light palette, which drops to 1.9–3.6:1
+// on the button's own background. Text buttons and links use the text-safe ramp.
+.el-button--warning.is-text,
+.el-button--warning.is-link {
+  color: var(--app-text-warning);
+}
+
+.el-button--danger.is-text,
+.el-button--danger.is-link {
+  color: var(--app-text-danger);
+}
+
+.el-button--success.is-text,
+.el-button--success.is-link {
+  color: var(--app-text-success);
+}
+
+// Text and link buttons are used as inline row actions; keep a real 28px target.
+.el-button.is-text,
+.el-button.is-link {
+  min-height: 28px;
+}
+
+// An alert description is body copy, not a tinted signal colour.
+.el-alert .el-alert__description,
+.el-alert--info.is-light .el-alert__description,
+.el-alert--success.is-light .el-alert__description,
+.el-alert--warning.is-light .el-alert__description,
+.el-alert--error.is-light .el-alert__description {
+  color: var(--app-text-secondary);
+}
+
+.el-button.is-disabled,
+.el-button.is-disabled:hover,
+.el-button.is-disabled:focus {
+  color: var(--app-text-disabled);
+}
+
+// Plain buttons inherit the light palette for their label; use the text-safe ramp.
+.el-button--success.is-plain:not(.is-disabled) {
+  color: var(--app-text-success);
+}
+
+.el-button--warning.is-plain:not(.is-disabled) {
+  color: var(--app-text-warning);
+}
+
+.el-button--danger.is-plain:not(.is-disabled) {
+  color: var(--app-text-danger);
+}
+
+.el-button.is-plain.is-disabled {
+  color: var(--app-text-disabled);
+}
+
+// A small radio button is 22px tall; keep the 28px target without changing its look.
+.el-radio-button--small .el-radio-button__inner {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+}
+
+// The right-hand spinner of a number input splits the field in half; give each half
+// the tallest box Element allows inside a 40px field.
+.el-input-number.is-controls-right .el-input-number__increase,
+.el-input-number.is-controls-right .el-input-number__decrease {
+  height: 20px;
+  padding: 0;
+}
+
+// Element Plus draws a 14px checkbox and a 20px switch. The visual size stays, but the
+// clickable label must still meet a 28px desktop / 36px mobile hit area.
+.el-checkbox,
+.el-radio {
+  min-height: 28px;
+  min-width: 28px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.el-checkbox__inner,
+.el-radio__inner {
+  flex-shrink: 0;
+}
+
+.el-switch {
+  min-height: 28px;
+  align-items: center;
+}
+
+@media (max-width: 600px) {
+  .el-checkbox,
+  .el-radio,
+  .el-switch {
+    min-height: 36px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .el-button,
+  .el-input__wrapper,
+  .el-textarea__inner,
+  .el-select__wrapper {
+    transition: none;
   }
 }

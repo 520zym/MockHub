@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mockhub.common.model.BizException;
+import com.mockhub.mock.lifecycle.ApiVersions;
 import com.mockhub.common.model.PageResult;
 import com.mockhub.common.util.PermissionChecker;
 import com.mockhub.common.util.SecurityContextUtil;
@@ -71,6 +72,10 @@ public class ApiServiceImpl implements ApiService {
     private final LogService logService;
     private final com.mockhub.system.repository.UserRepository userRepository;
     private final MockFileStorageService fileStorageService;
+    @org.springframework.beans.factory.annotation.Autowired
+    private SoapService soapService;
+    @org.springframework.beans.factory.annotation.Value("${mock.api.trash-retention-days:30}")
+    private int trashRetentionDays=30;
 
     public ApiServiceImpl(ApiRepository apiRepository,
                           ApiResponseRepository apiResponseRepository,
@@ -115,6 +120,25 @@ public class ApiServiceImpl implements ApiService {
             logService.logOperation(opLog);
         } catch (Exception e) {
             log.warn("记录操作日志失败: {}", e.getMessage());
+        }
+    }
+
+    private void validateTeamReferences(String teamId, String groupId, List<String> tagIds) {
+        if (groupId != null && !groupId.isEmpty()) {
+            com.mockhub.mock.model.entity.ApiGroup group = groupRepository.findById(groupId);
+            if (group == null || !teamId.equals(group.getTeamId())) {
+                throw new BizException(40102, "分组不属于当前团队或已被删除");
+            }
+        }
+        if (tagIds != null && !tagIds.isEmpty()) {
+            Set<String> expected = new HashSet<String>(tagIds);
+            List<Tag> tags = tagRepository.findByIds(new ArrayList<String>(expected));
+            if (tags.size() != expected.size()) throw new BizException(40102, "标签不存在或不属于当前团队");
+            for (Tag tag : tags) {
+                if (!teamId.equals(tag.getTeamId()) || !expected.contains(tag.getId())) {
+                    throw new BizException(40102, "标签不属于当前团队");
+                }
+            }
         }
     }
 
@@ -206,10 +230,25 @@ public class ApiServiceImpl implements ApiService {
                                             Boolean enabled, String keyword, List<String> tagIds,
                                             String type, String sortBy, String sortDir,
                                             int page, int size) {
+        return list(teamId,groupId,method,enabled,keyword,tagIds,type,sortBy,sortDir,page,size,null);
+    }
+    @Override
+    public PageResult<ApiDefinitionVO> list(String teamId,String groupId,String method,Boolean enabled,String keyword,
+            List<String> tagIds,String type,String sortBy,String sortDir,int page,int size,String createdBy) {
+        String creator="me".equals(createdBy)?SecurityContextUtil.getCurrentUserId():createdBy;
         // 确定当前用户可访问的团队范围
         List<String> teamIds = null;
         if (!SecurityContextUtil.isSuperAdmin()) {
-            teamIds = SecurityContextUtil.getCurrentTeamIds();
+            // 领域查询也重新取当前成员范围，不能让旧上下文或非 Web 入口沿用已撤销的团队。
+            teamIds = new ArrayList<String>();
+            for (com.mockhub.system.model.entity.UserTeam relation
+                    : userRepository.findTeamRolesByUserId(SecurityContextUtil.getCurrentUserId())) {
+                if(com.mockhub.common.model.enums.TeamRoleType.fromStored(relation.getRole())==null) continue;
+                String memberTeamId = relation.getTeamId();
+                if (memberTeamId != null && !memberTeamId.isEmpty() && !teamIds.contains(memberTeamId)) {
+                    teamIds.add(memberTeamId);
+                }
+            }
             if (teamIds.isEmpty()) {
                 // 用户没有任何团队，返回空列表
                 return PageResult.of(Collections.<ApiDefinitionVO>emptyList(), 0L, page, size);
@@ -222,8 +261,10 @@ public class ApiServiceImpl implements ApiService {
         }
 
         int offset = (page - 1) * size;
-        List<ApiDefinition> apis = apiRepository.findAll(teamIds, teamId, groupId, method, enabled, keyword, tagIds, type, sortBy, sortDir, offset, size);
-        long total = apiRepository.count(teamIds, teamId, groupId, method, enabled, keyword, tagIds, type);
+        List<ApiDefinition> apis = creator==null?apiRepository.findAll(teamIds,teamId,groupId,method,enabled,keyword,tagIds,type,sortBy,sortDir,offset,size)
+                :apiRepository.findAll(teamIds,teamId,groupId,method,enabled,keyword,tagIds,type,sortBy,sortDir,offset,size,creator);
+        long total = creator==null?apiRepository.count(teamIds,teamId,groupId,method,enabled,keyword,tagIds,type)
+                :apiRepository.count(teamIds,teamId,groupId,method,enabled,keyword,tagIds,type,creator);
 
         // 一次性查全量用户，构 id → 显示名 映射，避免 N+1 查询。
         // 用户表通常很小（< 1000 条），全表扫的成本远低于 N 次单查。
@@ -246,6 +287,7 @@ public class ApiServiceImpl implements ApiService {
             if (api.getCreatedBy() != null) {
                 vo.setCreatedByName(userIdToName.get(api.getCreatedBy()));
             }
+            vo.setUpdatedByName(userIdToName.get(api.getUpdatedBy()));
             voList.add(vo);
         }
 
@@ -283,6 +325,9 @@ public class ApiServiceImpl implements ApiService {
         detail.setCreatedAt(api.getCreatedAt());
         detail.setUpdatedAt(api.getUpdatedAt());
         detail.setUpdatedBy(api.getUpdatedBy());
+        detail.setRevision(api.getRevision());
+        detail.setCreatedByName(userName(api.getCreatedBy()));
+        detail.setUpdatedByName(userName(api.getUpdatedBy()));
 
         // 填充返回体列表
         List<ApiResponse> responses = apiResponseRepository.findByApiId(id);
@@ -301,9 +346,15 @@ public class ApiServiceImpl implements ApiService {
 
     @Override
     public ApiDefinition create(ApiDefinitionDTO dto) {
-        // 校验团队访问权限
-        permissionChecker.checkTeamAccess(dto.getTeamId());
+        return apiRepository.write(() -> createInternal(dto));
+    }
 
+    private ApiDefinition createInternal(ApiDefinitionDTO dto) {
+        // 校验团队访问权限
+        permissionChecker.checkTeamWrite(dto.getTeamId());
+
+        validateTeamReferences(dto.getTeamId(), dto.getGroupId(), dto.getTagIds());
+        validateWsdlReference(dto.getTeamId(),dto.getSoapConfig());
         String normalizedPath = normalizeApiPath(dto.getPath());
 
         // 校验同团队内 path+method 唯一性
@@ -356,18 +407,30 @@ public class ApiServiceImpl implements ApiService {
         recordOperation("CREATE", "API", api.getId(), api.getName(),
                 "创建接口 " + api.getMethod() + " " + api.getPath(), api.getTeamId());
 
+        apiRepository.appendRevision(api.getId(), "CREATE", "WEB", null);
         return api;
     }
 
     @Override
     public ApiDefinition update(String id, ApiDefinitionDTO dto) {
+        return apiRepository.write(() -> updateInternal(id, dto));
+    }
+
+    private ApiDefinition updateInternal(String id, ApiDefinitionDTO dto) {
         ApiDefinition existing = apiRepository.findById(id);
         if (existing == null) {
             throw new BizException(40402, "接口不存在");
         }
 
         // 校验团队访问权限
-        permissionChecker.checkTeamAccess(existing.getTeamId());
+        permissionChecker.checkTeamWrite(existing.getTeamId());
+        if(dto.getExpectedRevision()!=null && com.mockhub.mock.lifecycle.ApiVersions.require(dto.getExpectedRevision())!=existing.getRevision())
+            throw com.mockhub.mock.lifecycle.ApiVersions.conflict();
+        if (dto.getTeamId() != null && !existing.getTeamId().equals(dto.getTeamId())) {
+            throw new BizException(40102, "不能通过编辑接口变更所属团队");
+        }
+        validateTeamReferences(existing.getTeamId(), dto.getGroupId(), dto.getTagIds());
+        validateWsdlReference(existing.getTeamId(),dto.getSoapConfig());
 
         // 如果修改了 path 或 method，校验唯一性
         String newPath = dto.getPath() != null ? normalizeApiPath(dto.getPath()) : existing.getPath();
@@ -392,6 +455,7 @@ public class ApiServiceImpl implements ApiService {
         String now = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss").format(new Date());
         String userId = SecurityContextUtil.getCurrentUserId();
 
+        claim(existing, dto.getExpectedRevision(), now, userId);
         existing.setGroupId(dto.getGroupId());
         existing.setType(dto.getType() != null ? dto.getType() : existing.getType());
         existing.setName(dto.getName() != null ? dto.getName() : existing.getName());
@@ -421,16 +485,29 @@ public class ApiServiceImpl implements ApiService {
         // 更新标签关联
         apiTagRepository.replaceTagsForApi(id, dto.getTagIds());
 
+        apiRepository.appendRevision(id, "UPDATE", "WEB", null);
         return existing;
     }
 
     @Override
     public ApiDefinition updateResponseBody(String apiId, String responseId, String body) {
+        return apiRepository.write(() -> updateResponseBodyInternal(apiId, responseId, body));
+    }
+
+    @Override
+    public ApiDefinition updateResponseBody(String apiId,String responseId,String body,Long expected) {
+        return apiRepository.write(() -> updateResponseBodyInternal(apiId,responseId,body,expected));
+    }
+    private ApiDefinition updateResponseBodyInternal(String apiId,String responseId,String body) {
+        return updateResponseBodyInternal(apiId,responseId,body,null);
+    }
+    private ApiDefinition updateResponseBodyInternal(String apiId, String responseId, String body,Long expected) {
         ApiDefinition api = apiRepository.findById(apiId);
         if (api == null) {
             throw new BizException(40402, "接口不存在");
         }
-        permissionChecker.checkTeamAccess(api.getTeamId());
+        permissionChecker.checkTeamWrite(api.getTeamId());
+        if(expected!=null && ApiVersions.require(expected)!=api.getRevision()) throw ApiVersions.conflict();
 
         List<ApiResponse> responses = apiResponseRepository.findByApiId(apiId);
         ApiResponse target = null;
@@ -449,6 +526,7 @@ public class ApiServiceImpl implements ApiService {
 
         String now = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss").format(new Date());
         String userId = SecurityContextUtil.getCurrentUserId();
+        claim(api, expected==null?api.getRevision():expected, now, userId);
         String oldBody = target.getResponseBody();
         apiResponseRepository.updateBody(responseId, body, now);
 
@@ -466,41 +544,50 @@ public class ApiServiceImpl implements ApiService {
 
         recordOperation("UPDATE", "API", api.getId(), api.getName(),
                 "AI 修改返回体 " + api.getMethod() + " " + api.getPath(), api.getTeamId());
+        apiRepository.appendRevision(apiId, "UPDATE_RESPONSE_BODY", "AI", null);
         log.info("AI 更新接口返回体: apiId={}, responseId={}", apiId, responseId);
         return api;
     }
 
     @Override
     public void delete(String id) {
-        ApiDefinition api = apiRepository.findById(id);
-        if (api == null) {
-            throw new BizException(40402, "接口不存在");
-        }
+        apiRepository.write(() -> { deleteInternal(id); return null; });
+    }
 
-        // 校验团队访问权限
-        permissionChecker.checkTeamAccess(api.getTeamId());
+    private void deleteInternal(String id) { deleteInternal(id,null); }
 
-        // 删除标签关联
-        apiTagRepository.deleteByApiId(id);
-        Set<String> oldFilePaths = collectFilePaths(apiResponseRepository.findByApiId(id));
-        apiResponseRepository.deleteByApiId(id);
-        // 删除接口
-        apiRepository.deleteById(id);
-        cleanupUnreferencedFiles(oldFilePaths);
-        log.info("删除接口: id={}, name={}, path={}", id, api.getName(), api.getPath());
-        recordOperation("DELETE", "API", id, api.getName(),
-                "删除接口 " + api.getMethod() + " " + api.getPath(), api.getTeamId());
+    @Override
+    public void delete(String id,Long expected) {
+        apiRepository.write(() -> { deleteInternal(id,expected); return null; });
+    }
+    private void deleteInternal(String id,Long expected) {
+        ApiDefinition api=apiRepository.findById(id);
+        if(api==null) throw new BizException(40402,"接口不存在或已删除");
+        permissionChecker.checkTeamWrite(api.getTeamId());
+        String now=java.time.Instant.now().toString();
+        claim(api,expected==null?api.getRevision():expected,now,SecurityContextUtil.getCurrentUserId());
+        apiRepository.markDeleted(id,now,SecurityContextUtil.getCurrentUserId(),
+                java.time.Instant.now().plus(Math.max(1,trashRetentionDays),java.time.temporal.ChronoUnit.DAYS).toString());
+        apiRepository.appendRevision(id,"SOFT_DELETE","WEB",null);
     }
 
     @Override
     public ApiDefinition copy(String id) {
+        return apiRepository.write(() -> copyInternal(id));
+    }
+
+    @Override
+    public ApiDefinition copy(String id,Long expected) { return apiRepository.write(() -> copyInternal(id,expected)); }
+    private ApiDefinition copyInternal(String id) { return copyInternal(id,null); }
+    private ApiDefinition copyInternal(String id,Long expected) {
         ApiDefinition source = apiRepository.findById(id);
         if (source == null) {
             throw new BizException(40402, "接口不存在");
         }
 
         // 校验团队访问权限
-        permissionChecker.checkTeamAccess(source.getTeamId());
+        permissionChecker.checkTeamWrite(source.getTeamId());
+        if(expected!=null && ApiVersions.require(expected)!=source.getRevision()) throw ApiVersions.conflict();
 
         String now = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss").format(new Date());
         String userId = SecurityContextUtil.getCurrentUserId();
@@ -513,13 +600,17 @@ public class ApiServiceImpl implements ApiService {
         copy.setName(source.getName() + " (副本)");
         copy.setDescription(source.getDescription());
         copy.setMethod(source.getMethod());
-        copy.setPath(source.getPath() + "-copy");
+        String copyPath=source.getPath()+"-copy";int suffix=2;
+        while(!apiRepository.findByTeamIdAndPathAndMethod(source.getTeamId(),copyPath,source.getMethod()).isEmpty())
+            copyPath=source.getPath()+"-copy-"+(suffix++);
+        copy.setPath(copyPath);
         copy.setResponseCode(source.getResponseCode());
         copy.setContentType(source.getContentType());
         copy.setResponseBody(source.getResponseBody());
         copy.setDelayMs(source.getDelayMs());
         copy.setEnabled(false); // 副本默认禁用，避免路径冲突
         copy.setGlobalHeaderOverrides(source.getGlobalHeaderOverrides());
+        validateWsdlReference(source.getTeamId(),source.getSoapConfig());
         copy.setSoapConfig(source.getSoapConfig());
         copy.setResponseMode(source.getResponseMode());
         copy.setCreatedBy(userId);
@@ -533,6 +624,9 @@ public class ApiServiceImpl implements ApiService {
         // 复制返回体
         List<ApiResponse> sourceResponses = apiResponseRepository.findByApiId(id);
         for (ApiResponse srcResp : sourceResponses) {
+            if("FILE".equalsIgnoreCase(srcResp.getBodyType())) {
+                apiRepository.requireFileReference(source.getTeamId(),srcResp.getFilePath());fileStorageService.loadAsResource(srcResp.getFilePath());
+            }
             ApiResponse copyResp = new ApiResponse();
             copyResp.setId(UUID.randomUUID().toString());
             copyResp.setApiId(copy.getId());
@@ -561,22 +655,34 @@ public class ApiServiceImpl implements ApiService {
             apiTagRepository.replaceTagsForApi(copy.getId(), tagIds);
         }
 
+        apiRepository.appendRevision(copy.getId(), "COPY", "WEB", null);
         return copy;
     }
 
     @Override
     public boolean toggle(String id) {
+        return apiRepository.write(() -> toggleInternal(id));
+    }
+
+    @Override
+    public boolean toggle(String id,Long expected) {
+        return apiRepository.write(() -> toggleInternal(id,expected));
+    }
+    private boolean toggleInternal(String id) { return toggleInternal(id,null); }
+    private boolean toggleInternal(String id,Long expected) {
         ApiDefinition api = apiRepository.findById(id);
         if (api == null) {
             throw new BizException(40402, "接口不存在");
         }
 
         // 校验团队访问权限
-        permissionChecker.checkTeamAccess(api.getTeamId());
+        permissionChecker.checkTeamWrite(api.getTeamId());
 
         boolean newEnabled = !api.isEnabled();
         String now = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss").format(new Date());
+        claim(api, expected==null?api.getRevision():expected, now, SecurityContextUtil.getCurrentUserId());
         apiRepository.updateEnabled(id, newEnabled, now);
+        apiRepository.appendRevision(id, "TOGGLE", "WEB", null);
         log.info("切换接口状态: id={}, enabled={}", id, newEnabled);
 
         return newEnabled;
@@ -584,8 +690,19 @@ public class ApiServiceImpl implements ApiService {
 
     @Override
     public BatchApiResult batch(String action, List<String> ids, String targetGroupId) {
+        return apiRepository.write(() -> batchInternal(action, ids, targetGroupId));
+    }
+
+    @Override
+    public BatchApiResult batch(String action,List<String> ids,String targetGroupId,Map<String,Long> expectedRevisions) {
+        return apiRepository.write(() -> batchInternal(action,ids,targetGroupId,expectedRevisions));
+    }
+    private BatchApiResult batchInternal(String action, List<String> ids, String targetGroupId) {
+        return batchInternal(action,ids,targetGroupId,null);
+    }
+    private BatchApiResult batchInternal(String action,List<String> ids,String targetGroupId,Map<String,Long> expectedRevisions) {
         if (ids == null || ids.isEmpty()) {
-            return new BatchApiResult(0);
+            throw new BizException(40000,"请选择接口并提供每项预期版本");
         }
         if (action == null || action.isEmpty()) {
             throw new BizException(40400, "缺少 action 参数");
@@ -594,8 +711,7 @@ public class ApiServiceImpl implements ApiService {
         // 1. 一次性把目标接口加载出来（用于权限校验和审计日志）
         List<ApiDefinition> targets = apiRepository.findByIds(ids);
         if (targets.isEmpty()) {
-            log.warn("批量操作未匹配到任何接口: action={}, ids={}", action, ids);
-            return new BatchApiResult(0);
+            throw new BizException(40402,"批量目标不存在或已删除");
         }
 
         // 2. 按团队聚合一次去重，避免同一团队多次重复校验
@@ -604,7 +720,12 @@ public class ApiServiceImpl implements ApiService {
             teamIds.add(api.getTeamId());
         }
         for (String tid : teamIds) {
-            permissionChecker.checkTeamAccess(tid);
+            if ("delete".equals(action)) permissionChecker.checkTeamAdmin(tid);
+            else permissionChecker.checkTeamWrite(tid);
+        }
+
+        if ("move-group".equals(action)) {
+            for (String teamId : teamIds) validateTeamReferences(teamId, targetGroupId, null);
         }
 
         // 3. 收集 targets 实际命中的 id 列表（已存在的，用于 SQL 批处理）
@@ -614,6 +735,14 @@ public class ApiServiceImpl implements ApiService {
         }
 
         String now = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss").format(new Date());
+        if(targets.size()!=new HashSet<String>(ids).size()) throw new BizException(40402,"批量目标不存在或已删除");
+        // Validate every version BEFORE the first CAS; transaction rollback still protects later write failures.
+        for(ApiDefinition api:targets) {
+            Long expected=expectedRevisions==null?api.getRevision():expectedRevisions.get(api.getId());
+            if(ApiVersions.require(expected)!=api.getRevision()) throw ApiVersions.conflict();
+        }
+        for(ApiDefinition api:targets) claim(api,expectedRevisions==null?api.getRevision():expectedRevisions.get(api.getId()),
+                now,SecurityContextUtil.getCurrentUserId());
         int affected;
 
         if ("enable".equals(action)) {
@@ -623,16 +752,9 @@ public class ApiServiceImpl implements ApiService {
             affected = apiRepository.batchUpdateEnabled(validIds, false, now);
             log.info("批量禁用接口: count={}", affected);
         } else if ("delete".equals(action)) {
-            // 先清理标签关联和返回体，再删主表
-            Set<String> oldFilePaths = new HashSet<String>();
-            for (String apiId : validIds) {
-                oldFilePaths.addAll(collectFilePaths(apiResponseRepository.findByApiId(apiId)));
-            }
-            apiTagRepository.batchDeleteByApiIds(validIds);
-            apiResponseRepository.batchDeleteByApiIds(validIds);
-            affected = apiRepository.batchDeleteByIds(validIds);
-            cleanupUnreferencedFiles(oldFilePaths);
-            log.info("批量删除接口: count={}", affected);
+            String purgeAfter=java.time.Instant.now().plus(Math.max(1,trashRetentionDays),java.time.temporal.ChronoUnit.DAYS).toString();
+            for(ApiDefinition api:targets) apiRepository.markDeleted(api.getId(),now,SecurityContextUtil.getCurrentUserId(),purgeAfter);
+            affected=targets.size();
         } else if ("move-group".equals(action)) {
             affected = apiRepository.batchUpdateGroup(validIds, targetGroupId, now);
             log.info("批量移动分组: count={}, targetGroupId={}", affected, targetGroupId);
@@ -653,7 +775,10 @@ public class ApiServiceImpl implements ApiService {
                     "批量" + actionDisplayName(action) + " " + teamCount + " 个接口", tid);
         }
 
-        return new BatchApiResult(affected);
+        for(ApiDefinition api:targets) apiRepository.appendRevision(api.getId(), "BATCH_"+action.toUpperCase(), "WEB", null);
+        BatchApiResult result=new BatchApiResult(affected);
+        for(ApiDefinition api:targets)result.getRevisions().put(api.getId(),api.getRevision());
+        return result;
     }
 
     @Override
@@ -682,36 +807,8 @@ public class ApiServiceImpl implements ApiService {
      * 规范化接口维护路径：接口定义只保存 URL path，不保存 query/fragment。
      * Mock 分发入口收到请求时也是按 path 匹配，query 交给条件返回规则处理。
      */
-    private String normalizeApiPath(String path) {
-        String normalized = normalizeApiPathForCheck(path);
-        if (normalized == null) {
-            throw new BizException(40400, "接口路径不能为空");
-        }
-        return normalized;
-    }
-
-    private String normalizeApiPathForCheck(String path) {
-        if (path == null) {
-            return null;
-        }
-        String normalized = path.trim();
-        int queryIndex = normalized.indexOf('?');
-        if (queryIndex >= 0) {
-            normalized = normalized.substring(0, queryIndex);
-        }
-        int fragmentIndex = normalized.indexOf('#');
-        if (fragmentIndex >= 0) {
-            normalized = normalized.substring(0, fragmentIndex);
-        }
-        normalized = normalized.trim();
-        if (normalized.isEmpty()) {
-            return null;
-        }
-        if (!normalized.startsWith("/")) {
-            normalized = "/" + normalized;
-        }
-        return normalized;
-    }
+    private String normalizeApiPath(String path) { return com.mockhub.mock.lifecycle.ApiPaths.normalize(path); }
+    private String normalizeApiPathForCheck(String path) { return com.mockhub.mock.lifecycle.ApiPaths.forCheck(path); }
 
     /**
      * 把 action 翻成展示名（只用于操作日志的 detail 字段）
@@ -733,6 +830,7 @@ public class ApiServiceImpl implements ApiService {
     private ApiDefinitionVO convertToVO(ApiDefinition api) {
         ApiDefinitionVO vo = new ApiDefinitionVO();
         vo.setId(api.getId());
+        vo.setRevision(api.getRevision());
         vo.setTeamId(api.getTeamId());
         vo.setGroupId(api.getGroupId());
         vo.setType(api.getType());
@@ -748,6 +846,7 @@ public class ApiServiceImpl implements ApiService {
         vo.setCreatedBy(api.getCreatedBy());
         vo.setCreatedAt(api.getCreatedAt());
         vo.setUpdatedAt(api.getUpdatedAt());
+        vo.setUpdatedBy(api.getUpdatedBy());
         vo.setHitCount(api.getHitCount());
         vo.setLastCalledAt(api.getLastCalledAt());
 
@@ -883,6 +982,14 @@ public class ApiServiceImpl implements ApiService {
         // v1.4.3 新增：多启用 + 条件匹配前置校验，失败抛 BizException 由全局处理器转为 40410~40416 错误码
         ResponseValidator.validateDtos(responses, responseModes);
 
+        ApiDefinition owner=apiRepository.findById(apiId);
+        for(ApiResponseDTO response:responses) {
+            if("FILE".equalsIgnoreCase(response.getBodyType())) {
+                if(owner==null) throw new BizException(40402,"接口不存在");
+                apiRepository.requireFileReference(owner.getTeamId(),response.getFilePath());
+                fileStorageService.loadAsResource(response.getFilePath());
+            }
+        }
         List<ApiResponse> entities = new ArrayList<ApiResponse>();
         for (int i = 0; i < responses.size(); i++) {
             ApiResponseDTO dto = responses.get(i);
@@ -910,8 +1017,148 @@ public class ApiServiceImpl implements ApiService {
 
         Set<String> oldFilePaths = collectFilePaths(apiResponseRepository.findByApiId(apiId));
         apiResponseRepository.replaceAll(apiId, entities);
-        cleanupUnreferencedFiles(oldFilePaths);
+        // Physical cleanup is deferred: previous blobs may be referenced by a retained revision.
         log.debug("保存接口 {} 的返回体，共 {} 个", apiId, entities.size());
+    }
+
+    @Override
+    public PageResult<Map<String,Object>> trash(String teamId,int page,int size) {
+        List<String> teams=null;
+        if(!SecurityContextUtil.isSuperAdmin()) {
+            teams=new ArrayList<String>();
+            for(com.mockhub.system.model.entity.UserTeam membership:userRepository.findTeamRolesByUserId(SecurityContextUtil.getCurrentUserId()))
+                if(com.mockhub.common.model.enums.TeamRoleType.fromStored(membership.getRole())!=null) teams.add(membership.getTeamId());
+            if(teams.isEmpty()) return PageResult.of(Collections.emptyList(),0L,page,size);
+        }
+        if(teamId!=null&&!teamId.isEmpty()) permissionChecker.checkTeamAccess(teamId);
+        int currentPage=Math.max(1,page),pageSize=Math.max(1,Math.min(100,size));
+        List<Map<String,Object>> items=apiRepository.trash(teams,teamId,(currentPage-1)*pageSize,pageSize);
+        for(Map<String,Object> item:items) {
+            boolean write=canWrite(item.get("teamId").toString()),admin=canAdminister(item.get("teamId").toString());
+            boolean retained=item.get("purgeAfter")!=null && java.time.Instant.parse(item.get("purgeAfter").toString()).isAfter(java.time.Instant.now());
+            item.put("canRestore",retained&&write);item.put("canPurge",admin);
+        }
+        return PageResult.of(items,apiRepository.countTrash(teams,teamId),currentPage,pageSize);
+    }
+    private boolean canWrite(String team) {
+        try { permissionChecker.checkTeamWrite(team);return true; } catch(BizException denied) { return false; }
+    }
+    private boolean canAdminister(String team) {
+        try { permissionChecker.checkTeamAdmin(team);return true; } catch(BizException denied) { return false; }
+    }
+
+    @Override
+    public ApiDefinition restore(String id,Long expected,String newPath) {
+        return apiRepository.write(() -> {
+            ApiDefinition api=apiRepository.findIncludingDeleted(id);
+            if(api==null) throw new BizException(40402,"接口不存在或已彻底删除");
+            permissionChecker.checkTeamWrite(api.getTeamId());
+            if(api.getDeletedAt()==null) throw new BizException(40926,"接口不在回收站中");
+            long version=ApiVersions.require(expected);
+            if(version!=api.getRevision()) throw ApiVersions.conflict();
+            if(api.getPurgeAfter()==null || !java.time.Instant.parse(api.getPurgeAfter()).isAfter(java.time.Instant.now()))
+                throw new BizException(40923,"RETENTION_EXPIRED: 已超过恢复期限");
+            String path=newPath==null?api.getPath():normalizeApiPath(newPath);
+            if(!apiRepository.findByTeamIdAndPathAndMethod(api.getTeamId(),path,api.getMethod()).isEmpty())
+                throw new BizException(40922,"RESTORE_PATH_CONFLICT: 路径和方法已被占用，请使用新路径");
+            verifySnapshotFiles(apiRepository.revision(id,apiRepository.history(id).get(0).get("id").toString()).get("snapshot"),api.getTeamId());
+            validateWsdlReference(api.getTeamId(),api.getSoapConfig());
+            if(apiRepository.restore(id,version,path,java.time.Instant.now().toString(),SecurityContextUtil.getCurrentUserId(),api.getPurgeAfter())!=1)
+                throw ApiVersions.conflict();
+            apiRepository.removeMissingTeamReferences(id,api.getTeamId());
+            apiRepository.appendRevision(id,"RESTORE","WEB",null);
+            return apiRepository.findById(id);
+        });
+    }
+
+    @Override
+    public void purge(String id,Long expected) {
+        apiRepository.write(() -> {
+            ApiDefinition api=apiRepository.findIncludingDeleted(id);
+            if(api==null) throw new BizException(40402,"接口不存在或已彻底删除");
+            permissionChecker.checkTeamAdmin(api.getTeamId());
+            if(ApiVersions.require(expected)!=api.getRevision()) throw ApiVersions.conflict();
+            apiRepository.purgeAggregate(api,SecurityContextUtil.getCurrentUserId());return null;
+        });
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public ApiDefinition rollback(String id,String revisionId,Long expected) {
+        return apiRepository.write(() -> {
+            ApiDefinition api=apiRepository.findIncludingDeleted(id);
+            if(api==null) throw new BizException(40402,"接口不存在");
+            permissionChecker.checkTeamWrite(api.getTeamId());
+            if(api.getDeletedAt()!=null) throw new BizException(40926,"请先从回收站恢复接口");
+            Map<String,Object> version=apiRepository.revision(id,revisionId);
+            if(((Number)version.get("snapshotSchemaVersion")).intValue()!=1) throw new BizException(40924,"SNAPSHOT_VERSION_UNSUPPORTED");
+            Map<String,Object> snapshot=(Map<String,Object>)version.get("snapshot");
+            Map<String,Object> config=(Map<String,Object>)snapshot.get("config");
+            if(config==null || config.get("path")==null || config.get("method")==null) throw new BizException(40924,"快照配置不完整");
+            for(ApiDefinition conflict:apiRepository.findByTeamIdAndPathAndMethod(api.getTeamId(),config.get("path").toString(),config.get("method").toString()))
+                if(!id.equals(conflict.getId())) throw new BizException(40922,"RESTORE_PATH_CONFLICT: 历史路径已被占用");
+            verifySnapshotFiles(snapshot,api.getTeamId());
+            claim(api,expected,java.time.Instant.now().toString(),SecurityContextUtil.getCurrentUserId());
+            apiRepository.applySnapshot(id,snapshot);
+            apiRepository.removeMissingTeamReferences(id,api.getTeamId());
+            apiRepository.appendRevision(id,"ROLLBACK","WEB",revisionId);
+            return apiRepository.findById(id);
+        });
+    }
+    @SuppressWarnings("unchecked")
+    private void verifySnapshotFiles(Object value,String teamId) {
+        Map<String,Object> snapshot=(Map<String,Object>)value;
+        Map<String,Object> config=(Map<String,Object>)snapshot.get("config");
+        if(config!=null)validateWsdlReference(teamId,config.get("soap_config"));
+        for(Map<String,Object> response:(List<Map<String,Object>>)snapshot.get("responses")) {
+            if("FILE".equalsIgnoreCase(String.valueOf(response.get("body_type"))))
+                fileStorageService.loadAsResource((String)response.get("file_path"));
+        }
+    }
+
+    private void validateWsdlReference(String teamId,Object value) {
+        if(value==null)return;
+        com.fasterxml.jackson.databind.JsonNode config;
+        try{config=value instanceof String?objectMapper.readTree((String)value):objectMapper.valueToTree(value);}
+        catch(Exception e){throw new BizException(40000,"SOAP配置必须为有效JSON对象");}
+        if(config==null || config.isNull())return;
+        if(!config.isObject())throw new BizException(40000,"SOAP配置必须为对象");
+        com.fasterxml.jackson.databind.JsonNode name=config.get("wsdlFileName");
+        if(name==null || name.isNull())return;
+        if(!name.isTextual())throw new BizException(40702,"WSDL引用必须为安全的团队文件key");
+        if(name.asText().isEmpty())return; // Manual SOAP metadata without a WSDL remains supported.
+        if(soapService==null)throw new BizException(50001,"WSDL安全引用校验不可用");
+        soapService.assertReference(teamId,name.asText());
+    }
+
+    private String userName(String id) {
+        if(id==null) return null;
+        com.mockhub.system.model.entity.User user=userRepository.findById(id);
+        return user==null?null:(user.getDisplayName()==null||user.getDisplayName().isEmpty()?user.getUsername():user.getDisplayName());
+    }
+
+    private void claim(ApiDefinition api, Long expected, String now, String actor) {
+        long version=ApiVersions.require(expected);
+        if(api.getRevision()!=version || apiRepository.claimRevision(api.getId(),version,now,actor)!=1) {
+            throw ApiVersions.conflict();
+        }
+        api.setRevision(version+1);
+    }
+
+    @Override
+    public List<Map<String,Object>> revisions(String id) {
+        ApiDefinition api=apiRepository.findIncludingDeleted(id);
+        if(api==null) throw new BizException(40402,"接口不存在");
+        permissionChecker.checkTeamAccess(api.getTeamId());
+        return apiRepository.history(id);
+    }
+
+    @Override
+    public Map<String,Object> revision(String id,String revisionId) {
+        ApiDefinition api=apiRepository.findIncludingDeleted(id);
+        if(api==null) throw new BizException(40402,"接口不存在");
+        permissionChecker.checkTeamAccess(api.getTeamId());
+        return apiRepository.revision(id,revisionId);
     }
 
     private Set<String> collectFilePaths(List<ApiResponse> responses) {
@@ -951,8 +1198,7 @@ public class ApiServiceImpl implements ApiService {
         try {
             return objectMapper.writeValueAsString(map);
         } catch (JsonProcessingException e) {
-            log.error("序列化 globalHeaderOverrides 失败", e);
-            return null;
+            throw new BizException(40000, "全局响应头配置无法序列化");
         }
     }
 
@@ -964,10 +1210,9 @@ public class ApiServiceImpl implements ApiService {
             return null;
         }
         try {
-            return objectMapper.writeValueAsString(obj);
+            return obj instanceof String?objectMapper.writeValueAsString(objectMapper.readTree((String)obj)):objectMapper.writeValueAsString(obj);
         } catch (JsonProcessingException e) {
-            log.error("序列化 soapConfig 失败", e);
-            return null;
+            throw new BizException(40000, "SOAP配置无法序列化");
         }
     }
 

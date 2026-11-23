@@ -5,7 +5,7 @@ package com.mockhub.system.model.dto;
  */
 public class UpdateMemberRoleRequest {
 
-    /** 团队内角色：TEAM_ADMIN / MEMBER */
+    /** 团队内角色：TEAM_ADMIN / EDITOR / VIEWER（兼容输入 MEMBER 为 EDITOR） */
     private String role;
 
     public String getRole() {

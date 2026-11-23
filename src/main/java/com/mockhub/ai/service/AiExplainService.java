@@ -65,7 +65,10 @@ public class AiExplainService {
         if (api == null) {
             throw new BizException(40402, "接口不存在，可能已被删除");
         }
+        if(!java.util.Objects.equals(requestLog.getTeamId(),api.getTeamId()))throw new BizException(40102,"请求日志与接口团队不一致");
         AiSettings settings = settingsService.assertUsable(AiSettingsService.CAP_EXPLAIN, requestLog.getTeamId());
+        // Diagnostics and model prompts always use the privacy copy, including for administrators.
+        requestLog=com.mockhub.log.service.LogPrivacySanitizer.requestCopy(requestLog);
 
         List<ApiResponse> responses = new ArrayList<ApiResponse>();
         if (api.getResponses() != null) {
@@ -92,6 +95,7 @@ public class AiExplainService {
         AiChainItem fallbackItem = null;
         ApiResponse fallback = null;
         boolean single = responses.size() == 1;
+        boolean uncertain = false;
 
         for (int i = 0; i < responses.size(); i++) {
             ApiResponse response = responses.get(i);
@@ -105,6 +109,9 @@ public class AiExplainService {
                 item.setDetail("已命中前一条，未参与匹配");
                 chain.add(item);
                 continue;
+            }
+            if (uncertain) {
+                item.setStatus("UNKNOWN");item.setDetail("前序规则依赖已遮蔽的隐私字段，无法确定后续是否参与匹配");chain.add(item);continue;
             }
             if (single) {
                 item.setStatus("HIT");
@@ -124,6 +131,9 @@ public class AiExplainService {
                 chain.add(item);
                 continue;
             }
+            if(evaluator.dependsOnRedactedInput(rule,requestLog.getRequestBody(),requestLog.getRequestParams(),requestLog.getRequestHeaders())){
+                uncertain=true;item.setStatus("UNKNOWN");item.setDetail("规则依赖已遮蔽的隐私字段或不可安全展示的请求体，无法确定历史匹配结果");chain.add(item);continue;
+            }
             String reason = evaluator.evaluate(rule, requestLog.getRequestBody(),
                     requestLog.getRequestParams(), requestLog.getRequestHeaders());
             if (reason == null) {
@@ -142,7 +152,7 @@ public class AiExplainService {
         }
 
         boolean usedFallback = false;
-        if (matched == null && fallback != null) {
+        if (!uncertain && matched == null && fallback != null) {
             matched = fallback;
             usedFallback = true;
             if (fallbackItem != null) {
@@ -158,7 +168,11 @@ public class AiExplainService {
         result.setChain(chain);
         result.setProvider(settings.getProvider());
         result.setModel(settings.getModel());
-        if (matched != null) {
+        if(uncertain){
+            result.setConclusion("隐私字段已遮蔽，无法确定历史匹配结果");
+            result.setSummary("诊断采用脱敏快照；相关条件的历史值不可用于重放，不把遮蔽值误判为未命中或兜底。");
+            result.setSuggestion("请由有权限的管理员在安全环境核查；真实Mock请求仍按原始数据匹配，未被此诊断修改。");
+        } else if (matched != null) {
             result.setMatchedResponseId(matched.getId());
             result.setMatchedResponseName(matched.getName());
             result.setConclusion((usedFallback ? "使用兜底：" : "命中：") + matched.getName());
@@ -178,10 +192,17 @@ public class AiExplainService {
                     + (firstMissReason == null ? "检查字段路径与取值" : firstMissReason));
         }
 
-        if (!AiSettings.PROVIDER_MOCK.equals(settings.getProvider())) {
+        sanitizeResult(result);
+        if (!uncertain && !AiSettings.PROVIDER_MOCK.equals(settings.getProvider())) {
             enrichWithModel(settings, result);
         }
+        sanitizeResult(result);
         return result;
+    }
+
+    private void sanitizeResult(AiExplainResult result){
+        result.setConclusion(com.mockhub.log.service.LogPrivacySanitizer.redactText(result.getConclusion()));result.setSummary(com.mockhub.log.service.LogPrivacySanitizer.redactText(result.getSummary()));result.setSuggestion(com.mockhub.log.service.LogPrivacySanitizer.redactText(result.getSuggestion()));result.setMatchedResponseName(com.mockhub.log.service.LogPrivacySanitizer.redactText(result.getMatchedResponseName()));
+        if(result.getChain()!=null)for(AiChainItem item:result.getChain()){item.setName(com.mockhub.log.service.LogPrivacySanitizer.redactText(item.getName()));item.setDetail(com.mockhub.log.service.LogPrivacySanitizer.redactText(item.getDetail()));}
     }
 
     private String buildSummary(int total, String matchedName, boolean usedFallback,
@@ -236,7 +257,7 @@ public class AiExplainService {
                         .append(" [").append(item.getStatus()).append("] ").append(item.getDetail()).append("\n");
             }
             user.append("\n请用中文解释并给出修正建议。");
-            String raw = provider.complete(settings, system, user.toString());
+            String raw = provider.complete(settings, com.mockhub.log.service.LogPrivacySanitizer.redactPrompt(system), com.mockhub.log.service.LogPrivacySanitizer.redactPrompt(user.toString()));
             String json = raw.trim();
             int start = json.indexOf('{');
             int end = json.lastIndexOf('}');
@@ -252,7 +273,7 @@ public class AiExplainService {
                 }
             }
         } catch (Exception e) {
-            log.warn("AI 诊断文案生成失败，使用模板结果：{}", e.getMessage());
+            log.warn("AI诊断文案生成失败，保留脱敏模板结果");
         }
     }
 }

@@ -25,17 +25,38 @@ public final class AiProviderPresets {
     static {
         Map<String, AiProviderPreset> map = new LinkedHashMap<String, AiProviderPreset>();
         add(map, new AiProviderPreset("deepseek", "DeepSeek", "https://api.deepseek.com/v1",
-                "deepseek-chat", Arrays.asList("deepseek-chat", "deepseek-reasoner"), false));
+                "deepseek-chat", Arrays.asList("deepseek-chat", "deepseek-reasoner"), false,
+                "https://platform.deepseek.com/api_keys"));
         add(map, new AiProviderPreset("kimi", "Kimi", "https://api.moonshot.cn/v1",
-                "kimi-k3", Arrays.asList("kimi-k3", "kimi-k2-0905-preview", "moonshot-v1-8k"), false));
+                "kimi-k3", Arrays.asList("kimi-k3", "kimi-k2-0905-preview", "moonshot-v1-8k"), false,
+                "https://platform.moonshot.cn/console/api-keys"));
         add(map, new AiProviderPreset("minimax", "MiniMax", "https://api.minimax.cn/v1",
-                "MiniMax-M3", Arrays.asList("MiniMax-M3", "MiniMax-M3.1-Flash", "abab6.5s-chat"), false));
+                "MiniMax-M3", Arrays.asList("MiniMax-M3", "MiniMax-M3.1-Flash", "abab6.5s-chat"), false,
+                "https://platform.minimaxi.com/"));
         add(map, new AiProviderPreset("glm", "智谱 GLM", "https://open.bigmodel.cn/api/paas/v4",
-                "glm-4.6", Arrays.asList("glm-4.6", "glm-4.5", "glm-4-flash"), false));
-        add(map, new AiProviderPreset("qwen", "通义千问", "https://dashscope.aliyuncs.com/compatible-mode/v1",
-                "qwen-plus", Arrays.asList("qwen-plus", "qwen-max", "qwen-turbo"), false));
+                "glm-4.6", Arrays.asList("glm-4.6", "glm-4.5", "glm-4-flash"), false,
+                "https://open.bigmodel.cn/usercenter/apikeys"));
+        add(map, new AiProviderPreset("qwen", "千问AI", "https://maas.qianwenaiapi.com/compatible-mode/v1",
+                "qwen4-max", Arrays.asList("qwen4-max", "qwen4-max-preview", "qwen3.8-max", "qwen3.8-flash"), false,
+                "https://platform.qianwenai.com/"));
+        add(map, new AiProviderPreset("qwen-token-plan", "千问AI Token Plan", "https://token-plan.maas.qianwenaiapi.com/compatible-mode/v1",
+                "qwen4-max", Arrays.asList("qwen4-max", "qwen4-max-preview", "qwen3.8-max", "qwen3.8-flash"), false,
+                "https://platform.qianwenai.com/"));
+        add(map, new AiProviderPreset("volcengine", "火山方舟", "https://ark.cn-beijing.volces.com/api/v3",
+                "doubao-seed-2-1-pro-260915", Arrays.asList("doubao-seed-2-1-pro-260915", "doubao-seed-2-1-turbo-260628", "doubao-seed-evolving"), false,
+                "https://console.volcengine.com/ark"));
+        add(map, new AiProviderPreset("qianfan", "百度千帆", "https://qianfan.baidubce.com/v2",
+                "ernie-5.5-flash-preview", Arrays.asList("ernie-5.5-flash-preview", "ernie-5.1", "ernie-light-dt-1.0"), false,
+                "https://console.bce.baidu.com/qianfan/"));
+        add(map, new AiProviderPreset("hunyuan", "腾讯混元", "https://api.hunyuan.cloud.tencent.com/v1",
+                "hy4-flash", Arrays.asList("hy4-flash", "hy4-preview", "hunyuan-turbos-latest"), false,
+                "https://console.cloud.tencent.com/tokenhub"));
+        add(map, new AiProviderPreset("siliconflow", "硅基流动", "https://api.siliconflow.cn/v1",
+                "deepseek-ai/DeepSeek-V3", Arrays.asList("deepseek-ai/DeepSeek-V3", "deepseek-ai/DeepSeek-R1"), false,
+                "https://cloud.siliconflow.cn/account/ak"));
         add(map, new AiProviderPreset("openai", "OpenAI", "https://api.openai.com/v1",
-                "gpt-4o-mini", Arrays.asList("gpt-4o-mini", "gpt-4o", "o3-mini"), false));
+                "gpt-4o-mini", Arrays.asList("gpt-4o-mini", "gpt-4o", "o3-mini"), false,
+                "https://platform.openai.com/api-keys"));
         add(map, new AiProviderPreset("ollama", "Ollama", "http://localhost:11434/v1",
                 "llama3.1", Arrays.asList("llama3.1", "qwen2.5", "deepseek-r1"), true));
         add(map, new AiProviderPreset(CUSTOM, "自定义", "",
@@ -83,7 +104,12 @@ public final class AiProviderPresets {
         if (url.contains("moonshot")) return "kimi";
         if (url.contains("minimax")) return "minimax";
         if (url.contains("bigmodel")) return "glm";
-        if (url.contains("dashscope")) return "qwen";
+        if (url.contains("token-plan.maas.qianwenaiapi.com") || url.contains("token-plan")) return "qwen-token-plan";
+        if (url.contains("qianwenaiapi") || url.contains("dashscope")) return "qwen";
+        if (url.contains("volces.com")) return "volcengine";
+        if (url.contains("qianfan.baidubce.com")) return "qianfan";
+        if (url.contains("hunyuan.cloud.tencent.com") || url.contains("tokenhub")) return "hunyuan";
+        if (url.contains("siliconflow")) return "siliconflow";
         if (url.contains("api.openai.com")) return "openai";
         if (url.contains("11434")) return "ollama";
         return CUSTOM;

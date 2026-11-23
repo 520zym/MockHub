@@ -5,6 +5,14 @@ package com.mockhub.system.model.dto;
  */
 public class CreateTeamRequest {
 
+    private String description;
+    public String getDescription() { return description; }
+    public void setDescription(String description) { this.description=description; }
+
+    private String initialAdminUserId;
+    public String getInitialAdminUserId() { return initialAdminUserId; }
+    public void setInitialAdminUserId(String initialAdminUserId) { this.initialAdminUserId=initialAdminUserId; }
+
     /** 团队名称 */
     private String name;
 

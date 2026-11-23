@@ -12,6 +12,15 @@ import java.util.List;
  */
 public class ApiDefinitionVO {
 
+    private String updatedBy;
+    public String getUpdatedBy() { return updatedBy; }
+    public void setUpdatedBy(String value) { updatedBy=value; }
+    private String updatedByName;
+    public String getUpdatedByName() { return updatedByName; }
+    public void setUpdatedByName(String value) { updatedByName=value; }
+    private long revision = 1;
+    public long getRevision() { return revision; }
+    public void setRevision(long revision) { this.revision = revision; }
     private String id;
     private String teamId;
     private String teamName;

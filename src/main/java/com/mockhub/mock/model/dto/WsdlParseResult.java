@@ -7,8 +7,13 @@ import java.util.List;
  */
 public class WsdlParseResult {
 
-    /** WSDL 文件名 */
+    /** 安全的团队归属存储key（不是用户原始文件名） */
     private String fileName;
+    private String originalFileName;
+    public String getOriginalFileName(){return originalFileName;}
+    public void setOriginalFileName(String value){originalFileName=value;}
+    /** Alias for clients that explicitly name the persisted SOAP configuration key. */
+    public String getWsdlFileName(){return fileName;}
 
     /** 解析出的 SOAP 操作列表 */
     private List<WsdlOperation> operations;

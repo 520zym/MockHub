@@ -26,7 +26,7 @@ public class JwtUtil {
     private static final Logger log = LoggerFactory.getLogger(JwtUtil.class);
 
     /** Token 有效期：8 小时（毫秒） */
-    private static final long EXPIRATION_MS = 8 * 60 * 60 * 1000L;
+    public static final long EXPIRATION_MS = 8 * 60 * 60 * 1000L;
 
     private Key signingKey;
 
@@ -48,7 +48,14 @@ public class JwtUtil {
      * @param teamIds    用户所属团队 ID 列表
      * @return JWT Token 字符串
      */
+    /** Legacy generator retained only for compatibility tests; its token is intentionally rejected by JwtAuthFilter. */
+    @Deprecated
     public String generateToken(String userId, String username, String globalRole, List<String> teamIds) {
+        return generateToken(userId, username, globalRole, teamIds, null, null);
+    }
+
+    public String generateToken(String userId, String username, String globalRole, List<String> teamIds,
+                                Long authVersion, String sessionId) {
         Date now = new Date();
         Date expiration = new Date(now.getTime() + EXPIRATION_MS);
 
@@ -70,6 +77,8 @@ public class JwtUtil {
                 .claim("username", username)
                 .claim("globalRole", globalRole)
                 .claim("teamIds", teamIdsStr)
+                .claim("auth_version", authVersion)
+                .claim("sid", sessionId)
                 .setIssuedAt(now)
                 .setExpiration(expiration)
                 .signWith(SignatureAlgorithm.HS256, signingKey)

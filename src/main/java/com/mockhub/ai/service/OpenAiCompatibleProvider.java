@@ -39,6 +39,8 @@ public class OpenAiCompatibleProvider implements AiProvider {
 
     @Override
     public String complete(AiSettings settings, String system, String user) {
+        system=com.mockhub.log.service.LogPrivacySanitizer.redactPrompt(system);
+        user=com.mockhub.log.service.LogPrivacySanitizer.redactPrompt(user);
         String endpoint = resolveEndpoint(settings.getBaseUrl());
         if (endpoint == null) {
             throw new BizException(40303, "AI 服务尚未配置 Base URL");
@@ -63,16 +65,12 @@ public class OpenAiCompatibleProvider implements AiProvider {
             headers.set("Authorization", "Bearer " + apiKey);
         }
 
-        RestTemplate restTemplate = new RestTemplate();
-        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(5000);
-        factory.setReadTimeout(90000);
-        restTemplate.setRequestFactory(factory);
+        RestTemplate restTemplate = createRestTemplate();
 
         long started = System.currentTimeMillis();
         String requestId = UUID.randomUUID().toString().substring(0, 8);
         log.info("AI 请求开始：requestId={}, model={}, endpoint={}, systemChars={}, userChars={}, maxTokens=1800",
-                requestId, settings.getModel(), endpoint, system == null ? 0 : system.length(),
+                requestId, settings.getModel(), safeError(endpoint,apiKey), system == null ? 0 : system.length(),
                 user == null ? 0 : user.length());
         try {
             ResponseEntity<String> response = restTemplate.exchange(
@@ -95,7 +93,7 @@ public class OpenAiCompatibleProvider implements AiProvider {
                     usage.path("total_tokens").asLong(-1));
             return content;
         } catch (HttpStatusCodeException e) {
-            String detail = e.getResponseBodyAsString();
+            String detail = safeError(e.getResponseBodyAsString(),apiKey);
             if (detail != null && detail.length() > 300) {
                 detail = detail.substring(0, 300) + "…";
             }
@@ -106,15 +104,26 @@ public class OpenAiCompatibleProvider implements AiProvider {
                     + (detail != null && !detail.isEmpty() ? "：" + detail : ""));
         } catch (ResourceAccessException e) {
             log.warn("AI 请求连接失败：requestId={}, model={}, durationMs={}, error={}",
-                    requestId, settings.getModel(), System.currentTimeMillis() - started, e.getMessage());
+                    requestId, settings.getModel(), System.currentTimeMillis() - started, safeError(e.getMessage(),apiKey));
             throw new BizException(50202, "连接 AI 服务超时或失败，请检查 Base URL 与网络");
         } catch (BizException e) {
             throw e;
         } catch (Exception e) {
             log.error("AI 请求异常：requestId={}, model={}, durationMs={}",
-                    requestId, settings.getModel(), System.currentTimeMillis() - started, e);
-            throw new BizException(50203, "调用 AI 服务失败：" + e.getMessage());
+                    requestId, settings.getModel(), System.currentTimeMillis() - started, safeError(e.getMessage(),apiKey));
+            throw new BizException(50203, "调用 AI 服务失败：" + safeError(e.getMessage(),apiKey));
         }
+    }
+
+    /** Small test seam: production still uses the same connection/read timeouts. */
+    protected RestTemplate createRestTemplate(){
+        RestTemplate restTemplate=new RestTemplate();
+        SimpleClientHttpRequestFactory factory=new SimpleClientHttpRequestFactory();factory.setConnectTimeout(5000);factory.setReadTimeout(90000);restTemplate.setRequestFactory(factory);return restTemplate;
+    }
+    private String safeError(String value,String apiKey){
+        if(value==null)return null;
+        if(apiKey!=null && !apiKey.isEmpty())value=value.replace(apiKey,com.mockhub.log.service.LogPrivacySanitizer.REDACTED);
+        return com.mockhub.log.service.LogPrivacySanitizer.redactPrompt(value);
     }
 
     /**

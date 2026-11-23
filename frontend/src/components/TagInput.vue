@@ -5,8 +5,8 @@
       <el-tag
         v-for="tag in selectedTags"
         :key="tag.id"
-        closable
-        :style="{ backgroundColor: hexToRgba(tag.color, 0.15), color: tag.color, borderColor: 'transparent' }"
+        :closable="!readOnly"
+        :style="tagStyle(tag)"
         @close="removeTag(tag.id)"
       >
         {{ tag.name }}
@@ -14,7 +14,9 @@
     </div>
 
     <!-- 搜索输入 + 下拉列表 -->
-    <el-popover
+    <p v-if="tagError" class="tag-input__error" role="alert">标签读取失败，请重新加载详情后重试。</p>
+    <span v-else-if="readOnly && selectedTags.length === 0">未添加标签</span>
+    <el-popover v-if="!readOnly"
       :visible="popoverVisible"
       placement="bottom-start"
       :width="240"
@@ -70,12 +72,14 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { Check, Plus } from '@element-plus/icons-vue'
 import { getTags, createTag } from '@/api/tags'
+import { hexToRgba, tagTextColor } from '@/utils/tag-color'
+import { pickDistinctColor } from '@/utils/palette'
 import { ElMessage } from 'element-plus'
 
-// 新标签随机颜色预设色板
+// 新标签配色预设色板（优先选当前未使用的颜色）
 const PRESET_COLORS = [
   '#6366F1', '#8B5CF6', '#EC4899', '#EF4444', '#F59E0B',
   '#10B981', '#06B6D4', '#3B82F6', '#6B7280', '#D97706'
@@ -86,6 +90,7 @@ const props = defineProps({
     type: Array,
     default: () => []
   },
+  readOnly: { type: Boolean, default: false },
   teamId: {
     type: String,
     default: ''
@@ -94,22 +99,27 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue'])
 
+
 const searchText = ref('')
 const popoverVisible = ref(false)
 const allTags = ref([])
+const tagError = ref(false)
+let tagRequest = 0
+onBeforeUnmount(() => { tagRequest++ })
+watch(() => props.readOnly, value => { if (value) popoverVisible.value = false })
 const creating = ref(false) // 防止重复创建
 const inputRef = ref(null)
 
 // 团队切换时重新加载标签列表
 watch(() => props.teamId, async (newTeamId) => {
-  if (newTeamId) {
-    try {
-      allTags.value = await getTags(newTeamId)
-    } catch (e) {
-      allTags.value = []
-    }
-  } else {
-    allTags.value = []
+  const sequence = ++tagRequest
+  allTags.value = []; tagError.value = false; popoverVisible.value = false
+  if (!newTeamId) return
+  try {
+    const rows = await getTags(newTeamId)
+    if (sequence === tagRequest && props.teamId === newTeamId) allTags.value = rows
+  } catch {
+    if (sequence === tagRequest) tagError.value = true
   }
 }, { immediate: true })
 
@@ -142,6 +152,7 @@ function isSelected(tagId) {
 
 // 切换标签选中/取消选中
 function toggleTag(tag) {
+  if (props.readOnly) return
   const newValue = [...props.modelValue]
   const idx = newValue.indexOf(tag.id)
   if (idx >= 0) {
@@ -153,6 +164,7 @@ function toggleTag(tag) {
 }
 
 function removeTag(tagId) {
+  if (props.readOnly) return
   const newValue = props.modelValue.filter(id => id !== tagId)
   emit('update:modelValue', newValue)
 }
@@ -164,6 +176,7 @@ function removeTag(tagId) {
  * 3. 如果输入框为空 → 不做任何操作
  */
 function handleEnter() {
+  if (props.readOnly) return
   const text = searchText.value.trim()
   if (!text) return
 
@@ -188,17 +201,20 @@ function handleEnter() {
  * 3. 成功后添加到 allTags 列表并自动选中
  */
 async function handleCreateTag() {
+  if (props.readOnly) return
   const name = searchText.value.trim()
   if (!name || creating.value) return
 
   creating.value = true
+  const teamId = props.teamId, sequence = tagRequest
   try {
-    const color = PRESET_COLORS[Math.floor(Math.random() * PRESET_COLORS.length)]
+    const color = pickDistinctColor(allTags.value.map(tag => tag.color), PRESET_COLORS)
     const newTag = await createTag({
-      teamId: props.teamId,
+      teamId,
       name,
       color
     })
+    if (sequence !== tagRequest || teamId !== props.teamId || props.readOnly) return
     // 将新标签加入本地列表
     allTags.value.push(newTag)
     // 自动选中新创建的标签
@@ -219,12 +235,9 @@ function handleBlur() {
   }, 200)
 }
 
-function hexToRgba(hex, alpha) {
-  const h = (hex || '#6366F1').replace('#', '')
-  const r = parseInt(h.substring(0, 2), 16)
-  const g = parseInt(h.substring(2, 4), 16)
-  const b = parseInt(h.substring(4, 6), 16)
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+function tagStyle(tag) {
+  const color = tag.color || '#3568D4'
+  return { backgroundColor: hexToRgba(color, 0.15), color: tagTextColor(color), borderColor: 'transparent' }
 }
 </script>
 
@@ -261,13 +274,13 @@ function hexToRgba(hex, alpha) {
     font-size: 13px;
 
     &:hover {
-      background: #F7F8FA;
+      background: var(--app-bg-control);
     }
 
     // 创建新标签选项的特殊样式
     &--create {
-      color: #6366F1;
-      border-top: 1px solid #F0F0F5;
+      color: var(--app-text-accent);
+      border-top: 1px solid var(--app-divider);
       margin-top: 4px;
       padding-top: 10px;
     }
@@ -287,13 +300,13 @@ function hexToRgba(hex, alpha) {
 
   &__check {
     margin-left: auto;
-    color: #6366F1;
+    color: var(--app-text-accent);
   }
 
   &__empty {
     padding: 12px;
     text-align: center;
-    color: #A3AED0;
+    color: var(--app-text-secondary);
     font-size: 13px;
   }
 }

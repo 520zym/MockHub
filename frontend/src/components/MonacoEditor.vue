@@ -2,6 +2,15 @@
   <div ref="editorContainer" class="monaco-editor-container" />
 </template>
 
+<script>
+import { hasPlaceholder, isValidJsonWithPlaceholders } from '@/utils/json-placeholders'
+
+// Shared across component instances: script-setup declarations are instance-scoped.
+const modelVariableLists = new WeakMap()
+let markersPatched = false
+const markerOriginalKey = Symbol.for('mockhub.monaco.originalSetModelMarkers')
+</script>
+
 <script setup>
 import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import * as monaco from 'monaco-editor'
@@ -17,26 +26,23 @@ import { DYNAMIC_VARIABLES } from '@/constants/dynamicVariables'
 /**
  * 全局一次性拦截 Monaco 的 setModelMarkers
  *
- * 目的：保留 JSON/XML 等内置语法校验的同时，让动态变量占位符 `{{xxx}}` 不被标红。
- * 做法：Monkey-patch monaco.editor.setModelMarkers，过滤掉落在占位符区间内的 marker。
- * - 占位符正则与后端 DynamicVariableUtil 保持一致：`{{ word }}` 或 `{{ word.word }}`
- * - 只过滤"与占位符区间相交"的 marker，不影响占位符之外的真实语法错误
- * - 幂等：模块级 flag 防止多次包裹
+ * 目的：保留 JSON 内置语法校验，但动态变量占位符常在返回体里写成裸值
+ * （`"id": {{uuid}}`），JSON 校验会报 "Expected comma"，满屏红波浪线却找不到错。
+ * 做法（只作用于 JSON 诊断，XML/纯文本不受影响）：
+ * - 占位符换成 null 后如果仍是合法 JSON，说明这些报错全部来自占位符，清空 JSON 诊断；
+ * - 换成 null 后依然不合法，说明确有真实错误，只丢掉贴着占位符的那几个 marker，
+ *   其余真实错误照常显示。
+ * - 占位符语法与后端 DynamicVariableUtil 一致；幂等：模块级 flag 防止重复包裹。
  */
-let _markersPatched = false
 function patchSetModelMarkers() {
-  if (_markersPatched) return
-  _markersPatched = true
+  if (markersPatched) return
+  markersPatched = true
 
   const PLACEHOLDER_RE = /\{\{\w+(?:\.\w+)?\}\}/g
-  const original = monaco.editor.setModelMarkers.bind(monaco.editor)
+  const original = monaco.editor.setModelMarkers[markerOriginalKey] || monaco.editor.setModelMarkers.bind(monaco.editor)
 
-  monaco.editor.setModelMarkers = function (model, owner, markers) {
-    if (!model || !markers || markers.length === 0) {
-      return original(model, owner, markers)
-    }
-    // 计算当前 model 中所有占位符的行列区间
-    const text = model.getValue()
+  // 占位符行列区间，左右各放宽 2 列，吸收紧贴占位符的 "Expected comma"
+  function placeholderRanges(model, text) {
     const ranges = []
     let m
     PLACEHOLDER_RE.lastIndex = 0
@@ -44,19 +50,40 @@ function patchSetModelMarkers() {
       const start = model.getPositionAt(m.index)
       const end = model.getPositionAt(m.index + m[0].length)
       ranges.push({
-        sLine: start.lineNumber, sCol: start.column,
-        eLine: end.lineNumber,   eCol: end.column
+        sLine: start.lineNumber, sCol: Math.max(1, start.column - 2),
+        eLine: end.lineNumber,   eCol: end.column + 2
       })
     }
-    if (ranges.length === 0) {
+    return ranges
+  }
+
+  monaco.editor.setModelMarkers = function (model, owner, markers) {
+    if (!model || !markers || markers.length === 0) {
       return original(model, owner, markers)
     }
-    // 过滤：与任一占位符区间相交的 marker 丢弃
+    const languageId = model.getLanguageId ? model.getLanguageId() : ''
+    if (owner !== 'json' && languageId !== 'json') {
+      return original(model, owner, markers)
+    }
+    const text = model.getValue()
+    if (!hasPlaceholder(text)) {
+      return original(model, owner, markers)
+    }
+    if (isValidJsonWithPlaceholders(text)) {
+      return original(model, owner, markers.filter((mk) => !isJsonMarker(mk, owner)))
+    }
+    const ranges = placeholderRanges(model, text)
     const filtered = markers.filter((mk) => {
       return !ranges.some((r) => rangesIntersect(mk, r))
     })
     return original(model, owner, filtered)
   }
+  monaco.editor.setModelMarkers[markerOriginalKey] = original
+}
+
+/** 该 marker 是否由 JSON 校验产生（owner 或 source 为 json） */
+function isJsonMarker(marker, owner) {
+  return owner === 'json' || marker.source === 'json'
 }
 
 /**
@@ -76,21 +103,14 @@ function rangesIntersect(mk, r) {
 }
 
 /**
- * 模块级最新变量列表
+ * 每个文本模型独立的变量补全，避免不同接口/团队/浮层互相覆盖缓存
  *
  * 补全 provider 在模块级只注册一次，但不同 MonacoEditor 实例可能带不同的
- * dynamicVariables（例如不同团队的自定义变量）。解决方案：用一个模块级 ref
- * 由组件 mount 时写入，provider 每次请求补全都读取这个 ref 的当前值。
- * 同一时刻编辑器通常只有一个获得焦点，最后 mount 的实例覆盖前者即可。
+ * dynamicVariables（例如不同团队的自定义变量）。用 WeakMap 按文本模型隔离，
+ * provider 根据本次请求的 model 读取元数据，销毁时显式删除；不会跨团队串用补全。
  */
-let latestVariablesList = DYNAMIC_VARIABLES.slice()
-
-function setLatestVariablesList(list) {
-  if (Array.isArray(list) && list.length > 0) {
-    latestVariablesList = list
-  } else {
-    latestVariablesList = DYNAMIC_VARIABLES.slice()
-  }
+function setModelVariables(model, list) {
+  if (model) modelVariableLists.set(model, Array.isArray(list) && list.length ? list : DYNAMIC_VARIABLES)
 }
 
 /**
@@ -145,7 +165,7 @@ function registerDynamicVariableCompletion() {
           endColumn
         }
 
-        const suggestions = latestVariablesList.map((v) => ({
+        const suggestions = (modelVariableLists.get(model) || DYNAMIC_VARIABLES).map((v) => ({
           label: `{{${v.name}}}`,
           kind: monaco.languages.CompletionItemKind.Variable,
           detail: v.desc,
@@ -188,6 +208,7 @@ const emit = defineEmits(['update:modelValue'])
 
 const editorContainer = ref(null)
 let editor = null
+let syncingExternalValue = false
 
 // 大文本阈值（超过 100KB 禁用 minimap）
 const LARGE_TEXT_THRESHOLD = 100 * 1024
@@ -208,6 +229,7 @@ onMounted(() => {
 
   const isLargeText = (props.modelValue || '').length > LARGE_TEXT_THRESHOLD
 
+  monaco.editor.defineTheme('mockhub-flat', { base: 'vs', inherit: true, rules: [], colors: { 'editor.background': '#F4F6F9', 'editorGutter.background': '#F4F6F9', 'editorLineNumber.foreground': '#9EA5AF', 'editor.lineHighlightBackground': '#EEF2F7', 'editor.selectionBackground': '#DCE7FB', 'widget.shadow': '#00000000' } })
   editor = monaco.editor.create(editorContainer.value, {
     value: props.modelValue || '',
     language: props.language,
@@ -220,7 +242,7 @@ onMounted(() => {
     scrollBeyondLastLine: false,
     wordWrap: 'on',
     tabSize: 2,
-    theme: 'vs',
+    theme: 'mockhub-flat',
     renderWhitespace: 'selection',
     bracketPairColorization: { enabled: true },
     scrollbar: {
@@ -247,10 +269,8 @@ onMounted(() => {
     resizeObserver.observe(editorContainer.value)
   }
 
-  // 同步外部传入的动态变量列表到模块级变量，供补全 provider 使用
-  if (props.dynamicVariables) {
-    setLatestVariablesList(props.dynamicVariables)
-  }
+  // 仅同步到此文本模型，其他编辑器的团队变量互不影响
+  setModelVariables(editor.getModel(), props.dynamicVariables)
   // 注册动态变量补全（模块级幂等）
   registerDynamicVariableCompletion()
   // 拦截 setModelMarkers，过滤掉落在 {{xxx}} 区间内的诊断标记（模块级幂等）
@@ -259,7 +279,7 @@ onMounted(() => {
   // 监听编辑器内容变化
   editor.onDidChangeModelContent(() => {
     const value = editor.getValue()
-    emit('update:modelValue', value)
+    if (!syncingExternalValue && !props.readOnly) emit('update:modelValue', value)
 
     // 动态切换 minimap
     const shouldDisableMinimap = value.length > LARGE_TEXT_THRESHOLD
@@ -270,7 +290,8 @@ onMounted(() => {
 // 监听外部值变化
 watch(() => props.modelValue, (newVal) => {
   if (editor && newVal !== editor.getValue()) {
-    editor.setValue(newVal || '')
+    syncingExternalValue = true
+    try { editor.setValue(newVal || '') } finally { syncingExternalValue = false }
   }
 })
 
@@ -294,9 +315,7 @@ watch(() => props.readOnly, (newVal) => {
 // 监听动态变量列表变化（例如父组件切换了团队或拉取回了自定义变量），
 // 写回模块级变量，provider 下次弹出补全时会读到新列表。
 watch(() => props.dynamicVariables, (newVal) => {
-  if (newVal) {
-    setLatestVariablesList(newVal)
-  }
+  if (editor) setModelVariables(editor.getModel(), newVal)
 }, { deep: false })
 
 onBeforeUnmount(() => {
@@ -310,7 +329,10 @@ onBeforeUnmount(() => {
     resizeObserver = null
   }
   if (editor) {
+    const model = editor.getModel()
+    if (model) modelVariableLists.delete(model)
     editor.dispose()
+    if (model && !model.isDisposed()) model.dispose()
     editor = null
   }
 })
@@ -322,7 +344,7 @@ onBeforeUnmount(() => {
  * 若存在选区，会先覆盖选区再插入。
  */
 function insertAtCursor(text) {
-  if (!editor || !text) return
+  if (!editor || !text || props.readOnly) return
   const selection = editor.getSelection()
   const range = selection || {
     startLineNumber: 1,
@@ -347,6 +369,8 @@ defineExpose({ insertAtCursor })
   height: 400px;
   border-radius: 10px;
   overflow: hidden;
-  border: 2px solid #F1F5F9;
+  border: 0;
+  background: var(--app-bg-control);
 }
+.monaco-editor-container :deep(.monaco-hover),.monaco-editor-container :deep(.suggest-widget),.monaco-editor-container :deep(.parameter-hints-widget) { box-shadow: none; border: 0; }
 </style>

@@ -38,9 +38,10 @@ public class FileManagementController {
     }
     @GetMapping("/api/files")
     public Result<PageResult<Map<String, Object>>> list(@RequestParam(required=false) String teamId,
-            @RequestParam(required=false) String keyword, @RequestParam(required=false) String tag,
+            @RequestParam(required=false) String keyword, @RequestParam(required=false) String tagId,
+            @RequestParam(required=false) String tag,
             @RequestParam(defaultValue="1") int page, @RequestParam(defaultValue="20") int size) {
-        PageResult<StoredFile> found = service.list(teamId, keyword, tag, page, size);
+        PageResult<StoredFile> found = service.list(teamId, keyword, tagId, tag, page, size);
         List<Map<String, Object>> items = new ArrayList<>();
         for (StoredFile f : found.getItems()) items.add(view(f));
         return Result.ok(PageResult.of(items, found.getTotal(), found.getPage(), found.getSize()));
@@ -49,7 +50,7 @@ public class FileManagementController {
     public Result<Map<String, Object>> detail(@PathVariable String id) { return Result.ok(view(service.detail(id))); }
     @PutMapping("/api/files/{id}")
     public Result<Map<String, Object>> update(@PathVariable String id, @RequestBody Metadata request) {
-        return Result.ok(view(service.update(id, request.getAlias(), request.getTags())));
+        return Result.ok(view(service.update(id, request.getAlias(), request.getTagIds(), request.getTags())));
     }
     @DeleteMapping("/api/files/{id}")
     public Result<Void> delete(@PathVariable String id) { service.delete(Collections.singletonList(id)); return Result.ok(); }
@@ -70,9 +71,14 @@ public class FileManagementController {
     }
     public static class Metadata {
         private String alias;
+        /** 共享标签 ID（与接口标签同一套）。 */
+        private List<String> tagIds;
+        /** 旧版调用方按标签名提交；服务端复用同名共享标签。 */
         private List<String> tags;
         public String getAlias() { return alias; }
         public void setAlias(String alias) { this.alias = alias; }
+        public List<String> getTagIds() { return tagIds; }
+        public void setTagIds(List<String> tagIds) { this.tagIds = tagIds; }
         public List<String> getTags() { return tags; }
         public void setTags(List<String> tags) { this.tags = tags; }
     }

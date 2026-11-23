@@ -19,10 +19,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.mockhub.common.util.PasswordUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -38,13 +34,17 @@ import java.util.Map;
 @RequestMapping("/api/users")
 public class UserController {
 
-    private static final Logger log = LoggerFactory.getLogger(UserController.class);
-
     @Autowired
     private UserServiceImpl userService;
 
     @Autowired
     private TeamRepository teamRepository;
+
+    @org.springframework.web.bind.annotation.PatchMapping("/{id}/status")
+    public Result<Map<String, Object>> updateStatus(@PathVariable String id,
+            @RequestBody com.mockhub.system.model.dto.UpdateUserStatusRequest request) {
+        return Result.ok(buildUserVO(userService.updateStatus(id, request)));
+    }
 
     /**
      * GET /api/users — 用户列表（不分页）
@@ -122,18 +122,7 @@ public class UserController {
      */
     @PostMapping("/{id}/reset-password")
     public Result<Void> resetPassword(@PathVariable String id, @RequestBody Map<String, String> body) {
-        String newPassword = body.get("newPassword");
-        if (newPassword == null || newPassword.length() < 6) {
-            return Result.error(40000, "新密码长度不能少于6位");
-        }
-        User user = userService.findById(id);
-        if (user == null) {
-            return Result.error(40401, "用户不存在");
-        }
-        String newHash = PasswordUtil.hash(newPassword);
-        userService.updatePassword(id, newHash);
-        userService.updateFirstLogin(id, true);
-        log.info("超管重置用户密码：userId={}, username={}", id, user.getUsername());
+        userService.resetPassword(id, body.get("newPassword"));
         return Result.ok();
     }
 
@@ -150,6 +139,7 @@ public class UserController {
         vo.put("displayName", user.getDisplayName());
         vo.put("globalRole", user.getGlobalRole());
         vo.put("firstLogin", user.isFirstLogin());
+        vo.put("status", user.getStatus());
         vo.put("createdAt", user.getCreatedAt());
 
         // 填充团队角色信息

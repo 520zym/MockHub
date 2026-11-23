@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440, initial-scale=1">
+<title>请求日志 · MockHub Flat</title>
+<link rel="stylesheet" href="assets/glass.css">
+<link rel="stylesheet" href="assets/pages.css">
+<!-- board-fit --><style id="board-fit">html,body{overflow:hidden!important;margin:0}.app{width:1440px!important;height:900px!important;min-height:0!important}</style></head>
+<body>
+<div class="app">
+<aside class="rail">
+  <div class="brand"><span class="brand__mark">M</span><span class="brand__name">MockHub</span><span class="brand__ver">1.8</span></div>
+  <div class="rail__label">工作区</div>
+  <nav class="nav">
+    <a class="nav__item" href="01-api-list.html"><svg class="i" viewBox="0 0 24 24"><path d="M8.5 3a1.2 1.2 0 0 1 1.2 1.2v2.5h4.6V4.2a1.2 1.2 0 1 1 2.4 0v2.5h.5A2.8 2.8 0 0 1 20 9.5v1.7a7.4 7.4 0 0 1-6.2 7.3v2.3a1.2 1.2 0 1 1-2.4 0v-2.3A7.4 7.4 0 0 1 4 11.2V9.5a2.8 2.8 0 0 1 2.8-2.8h.5V4.2A1.2 1.2 0 0 1 8.5 3Z"/></svg><span>接口管理</span><span class="nav__count">143</span></a>
+    <a class="nav__item" href="07-files.html"><svg class="i" viewBox="0 0 24 24"><path d="M3 7.2A3.2 3.2 0 0 1 6.2 4h3.1c.8 0 1.5.3 2 .9l.9 1.1h5.6A3.2 3.2 0 0 1 21 9.2v7.6a3.2 3.2 0 0 1-3.2 3.2H6.2A3.2 3.2 0 0 1 3 16.8Z"/></svg><span>文件服务器</span><span class="nav__count">28</span></a>
+    <a class="nav__item" href="08-variables.html"><svg class="i" viewBox="0 0 24 24"><path fill-rule="evenodd" d="M3 6.2A3.2 3.2 0 0 1 6.2 3h6.1c.9 0 1.7.3 2.3.9l5.5 5.5a3.2 3.2 0 0 1 0 4.5l-5.4 5.4a3.2 3.2 0 0 1-4.5 0l-5.5-5.5A3.2 3.2 0 0 1 3 11.5Zm5.2 3.7a1.7 1.7 0 1 0 0-3.4 1.7 1.7 0 0 0 0 3.4Z"/></svg><span>动态变量</span><span class="nav__count">12</span></a>
+    <a class="nav__item" href="09-stats.html"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="13" width="4.2" height="7" rx="1.5"/><rect x="9.9" y="8" width="4.2" height="12" rx="1.5"/><rect x="16.8" y="3" width="4.2" height="17" rx="1.5"/></svg><span>使用统计</span></a>
+  </nav>
+  <div class="rail__label">管理</div>
+  <nav class="nav">
+    <a class="nav__item" href="10-teams.html"><svg class="i" viewBox="0 0 24 24"><circle cx="8.3" cy="7.7" r="3.2"/><path d="M2.4 18.2c0-3 2.5-5 5.9-5s5.9 2 5.9 5c0 .8-.6 1.4-1.4 1.4H3.8c-.8 0-1.4-.6-1.4-1.4Z"/><g opacity=".55"><circle cx="16.7" cy="8.8" r="2.5"/><path d="M15.3 14.2c2.9-.2 5.4 1.6 5.4 4.2 0 .7-.5 1.2-1.2 1.2h-3c.1-.4.2-.9.2-1.4 0-1.6-.5-3-1.4-4Z"/></g></svg><span>团队管理</span><span class="nav__count">4</span></a>
+    <a class="nav__item" href="11-users.html"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.8"/><path d="M4.2 20c0-3.9 3.4-6.3 7.8-6.3s7.8 2.4 7.8 6.3c0 .7-.6 1.2-1.3 1.2H5.5c-.7 0-1.3-.5-1.3-1.2Z"/></svg><span>用户管理</span><span class="nav__count">26</span></a>
+    <a class="nav__item nav__item--on" href="03-logs.html"><svg class="i" viewBox="0 0 24 24"><rect x="9" y="5" width="12" height="2.4" rx="1.2"/><rect x="9" y="10.8" width="12" height="2.4" rx="1.2"/><rect x="9" y="16.6" width="12" height="2.4" rx="1.2"/><circle cx="4.6" cy="6.2" r="1.5"/><circle cx="4.6" cy="12" r="1.5"/><circle cx="4.6" cy="17.8" r="1.5"/></svg><span>请求日志</span></a>
+    <a class="nav__item" href="14-settings-providers.html"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="5.8" width="9" height="2.4" rx="1.2"/><rect x="17" y="5.8" width="4" height="2.4" rx="1.2"/><circle cx="14.8" cy="7" r="2.7"/><rect x="3" y="15.8" width="4" height="2.4" rx="1.2"/><rect x="11" y="15.8" width="10" height="2.4" rx="1.2"/><circle cx="8.6" cy="17" r="2.7"/></svg><span>全局设置</span></a>
+  </nav>
+  <div class="rail__spacer"></div>
+  <div class="teamcard"><span class="tdot tdot--pay"></span><div class="who"><b>当前团队</b><span>支付中心</span></div><svg class="i" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></div>
+  <div class="statuspill"><span class="dot"></span>服务运行中<span class="mono">:8080</span></div>
+  <div class="rail__user"><span class="avatar">张</span><div class="who"><b>张一鸣</b><span>超级管理员</span></div><button class="iconbtn"><svg class="i" viewBox="0 0 24 24"><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"/></svg></button></div>
+</aside>
+<div class="work">
+<header class="topbar">
+  <div class="crumb"><svg class="i i--16" viewBox="0 0 24 24" style="color:var(--faint)"><rect x="3" y="4" width="18" height="16" rx="4"/><path d="M9 4v16"/></svg><span>MockHub</span><span class="sep">/</span><b>请求日志</b></div>
+  <div class="topbar__right">
+    <span class="env"><span class="dot"></span>生产内网</span>
+    <div class="searchpill"><svg class="i i--12" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span>搜索接口、日志或命令</span><span class="kbd">⌘K</span></div>
+    <button class="iconbtn"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2.5-3 4M12 17h.01"/></svg></button>
+  </div>
+</header>
+<main class="main">
+  <div class="page-head">
+    <div>
+      <div class="page-title"><h1>请求日志</h1><span class="countpill">2,146 条 / 1 小时</span></div>
+      <div class="page-sub"><span>命中率 99.4%</span><span class="dot"></span><span>P95 12 ms</span><span class="dot"></span><span class="mono">实时更新 14:32:08</span></div>
+    </div>
+    <div class="page-actions"><a class="btn" href="12-operation-logs.html">操作日志</a>
+      <button class="btn"><svg class="i" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>导出 CSV</button>
+      <button class="btn"><svg class="i" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>清理</button>
+    </div>
+  </div>
+
+  <div class="logsplit">
+    <section class="logpanel">
+      <div class="logbar">
+        <div class="seg">
+          <span class="seg__item">15 分</span><span class="seg__item seg__item--on">1 小时</span><span class="seg__item">24 小时</span><span class="seg__item">7 天</span>
+        </div>
+        <button class="filterpill"><span>团队</span><b>支付中心</b><svg class="i" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
+        <button class="filterpill"><span>状态</span><b>全部</b><svg class="i" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
+        <button class="filterpill"><span>仅异常</span><b>关闭</b><svg class="i" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+          <span class="live"><span class="livedot"></span>跟随最新</span>
+          <span class="sw sw--on"></span>
+        </div>
+      </div>
+      <div class="tablewrap">
+        <table class="logtable">
+          <colgroup><col style="width:84px"><col style="width:74px"><col><col style="width:48px"><col style="width:62px"><col style="width:58px"><col style="width:20px"></colgroup>
+          <thead><tr><th>时间</th><th>方法</th><th>请求路径</th><th class="num">状态</th><th class="num">耗时</th><th>团队</th><th></th></tr></thead>
+          <tbody>
+<tr class="is-selected">
+  <td class="mono" style="font-size:8.5px;color:var(--faint)">19:32:08.412</td>
+  <td><span class="method m-GET">GET</span></td>
+  <td><div class="path">/api/pay/order</div></td>
+  <td class="num"><span class="code200">200</span></td>
+  <td class="num" style="color:var(--muted)">8 ms</td>
+  <td><span class="team"><span class="tdot tdot--pay"></span>PAY</span></td>
+  <td><svg class="i i--12" style="color:rgba(148,163,157,.6)" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></td>
+</tr>
+<tr class="">
+  <td class="mono" style="font-size:8.5px;color:var(--faint)">19:32:07.980</td>
+  <td><span class="method m-POST">POST</span></td>
+  <td><div class="path">/api/pay/callback/alipay</div></td>
+  <td class="num"><span class="code200">200</span></td>
+  <td class="num" style="color:var(--muted)">12 ms</td>
+  <td><span class="team"><span class="tdot tdot--pay"></span>PAY</span></td>
+  <td><svg class="i i--12" style="color:rgba(148,163,157,.6)" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></td>
+</tr>
+<tr class="">
+  <td class="mono" style="font-size:8.5px;color:var(--faint)">19:32:07.641</td>
+  <td><span class="method m-GET">GET</span></td>
+  <td><div class="path">/api/user/88213</div></td>
+  <td class="num"><span class="code200">200</span></td>
+  <td class="num" style="color:var(--muted)">4 ms</td>
+  <td><span class="team"><span class="tdot tdot--user"></span>USER</span></td>
+  <td><svg class="i i--12" style="color:rgba(148,163,157,.6)" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></td>
+</tr>
+<tr class="">
+  <td class="mono" style="font-size:8.5px;color:var(--faint)">19:32:06.205</td>
+  <td><span class="method m-GET">GET</span></td>
+  <td><div class="path">/api/order/list</div></td>
+  <td class="num"><span class="code200">200</span></td>
+  <td class="num" style="color:var(--muted)">21 ms</td>
+  <td><span class="team"><span class="tdot tdot--order"></span>ORDER</span></td>
+  <td><svg class="i i--12" style="color:rgba(148,163,157,.6)" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></td>
+</tr>
+<tr class="">
+  <td class="mono" style="font-size:8.5px;color:var(--faint)">19:32:05.887</td>
+  <td><span class="method m-POST">POST</span></td>
+  <td><div class="path">/api/user/login</div></td>
+  <td class="num"><span class="code4">401</span></td>
+  <td class="num" style="color:var(--muted)">6 ms</td>
+  <td><span class="team"><span class="tdot tdot--user"></span>USER</span></td>
+  <td><svg class="i i--12" style="color:rgba(148,163,157,.6)" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></td>
+</tr>
+<tr class="">
+  <td class="mono" style="font-size:8.5px;color:var(--faint)">19:32:05.112</td>
+  <td><span class="method m-PUT">PUT</span></td>
+  <td><div class="path">/api/order/1002/status</div></td>
+  <td class="num"><span class="code5">500</span></td>
+  <td class="num" style="color:var(--muted)">34 ms</td>
+  <td><span class="team"><span class="tdot tdot--order"></span>ORDER</span></td>
+  <td><svg class="i i--12" style="color:rgba(148,163,157,.6)" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></td>
+</tr>
+<tr class="">
+  <td class="mono" style="font-size:8.5px;color:var(--faint)">19:32:04.760</td>
+  <td><span class="method m-GET">GET</span></td>
+  <td><div class="path">/api/product/search</div></td>
+  <td class="num"><span class="code200">200</span></td>
+  <td class="num" style="color:var(--muted)">9 ms</td>
+  <td><span class="team"><span class="tdot tdot--order"></span>ORDER</span></td>
+  <td><svg class="i i--12" style="color:rgba(148,163,157,.6)" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></td>
+</tr>
+<tr class="">
+  <td class="mono" style="font-size:8.5px;color:var(--faint)">19:32:04.318</td>
+  <td><span class="method m-DELETE">DELETE</span></td>
+  <td><div class="path">/api/cart/77</div></td>
+  <td class="num"><span class="code3">204</span></td>
+  <td class="num" style="color:var(--muted)">3 ms</td>
+  <td><span class="team"><span class="tdot tdot--user"></span>USER</span></td>
+  <td><svg class="i i--12" style="color:rgba(148,163,157,.6)" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></td>
+</tr>
+<tr class="">
+  <td class="mono" style="font-size:8.5px;color:var(--faint)">19:32:03.905</td>
+  <td><span class="method m-GET">GET</span></td>
+  <td><div class="path">/api/health</div></td>
+  <td class="num"><span class="code200">200</span></td>
+  <td class="num" style="color:var(--muted)">1 ms</td>
+  <td><span class="team"><span class="tdot tdot--order"></span>ORDER</span></td>
+  <td><svg class="i i--12" style="color:rgba(148,163,157,.6)" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></td>
+</tr>
+<tr class="">
+  <td class="mono" style="font-size:8.5px;color:var(--faint)">19:32:03.441</td>
+  <td><span class="method m-GET">GET</span></td>
+  <td><div class="path">/api/pay/order</div></td>
+  <td class="num"><span class="code200">200</span></td>
+  <td class="num" style="color:var(--muted)">7 ms</td>
+  <td><span class="team"><span class="tdot tdot--pay"></span>PAY</span></td>
+  <td><svg class="i i--12" style="color:rgba(148,163,157,.6)" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></td>
+</tr>
+<tr class="">
+  <td class="mono" style="font-size:8.5px;color:var(--faint)">19:32:02.990</td>
+  <td><span class="method m-GET">GET</span></td>
+  <td><div class="path">/api/user/88213</div></td>
+  <td class="num"><span class="code200">200</span></td>
+  <td class="num" style="color:var(--muted)">4 ms</td>
+  <td><span class="team"><span class="tdot tdot--user"></span>USER</span></td>
+  <td><svg class="i i--12" style="color:rgba(148,163,157,.6)" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></td>
+</tr>
+<tr class="">
+  <td class="mono" style="font-size:8.5px;color:var(--faint)">19:32:02.652</td>
+  <td><span class="method m-POST">POST</span></td>
+  <td><div class="path">/api/pay/refund</div></td>
+  <td class="num"><span class="code200">200</span></td>
+  <td class="num" style="color:var(--muted)">18 ms</td>
+  <td><span class="team"><span class="tdot tdot--pay"></span>PAY</span></td>
+  <td><svg class="i i--12" style="color:rgba(148,163,157,.6)" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></td>
+</tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="tfoot">
+        <span>最近 <span class="mono">50</span> 条 · 暂停滚动后可选历史</span>
+        <div class="pager"><span class="mono">19:31 — 19:32</span><button class="pgbtn pgbtn--dis">‹</button><button class="pgbtn pgbtn--on">1</button><button class="pgbtn">2</button><button class="pgbtn">›</button></div>
+      </div>
+    </section>
+
+    <aside class="inspector">
+      <div class="insp-head">
+        <span class="insp-id">#req_8f3a2c</span>
+        <span class="insp-code">200</span>
+        <span class="method m-GET" style="height:21px;padding:0 7px">GET</span>
+        <span class="insp-path">/api/pay/order</span>
+        <div class="insp-actions">
+          <button class="iconbtn"><svg class="i" viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+          <button class="iconbtn"><svg class="i" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+        </div>
+      </div>
+
+      <div class="metricgrid">
+        <div class="metric"><b style="color:var(--green)">200</b><span>STATUS</span></div>
+        <div class="metric"><b>8<span class="u">ms</span></b><span>DURATION</span></div>
+        <div class="metric"><b>1.2<span class="u">KB</span></b><span>SIZE</span></div>
+        <div class="metric"><b style="font-size:13px">14:32:08</b><span>TIME</span></div>
+      </div>
+
+      <div class="insp-body">
+        <div class="insp-section">
+          <div class="kv">
+            <dt>接口</dt><dd>订单详情 <span class="mono" style="color:var(--faint);font-size:8.5px">#a91f</span></dd>
+            <dt>团队</dt><dd><span class="team"><span class="tdot tdot--pay"></span>PAY</span> 支付中心</dd>
+            <dt>来源</dt><dd class="mono">10.24.8.31 · curl/8.4.0</dd>
+            <dt>返回体</dt><dd>默认 <span class="mono" style="color:var(--faint);font-size:8.5px">#1</span></dd>
+          </div>
+        </div>
+
+        <div class="insp-section">
+          <div class="insp-label">命中链路 <span class="mono">MATCH TRACE</span></div>
+          <div class="chain">
+            <div class="step step--ok"><span class="step__dot">1</span><div><div class="step__title">团队路由 <span class="mono">/pay → PAY</span></div><div class="step__desc">前缀匹配成功，进入 支付中心</div></div></div>
+            <div class="step step--ok"><span class="step__dot">2</span><div><div class="step__title">规则 #1 <span class="mono">query.channel = "alipay"</span></div><div class="step__desc">channel=alipay · 命中「支付宝渠道」</div></div></div>
+            <div class="step step--ok"><span class="step__dot">3</span><div><div class="step__title">返回体 支付宝渠道 <span class="mono">#2 · 200</span></div><div class="step__desc">替换 3 个动态变量 · 耗时 1.8 ms</div></div></div>
+            <div class="step"><span class="step__dot">4</span><div><div class="step__title">兜底 <span class="mono">未执行</span></div><div class="step__desc">已命中，跳过默认返回体</div></div></div>
+          </div>
+        </div>
+
+        <div class="insp-section">
+          <div class="insp-label">请求头 <span class="mono">HEADERS · 3</span></div>
+          <div class="kv">
+            <dt>accept</dt><dd class="mono">application/json</dd>
+            <dt>user-agent</dt><dd class="mono">curl/8.4.0</dd>
+            <dt>x-mock-sandbox</dt><dd class="mono">1</dd>
+          </div>
+        </div>
+
+        <div class="insp-section">
+          <div class="insp-label">响应体 <span class="mono">RESPONSE · JSON</span></div>
+          <div class="mini-code"><span class="tk-p">{</span>
+  <span class="tk-k">"code"</span>: <span class="tk-n">0</span>,
+  <span class="tk-k">"data"</span>: <span class="tk-p">{</span>
+    <span class="tk-k">"orderId"</span>: <span class="tk-s">"202610220001"</span>,
+    <span class="tk-k">"status"</span>: <span class="tk-s">"PAID"</span>
+  <span class="tk-p">}</span>,
+  <span class="tk-k">"traceId"</span>: <span class="tk-s">"4f9c2a71-..."</span>
+<span class="tk-p">}</span></div>
+        </div>
+      </div>
+
+      <div class="insp-foot">
+        <button class="btn btn--sm"><span class="ai-tag">AI</span>解释这次匹配</button>
+        <button class="btn btn--ghost btn--sm">重放</button>
+        <button class="btn btn--ghost btn--sm">复制 cURL</button>
+        <span class="note">日志保留 30 天</span>
+      </div>
+    </aside>
+  </div>
+</main>
+</div>
+</div>
+<script src="assets/preview.js"></script>
+<script id="board-fit-js">(function(){if(window.self!==window.top)return;var app=document.querySelector(".app");if(!app)return;function fit(){var s=Math.min(window.innerWidth/1440,window.innerHeight/900,1);app.style.transformOrigin="top left";app.style.transform="scale("+s+")";document.body.style.width=(1440*s)+"px";document.body.style.height=(900*s)+"px";}fit();window.addEventListener("resize",fit);window.addEventListener("load",fit);})();</script></body>
+</html>

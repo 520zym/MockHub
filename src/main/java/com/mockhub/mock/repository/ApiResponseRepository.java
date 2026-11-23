@@ -205,6 +205,10 @@ public class ApiResponseRepository {
     /**
      * 统计某个文件路径被多少返回体引用，用于删除时避免误删仍被副本使用的文件。
      */
+    public <T> T withFileGcLock(java.util.function.Supplier<T> work) {
+        return new ApiLifecycleRepository(jdbcTemplate).write(work);
+    }
+
     public int countByFilePath(String filePath) {
         if (filePath == null || filePath.trim().isEmpty()) {
             return 0;
@@ -219,8 +223,10 @@ public class ApiResponseRepository {
      */
     public List<String> findAllFilePaths() {
         return jdbcTemplate.queryForList(
-                "SELECT DISTINCT file_path FROM api_response WHERE file_path IS NOT NULL AND file_path <> ''",
-                String.class);
+                "SELECT DISTINCT file_path FROM api_response WHERE file_path IS NOT NULL AND file_path <> '' "
+                        + "UNION SELECT file_path FROM mock_blob_ref WHERE expires_at IS NULL OR expires_at > ? "
+                        + "UNION SELECT file_path FROM mock_blob WHERE lease_expires_at > ?",
+                String.class,System.currentTimeMillis(),System.currentTimeMillis());
     }
 
     /**

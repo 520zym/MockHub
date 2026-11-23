@@ -5,6 +5,9 @@ package com.mockhub.ai.model;
  */
 public class AiPendingAction {
 
+    private Long baseRevision;
+    public Long getBaseRevision() { return baseRevision; }
+    public void setBaseRevision(Long value) { baseRevision=value; }
     private String id;
     private String userId;
     private String teamId;
@@ -16,6 +19,18 @@ public class AiPendingAction {
     private String expiresAt;
     private String confirmedAt;
     private String resultApiId;
+    private String sourceType="WEB";
+    private String sourceTokenId;
+    private String sourceScopeJson;
+    public String getSourceType(){return sourceType;}
+    public void setSourceType(String value){sourceType=value;}
+    public String getSourceTokenId(){return sourceTokenId;}
+    public void setSourceTokenId(String value){sourceTokenId=value;}
+    public String getSourceScopeJson(){return sourceScopeJson;}
+    public void setSourceScopeJson(String value){sourceScopeJson=value;}
+    private String targetApiId;
+    public String getTargetApiId() { return targetApiId; }
+    public void setTargetApiId(String value) { targetApiId=value; }
 
     public String getId() {
         return id;

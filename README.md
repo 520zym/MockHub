@@ -70,7 +70,7 @@
 - [x] **AI 生成条件规则** -- 自然语言转成现有 conditions 结构，逐条勾选、字段校验
 - [x] **AI 匹配诊断** -- 请求日志里重放命中链路，解释为什么命中 / 未命中
 - [x] **对话助手** -- 右下角入口，支持统计问答、搜索接口、创建/修改接口草稿（确认卡片）与会话历史
-- [x] **AI 供应商与模型** -- 8 个供应商预设、默认地址/模型、从 `/models` 实时拉取、手动输入
+- [x] **AI 供应商与模型** -- 12 个供应商入口（千问AI 内含按量计费 / Token Plan）、默认地址/模型、从 `/models` 实时拉取或手动输入；配置页可直达各平台工作台创建 API Key
 - [x] **AI 会话历史** -- 会话持久化，可查看历史、继续对话，并恢复确认卡片状态
 - [x] **MCP Server** -- Streamable HTTP JSON-RPC、Token、工具开关、多返回体草稿与修改接口
 - [x] **旧版本自动升级** -- 1.4.6 起自动建表、补列、补索引，无需手工改数据库
@@ -125,8 +125,8 @@
 
 | 项 | 说明 |
 | --- | --- |
-| 供应商 | DeepSeek / Kimi / MiniMax / 智谱 GLM / 通义千问 / OpenAI / Ollama / 自定义；统一走 OpenAI 兼容协议 |
-| Base URL | 选择供应商后自动填入默认地址，可修改；例如 `https://api.deepseek.com/v1`，服务端自动补 `/chat/completions` |
+| 供应商 | DeepSeek / Kimi / MiniMax / 智谱 GLM / 千问AI（按量计费 / Token Plan）/ 火山方舟 / 百度千帆 / 腾讯混元 / 硅基流动 / OpenAI / Ollama / 自定义；统一走 OpenAI 兼容协议 |
+| Base URL | 选择供应商后自动填入默认地址，可修改；例如 DeepSeek `https://api.deepseek.com/v1`、千问AI `https://maas.qianwenaiapi.com/compatible-mode/v1` |
 | 默认模型 | 每个供应商有内置推荐列表；也可从服务商 `/models` 实时拉取，或手动输入模型 ID |
 | API Key | 仅保存在服务端并以 AES-GCM 密文落库；接口只返回掩码，支持替换与清除 |
 | 能力开关 | 生成响应体 / 生成条件规则 / 解释匹配结果 / 创建、修改接口草稿 |
@@ -198,7 +198,7 @@
 
 ### 旧版本升级
 
-从任意历史版本升级到 1.4.6 时，**不需要手工修改数据库**：停止服务、备份 `data/`、替换 jar 后启动即可。启动时会自动创建新增表，并逐列补齐旧库可能缺失的字段（如 `vendor`、`conditions`、`scenarios`、`tool_update_api_draft` 等），已有数据保持不变。
+从任意历史版本升级到 2026.11.22 时，**不需要手工修改数据库**：停止服务、备份 `data/`、替换 jar 后启动即可。启动时会自动创建新增表，并逐列补齐旧库可能缺失的字段（如 `vendor`、`conditions`、`scenarios`、`tool_update_api_draft` 等），已有数据保持不变。
 
 > 备份时请同时保留 `data/.ai-key`，否则已保存的 AI API Key 无法解密。
 
@@ -345,7 +345,7 @@ REST 模式使用 `responseMode` 字段，SOAP 使用 `soapConfig.operations[].r
 示例：
 
 ```bash
-java -jar mockhub-1.4.6.jar \
+java -jar mockhub-2026.11.22.jar \
   --server.port=9090 \
   --data.path=D:/mockhub/data \
   --log.retain.mode=days \
@@ -409,7 +409,7 @@ mvn clean package -DskipTests
   <name>MockHub</name>
   <description>MockHub 接口模拟服务</description>
   <executable>java</executable>
-  <arguments>-jar mockhub-1.4.6.jar --server.port=18080 --data.path=./data</arguments>
+  <arguments>-jar mockhub-2026.11.22.jar --server.port=18080 --data.path=./data</arguments>
   <workingdirectory>%BASE%</workingdirectory>
   <logpath>%BASE%\logs</logpath>
   <log mode="roll-by-size">

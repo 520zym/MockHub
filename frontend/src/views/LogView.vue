@@ -5,43 +5,19 @@
 -->
 <template>
   <div class="page-log-view">
-    <!-- 工具栏：Tab 切换 + 团队筛选 -->
+    <header class="resource-header"><div><h1>团队日志</h1></div></header>
     <div class="log-toolbar">
-      <div class="log-tabs">
-        <div
-          class="log-tab"
-          :class="{ active: logType === 'operation' }"
-          @click="switchTab('operation')"
-        >
-          操作日志
-        </div>
-        <div
-          class="log-tab"
-          :class="{ active: logType === 'request' }"
-          @click="switchTab('request')"
-        >
-          请求日志
-        </div>
+      <div class="log-tabs" role="tablist" aria-label="日志类型">
+        <button type="button" class="log-tab" role="tab" :aria-selected="logType === 'operation'" :class="{ active: logType === 'operation' }" @click="switchTab('operation')">操作日志</button>
+        <button type="button" class="log-tab" role="tab" :aria-selected="logType === 'request'" :class="{ active: logType === 'request' }" @click="switchTab('request')">请求日志</button>
       </div>
-
-      <el-select
-        v-model="selectedTeamId"
-        placeholder="选择团队"
-        clearable
-        class="team-select"
-        @change="handleTeamChange"
-      >
-        <el-option
-          v-for="team in appStore.teams"
-          :key="team.id"
-          :label="team.name"
-          :value="team.id"
-        />
-      </el-select>
+      <div class="toolbar-actions"><span class="team-context">{{ appStore.currentTeam?.name || '未选择团队' }}</span><el-button :disabled="!canRead" :loading="loading" @click="loadLogs">刷新</el-button></div>
     </div>
+    <div v-if="!canRead" class="resource-state" role="status">请选择有访问权限的团队。</div>
+    <div v-if="loadError" class="resource-state" role="alert"><strong>日志加载失败</strong><p>{{ loadError }}</p><el-button @click="loadLogs">重试</el-button></div>
 
     <!-- 日志卡片 -->
-    <div class="log-card">
+    <div v-if="canRead && !loadError" class="log-card">
       <!-- 操作日志表格 -->
       <el-table
         v-if="logType === 'operation'"
@@ -50,26 +26,34 @@
         class="soft-table"
         :header-cell-style="headerCellStyle"
       >
-        <el-table-column label="时间" prop="createdAt" width="180">
+        <el-table-column label="时间" prop="createdAt" width="180" align="center">
           <template #default="{ row }">
             {{ formatTime(row.createdAt) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作人" prop="username" width="120" />
-        <el-table-column label="操作类型" prop="action" width="120">
+        <el-table-column label="操作人" prop="username" width="140" align="center">
+          <template #default="{ row }">
+            <span class="cell-title" :title="row.username">{{ row.username }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作类型" prop="action" width="120" align="center">
           <template #default="{ row }">
             <span class="action-tag" :style="actionTagStyle(row.action)">
               {{ actionLabel(row.action) }}
             </span>
           </template>
         </el-table-column>
-        <el-table-column label="目标类型" prop="targetType" width="100" />
-        <el-table-column label="目标名称" prop="targetName" min-width="160" show-overflow-tooltip />
-        <el-table-column label="详细信息" prop="detail" min-width="200" show-overflow-tooltip />
+        <el-table-column label="目标类型" prop="targetType" width="110" align="center" />
+        <el-table-column label="目标名称" prop="targetName" min-width="300" align="left" header-align="center">
+          <template #default="{ row }">
+            <span class="cell-title" :title="row.targetName">{{ row.targetName }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="详细信息" prop="detail" min-width="220" show-overflow-tooltip align="left" header-align="center" />
         <!-- 空状态 -->
         <template #empty>
           <div class="empty-state">
-            <p>暂无操作日志</p>
+            <p>{{ loading ? '正在读取操作日志…' : '当前团队暂无操作日志' }}</p>
           </div>
         </template>
       </el-table>
@@ -82,30 +66,35 @@
         class="soft-table"
         :header-cell-style="headerCellStyle"
       >
-        <el-table-column label="时间" prop="createdAt" width="180">
+        <el-table-column label="时间" prop="createdAt" width="180" align="center">
           <template #default="{ row }">
             {{ formatTime(row.createdAt) }}
           </template>
         </el-table-column>
-        <el-table-column label="方法" prop="method" width="100">
+        <el-table-column label="方法" prop="method" width="100" align="center">
           <template #default="{ row }">
             <HttpMethodTag :method="row.method" />
           </template>
         </el-table-column>
-        <el-table-column label="请求路径" prop="apiPath" min-width="240" show-overflow-tooltip />
-        <el-table-column label="响应码" prop="responseCode" width="100">
+        <el-table-column label="请求路径" prop="apiPath" min-width="280" align="left" header-align="center">
+          <template #default="{ row }">
+            <el-tag v-if="row.targetType === 'FILE'" size="small" class="target-tag">文件</el-tag>
+            <span class="cell-title" :title="row.apiPath">{{ row.apiPath }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="响应码" prop="responseCode" width="100" align="center">
           <template #default="{ row }">
             <span class="status-code-tag" :style="statusCodeStyle(row.responseCode)">
               {{ row.responseCode }}
             </span>
           </template>
         </el-table-column>
-        <el-table-column label="耗时" prop="durationMs" width="100">
+        <el-table-column label="耗时" prop="durationMs" width="100" align="center">
           <template #default="{ row }">
             <span class="duration-text">{{ row.durationMs }} ms</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="100" fixed="right">
+        <el-table-column label="操作" width="110" fixed="right" align="center">
           <template #default="{ row }">
             <el-button type="primary" link size="small" @click="showDetail(row)">
               查看详情
@@ -115,7 +104,7 @@
         <!-- 空状态 -->
         <template #empty>
           <div class="empty-state">
-            <p>暂无请求日志</p>
+            <p>{{ loading ? '正在读取请求日志…' : '当前团队暂无请求日志' }}</p>
           </div>
         </template>
       </el-table>
@@ -143,12 +132,13 @@
       class="log-detail-dialog"
       destroy-on-close
     >
-      <div v-if="detailRow" class="detail-content">
+      <div v-if="detailRow && canRead" class="detail-content">
         <!-- 基本信息 -->
         <div class="detail-section">
           <div class="detail-label">请求</div>
           <div class="detail-value">
             <HttpMethodTag :method="detailRow.method" />
+            <el-tag v-if="detailRow.targetType === 'FILE'" size="small" class="target-tag">文件下载</el-tag>
             <span class="detail-path">{{ detailRow.apiPath }}</span>
             <span class="status-code-tag" :style="statusCodeStyle(detailRow.responseCode)">
               {{ detailRow.responseCode }}
@@ -176,19 +166,19 @@
         </div>
 
         <!-- AI 匹配诊断 -->
-        <div v-if="aiStore.capabilities.explain" class="detail-section ai-diagnosis">
+        <div v-if="canExplain" class="detail-section ai-diagnosis">
           <div class="ai-diagnosis__head">
             <div class="detail-label" style="margin: 0">AI 匹配诊断</div>
             <el-button
               v-if="!aiExplain"
               size="small"
-              :loading="aiExplainLoading"
+              :loading="aiExplainLoading" :disabled="!canExplain"
               @click="runAiExplain"
             >
               <el-icon><MagicStick /></el-icon>
               解释这次匹配
             </el-button>
-            <el-button v-else size="small" text :loading="aiExplainLoading" @click="runAiExplain">
+            <el-button v-else size="small" text :loading="aiExplainLoading" :disabled="!canExplain" @click="runAiExplain">
               <el-icon><Refresh /></el-icon>
               重新诊断
             </el-button>
@@ -230,13 +220,10 @@
               <div class="ai-suggestion__text">{{ aiExplain.suggestion }}</div>
             </div>
             <div class="ai-diagnosis__note">
-              诊断基于本次请求快照，不会修改任何配置；如需调整请到接口编辑页。
+              诊断不会修改配置；如需调整请到接口编辑页。
             </div>
           </div>
 
-          <div v-else-if="!aiExplainLoading" class="ai-diagnosis__empty">
-            点击「解释这次匹配」，按当前条件重放本次请求并给出原因。
-          </div>
         </div>
       </div>
     </el-dialog>
@@ -244,564 +231,78 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
+import { useUserStore } from '@/stores/user'
 import { getOperationLogs, getRequestLogs } from '@/api/logs'
 import { explainAiMatch } from '@/api/ai'
 import { useAiStore } from '@/stores/ai'
 import { MagicStick, Refresh } from '@element-plus/icons-vue'
 import HttpMethodTag from '@/components/HttpMethodTag.vue'
-
-const route = useRoute()
-const router = useRouter()
-const appStore = useAppStore()
-
-// ========== 状态 ==========
-const loading = ref(false)
-const operationLogs = ref([])
-const requestLogs = ref([])
-const total = ref(0)
-const page = ref(1)
-const pageSize = ref(50)
-const selectedTeamId = ref(null)
-
-// 当前日志类型，根据路由 path 判断
-const logType = computed(() => {
-  return route.path.includes('request') ? 'request' : 'operation'
-})
-
-// ========== 请求详情对话框 ==========
-const detailVisible = ref(false)
-const detailRow = ref(null)
-
-// ========== AI 匹配诊断 ==========
-const aiStore = useAiStore()
-const aiExplain = ref(null)
-const aiExplainLoading = ref(false)
-const aiExplainError = ref('')
-
-// ========== 表格样式 ==========
-const headerCellStyle = {
-  background: 'transparent',
-  color: '#A3AED0',
-  fontWeight: '500',
-  fontSize: '13px',
-  borderBottom: '1px solid #F1F5F9'
-}
-
-// ========== 数据加载 ==========
+import { formatFull } from '@/utils/time'
+const route = useRoute(), router = useRouter(), appStore = useAppStore(), userStore = useUserStore(), aiStore = useAiStore()
+const selectedTeamId = computed(() => appStore.currentTeamId || null)
+const canRead = computed(() => !!selectedTeamId.value && userStore.identityReady && userStore.hasCapability(selectedTeamId.value, 'read'))
+// 文件下载日志没有对应的接口定义，AI 匹配诊断只对 Mock 接口调用开放。
+const canExplain = computed(() => canRead.value && aiStore.available && aiStore.capabilities.explain && !!detailRow.value?.apiId)
+const loading = ref(false), loadError = ref(''), operationLogs = ref([]), requestLogs = ref([]), total = ref(0), page = ref(1), pageSize = ref(50)
+const logType = computed(() => route.path.includes('request') ? 'request' : 'operation')
+const detailVisible = ref(false), detailRow = ref(null), aiExplain = ref(null), aiExplainLoading = ref(false), aiExplainError = ref('')
+let contextVersion = 0, listSequence = 0, detailVersion = 0, explainSequence = 0, disposed = false
+const headerCellStyle = { background: 'var(--app-bg-control)', color: 'var(--app-text-secondary)', fontWeight: '500', fontSize: '12px' }
+function snapshot() { return { teamId: selectedTeamId.value, version: contextVersion, type: logType.value } }
+function current(ctx) { return !disposed && canRead.value && ctx.teamId === selectedTeamId.value && ctx.version === contextVersion && ctx.type === logType.value }
+function clearDetail() { detailVersion++; explainSequence++; detailRow.value = null; aiExplain.value = null; aiExplainError.value = ''; aiExplainLoading.value = false }
+function resetContext() { contextVersion++; listSequence++; operationLogs.value = []; requestLogs.value = []; total.value = 0; page.value = 1; loading.value = false; loadError.value = ''; detailVisible.value = false; clearDetail(); if (canRead.value) loadLogs() }
 async function loadLogs() {
-  // 需要选择团队才加载
-  if (!selectedTeamId.value) {
-    operationLogs.value = []
-    requestLogs.value = []
-    total.value = 0
-    return
-  }
-
-  loading.value = true
+  const ctx = snapshot(), sequence = ++listSequence
+  if (!canRead.value) { operationLogs.value = []; requestLogs.value = []; total.value = 0; return }
+  loading.value = true; loadError.value = ''
   try {
-    const params = {
-      teamId: selectedTeamId.value,
-      page: page.value,
-      size: pageSize.value
-    }
-
-    if (logType.value === 'operation') {
-      const result = await getOperationLogs(params)
-      operationLogs.value = result.items || []
-      total.value = result.total || 0
-    } else {
-      const result = await getRequestLogs(params)
-      requestLogs.value = result.items || []
-      total.value = result.total || 0
-    }
-  } catch (err) {
-    // 拦截器已处理错误提示
-  } finally {
-    loading.value = false
-  }
+    const params = { teamId: ctx.teamId, page: page.value, size: pageSize.value }
+    const result = await (ctx.type === 'operation' ? getOperationLogs(params) : getRequestLogs(params))
+    if (!current(ctx) || sequence !== listSequence) return
+    if (ctx.type === 'operation') operationLogs.value = result.items || []
+    else requestLogs.value = result.items || []
+    total.value = result.total || 0
+  } catch (error) { if (current(ctx) && sequence === listSequence) { operationLogs.value = []; requestLogs.value = []; total.value = 0; loadError.value = error?.response?.data?.msg || error?.msg || error?.message || '日志请求失败。' } }
+  finally { if (current(ctx) && sequence === listSequence) loading.value = false }
 }
-
-// ========== 事件处理 ==========
-function switchTab(type) {
-  const path = type === 'operation' ? '/logs/operation' : '/logs/request'
-  router.push(path)
-}
-
-function handleTeamChange() {
-  page.value = 1
-  loadLogs()
-}
-
-function handlePageChange() {
-  loadLogs()
-}
-
-function handleSizeChange() {
-  page.value = 1
-  loadLogs()
-}
-
-function showDetail(row) {
-  detailRow.value = row
-  detailVisible.value = true
-  aiExplain.value = null
-  aiExplainError.value = ''
-}
-
+function switchTab(type) { router.push(type === 'operation' ? '/logs/operation' : '/logs/request') }
+function handlePageChange() { loadLogs() }
+function handleSizeChange() { page.value = 1; loadLogs() }
+function showDetail(row) { if (!canRead.value || !requestLogs.value.some(item => item.id === row.id)) return; clearDetail(); detailRow.value = row; detailVisible.value = true }
 async function runAiExplain() {
-  if (!detailRow.value?.id) return
-  aiExplainLoading.value = true
-  aiExplainError.value = ''
+  if (!canExplain.value || !detailRow.value?.id || aiExplainLoading.value) return
+  const ctx = snapshot(), id = detailRow.value.id, detail = detailVersion, sequence = ++explainSequence
+  aiExplainLoading.value = true; aiExplainError.value = ''
   try {
-    aiExplain.value = await explainAiMatch({ requestLogId: detailRow.value.id })
-  } catch (e) {
-    aiExplainError.value = e?.msg || '诊断失败，请稍后重试'
-  } finally {
-    aiExplainLoading.value = false
-  }
+    const result = await explainAiMatch({ requestLogId: id })
+    if (current(ctx) && canExplain.value && sequence === explainSequence && detail === detailVersion && id === detailRow.value?.id) aiExplain.value = result
+  } catch (error) { if (current(ctx) && sequence === explainSequence && detail === detailVersion) aiExplainError.value = error?.msg || error?.message || '诊断失败，请重试。' }
+  finally { if (current(ctx) && sequence === explainSequence && detail === detailVersion) aiExplainLoading.value = false }
 }
-
-function statusLabel(status) {
-  const map = {
-    HIT: '命中',
-    MISS: '未命中',
-    SKIP: '未参与',
-    FALLBACK: '兜底候选',
-    FALLBACK_HIT: '兜底命中'
-  }
-  return map[status] || status
-}
-
-// ========== 格式化函数 ==========
-function formatTime(timeStr) {
-  if (!timeStr) return '-'
-  // 兼容 ISO 格式和普通格式
-  const d = new Date(timeStr)
-  if (isNaN(d.getTime())) return timeStr
-  const pad = (n) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-}
-
-function formatJson(obj) {
-  try {
-    return JSON.stringify(obj, null, 2)
-  } catch {
-    return String(obj)
-  }
-}
-
-function formatBody(body) {
-  if (!body) return ''
-  // 尝试格式化为 JSON
-  try {
-    const parsed = JSON.parse(body)
-    return JSON.stringify(parsed, null, 2)
-  } catch {
-    return body
-  }
-}
-
-// 操作类型标签配色
-const actionColorMap = {
-  CREATE: { bg: 'rgba(16, 185, 129, 0.12)', color: '#059669' },
-  UPDATE: { bg: 'rgba(99, 102, 241, 0.12)', color: '#4F46E5' },
-  DELETE: { bg: 'rgba(239, 68, 68, 0.12)', color: '#DC2626' },
-  TOGGLE: { bg: 'rgba(245, 158, 11, 0.12)', color: '#D97706' },
-  IMPORT: { bg: 'rgba(139, 92, 246, 0.12)', color: '#7C3AED' }
-}
-
-const actionLabelMap = {
-  CREATE: '创建',
-  UPDATE: '更新',
-  DELETE: '删除',
-  TOGGLE: '切换',
-  IMPORT: '导入'
-}
-
-function actionTagStyle(action) {
-  const scheme = actionColorMap[action] || { bg: 'rgba(107, 114, 128, 0.12)', color: '#6B7280' }
-  return { backgroundColor: scheme.bg, color: scheme.color }
-}
-
-function actionLabel(action) {
-  return actionLabelMap[action] || action
-}
-
-// 响应码标签配色
-function statusCodeStyle(code) {
-  if (code >= 200 && code < 300) {
-    return { backgroundColor: 'rgba(16, 185, 129, 0.12)', color: '#059669' }
-  } else if (code >= 400 && code < 500) {
-    return { backgroundColor: 'rgba(245, 158, 11, 0.12)', color: '#D97706' }
-  } else if (code >= 500) {
-    return { backgroundColor: 'rgba(239, 68, 68, 0.12)', color: '#DC2626' }
-  }
-  return { backgroundColor: 'rgba(107, 114, 128, 0.12)', color: '#6B7280' }
-}
-
-// ========== 路由变化时重新加载 ==========
-watch(() => route.path, () => {
-  page.value = 1
-  loadLogs()
-})
-
-// ========== 初始化 ==========
-onMounted(async () => {
-  // 确保团队列表已加载
-  if (appStore.teams.length === 0) {
-    await appStore.loadTeams()
-  }
-  // 默认选中第一个团队
-  if (appStore.teams.length > 0 && !selectedTeamId.value) {
-    selectedTeamId.value = appStore.teams[0].id
-  }
-  loadLogs()
-})
+function statusLabel(status) { return ({ HIT: '命中', MISS: '未命中', SKIP: '未参与', FALLBACK: '兜底候选', FALLBACK_HIT: '兜底命中' })[status] || status }
+function formatTime(value) { return formatFull(value) }
+function formatJson(value) { try { return JSON.stringify(value, null, 2) } catch { return String(value) } }
+function formatBody(value) { if (!value) return ''; try { return JSON.stringify(JSON.parse(value), null, 2) } catch { return value } }
+const actionColors = { CREATE: ['var(--el-color-success-light-9)', 'var(--app-text-success)'], UPDATE: ['var(--app-bg-selected)', 'var(--app-text-accent)'], DELETE: ['var(--el-color-danger-light-9)', 'var(--app-text-danger)'], TOGGLE: ['var(--el-color-warning-light-9)', 'var(--app-text-warning)'], IMPORT: ['var(--app-bg-selected)', 'var(--app-text-accent)'] }
+function actionTagStyle(action) { const [backgroundColor, color] = actionColors[action] || ['var(--app-bg-control)', 'var(--app-text-secondary)']; return { backgroundColor, color } }
+function actionLabel(action) { return ({ CREATE: '创建', UPDATE: '更新', DELETE: '删除', TOGGLE: '切换', IMPORT: '导入' })[action] || action }
+function statusCodeStyle(code) { const scheme = code >= 200 && code < 300 ? ['var(--el-color-success-light-9)', 'var(--app-text-success)'] : code >= 400 && code < 500 ? ['var(--el-color-warning-light-9)', 'var(--app-text-warning)'] : code >= 500 ? ['var(--el-color-danger-light-9)', 'var(--app-text-danger)'] : ['var(--app-bg-control)', 'var(--app-text-secondary)']; return { backgroundColor: scheme[0], color: scheme[1] } }
+watch([selectedTeamId, canRead, logType, () => userStore.user?.id], resetContext, { immediate: true, flush: 'sync' })
+watch(detailVisible, visible => { if (!visible) clearDetail() }, { flush: 'sync' })
+watch(canExplain, allowed => { if (!allowed) { explainSequence++; aiExplain.value = null; aiExplainError.value = ''; aiExplainLoading.value = false } }, { flush: 'sync' })
+onBeforeUnmount(() => { disposed = true; contextVersion++; listSequence++; detailVisible.value = false; clearDetail() })
 </script>
 
 <style lang="scss" scoped>
-.page-log-view {
-  padding: 0;
-}
-
-// ========== 工具栏 ==========
-.log-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 20px;
-}
-
-.log-tabs {
-  display: flex;
-  gap: 4px;
-  background: #F7F8FA;
-  border-radius: 12px;
-  padding: 4px;
-}
-
-.log-tab {
-  padding: 8px 20px;
-  border-radius: 10px;
-  font-size: 14px;
-  font-weight: 500;
-  color: #A3AED0;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  user-select: none;
-
-  &:hover {
-    color: #4A5568;
-  }
-
-  &.active {
-    background: #ffffff;
-    color: #6366F1;
-    // 扁平化：active tab 不再用阴影漂浮，靠白色背景与外层灰底对比
-  }
-}
-
-.team-select {
-  width: 200px;
-}
-
-// ========== 日志卡片 ==========
-// 扁平化：去阴影 + 去边框，靠页面底色与白色卡片色差区分；圆角收紧到 12px
-.log-card {
-  background: #ffffff;
-  border-radius: 12px;
-  padding: 20px;
-}
-
-// ========== Soft UI 无边框表格 ==========
-.soft-table {
-  --el-table-border-color: transparent;
-  --el-table-header-bg-color: transparent;
-  --el-table-tr-bg-color: transparent;
-  --el-table-row-hover-bg-color: #F7F8FF;
-
-  :deep(th.el-table__cell) {
-    border-bottom: 1px solid #F1F5F9 !important;
-  }
-
-  :deep(td.el-table__cell) {
-    border-bottom: 1px solid #F8FAFC !important;
-  }
-
-  :deep(.el-table__inner-wrapper::before) {
-    display: none;
-  }
-
-  :deep(.el-table__row) {
-    transition: background-color 0.15s ease;
-  }
-}
-
-// ========== 标签样式 ==========
-.action-tag {
-  display: inline-block;
-  padding: 2px 10px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 20px;
-  white-space: nowrap;
-}
-
-.status-code-tag {
-  display: inline-block;
-  padding: 2px 10px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 20px;
-  white-space: nowrap;
-}
-
-.duration-text {
-  color: #A3AED0;
-  font-size: 13px;
-}
-
-// ========== 分页 ==========
-.pagination-wrapper {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 20px;
-  padding-top: 16px;
-  border-top: 1px solid #F1F5F9;
-}
-
-// ========== 空状态 ==========
-.empty-state {
-  padding: 40px 0;
-  text-align: center;
-  color: #A3AED0;
-  font-size: 14px;
-
-  p {
-    margin: 0;
-  }
-}
-
-// ========== 详情对话框 ==========
-.ai-diagnosis {
-  border-top: 1px solid #F1F5F9;
-  padding-top: 16px;
-}
-
-.ai-diagnosis__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.ai-diagnosis__body {
-  margin-top: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.ai-verdict {
-  border-radius: 10px;
-  padding: 12px 14px;
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.07), rgba(99, 102, 241, 0.04));
-  border: 1px solid #D9F2E7;
-}
-
-.ai-verdict__title {
-  font-size: 13.5px;
-  font-weight: 700;
-  color: #0F9D6E;
-}
-
-.ai-verdict__desc {
-  font-size: 12px;
-  color: #4A5568;
-  line-height: 1.75;
-  margin-top: 4px;
-}
-
-.ai-chain {
-  display: flex;
-  flex-direction: column;
-}
-
-.ai-chain__item {
-  display: flex;
-  gap: 10px;
-  padding-bottom: 12px;
-}
-
-.ai-chain__item:last-child {
-  padding-bottom: 0;
-}
-
-.ai-chain__dot {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: #CBD5E1;
-  color: #fff;
-  font-size: 10px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.ai-chain__dot--hit,
-.ai-chain__dot--fallback_hit {
-  background: #10B981;
-}
-
-.ai-chain__dot--fallback {
-  background: #F59E0B;
-}
-
-.ai-chain__content {
-  flex: 1;
-  min-width: 0;
-}
-
-.ai-chain__title {
-  font-size: 12.5px;
-  font-weight: 600;
-  color: #1B2559;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.ai-chain__badge {
-  font-size: 10px;
-  font-weight: 600;
-  color: #A3AED0;
-  background: #F7F8FA;
-  border-radius: 5px;
-  padding: 0 6px;
-  line-height: 17px;
-}
-
-.ai-chain__dot--hit + .ai-chain__content .ai-chain__badge,
-.ai-chain__dot--fallback_hit + .ai-chain__content .ai-chain__badge {
-  color: #0F9D6E;
-  background: #ECFDF5;
-}
-
-.ai-chain__desc {
-  font-size: 11.5px;
-  color: #A3AED0;
-  line-height: 1.7;
-  margin-top: 2px;
-  word-break: break-word;
-}
-
-.ai-suggestion {
-  border: 1px solid #E7E3FD;
-  background: #FCFBFF;
-  border-radius: 10px;
-  padding: 10px 12px;
-}
-
-.ai-suggestion__title {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 12px;
-  font-weight: 600;
-  color: #8B5CF6;
-}
-
-.ai-suggestion__text {
-  font-size: 12px;
-  color: #4A5568;
-  line-height: 1.75;
-  margin-top: 4px;
-}
-
-.ai-diagnosis__note {
-  font-size: 10.5px;
-  color: #CBD5E0;
-}
-
-.ai-diagnosis__empty {
-  font-size: 11.5px;
-  color: #A3AED0;
-  padding: 12px 0 2px;
-}
-
-.detail-content {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.detail-section {
-  .detail-label {
-    font-size: 13px;
-    font-weight: 500;
-    color: #A3AED0;
-    margin-bottom: 8px;
-  }
-
-  .detail-value {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-  }
-
-  .detail-path {
-    font-size: 14px;
-    color: #1B2559;
-    font-weight: 500;
-    word-break: break-all;
-  }
-}
-
-.detail-pre {
-  background: #F7F8FA;
-  border-radius: 10px;
-  padding: 14px 16px;
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.6;
-  color: #4A5568;
-  overflow-x: auto;
-  max-height: 300px;
-  overflow-y: auto;
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-</style>
-
-<style lang="scss">
-// 详情对话框全局样式覆盖
-.log-detail-dialog {
-  .el-dialog {
-    border-radius: 16px;
-    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.08);
-  }
-
-  .el-dialog__header {
-    padding: 20px 24px 0;
-  }
-
-  .el-dialog__title {
-    font-size: 18px;
-    font-weight: 600;
-    color: #1B2559;
-  }
-
-  .el-dialog__body {
-    padding: 16px 24px 24px;
-  }
-}
+.page-log-view { min-width: 0; color: var(--app-text-primary); }.resource-header { margin-bottom: 20px; }.resource-header h1 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -.025em; }
+.log-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; margin-bottom: 16px; }.log-tabs { display: flex; gap: 4px; background: var(--app-bg-control); border-radius: 10px; padding: 4px; }.log-tab { padding: 8px 18px; font: inherit; border: 0; border-radius: 8px; color: var(--app-text-secondary); cursor: pointer; background: var(--app-bg-control); }.log-tab:hover { color: var(--app-text-primary); }.log-tab.active { color: var(--app-accent); background: var(--app-bg-surface); }.toolbar-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }.team-context { font-size: 12px; color: var(--app-text-secondary); padding: 8px 12px; background: var(--app-bg-surface); border-radius: 8px; }
+.log-card { min-width: 0; background: var(--app-bg-surface); border-radius: 16px; padding: 20px; }.log-card :deep(.el-table .cell) { line-height: 1.6; }.log-card :deep(.el-table td.el-table__cell), .log-card :deep(.el-table th.el-table__cell) { vertical-align: middle; }.target-tag { margin-right: 6px; border-color: transparent; background: var(--app-bg-selected); color: var(--app-text-accent); }
+.cell-title { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.action-tag, .status-code-tag { display: inline-block; padding: 3px 8px; border-radius: 8px; font-size: var(--app-font-caption); font-weight: 500; line-height: 1.6; white-space: nowrap; }.duration-text { color: var(--app-text-secondary); font-size: 12px; }.pagination-wrapper { display: flex; justify-content: flex-end; margin-top: 16px; padding-top: 12px; min-width: 0; }.empty-state { padding: 36px 16px; text-align: center; color: var(--app-text-secondary); font-size: 13px; }.empty-state p { margin: 0; }.resource-state { padding: 32px 20px; border-radius: 16px; background: var(--app-bg-surface); color: var(--app-text-secondary); text-align: center; font-size: 13px; }.resource-state p { margin: 12px 0; }
+.detail-content { display: flex; flex-direction: column; gap: 18px; min-width: 0; }.detail-label { font-size: 13px; font-weight: 500; color: var(--app-text-secondary); margin-bottom: 8px; }.detail-value { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }.detail-path { font: 13px var(--app-font-mono); color: var(--app-text-primary); overflow-wrap: anywhere; min-width: 0; }.detail-pre { margin: 0; padding: 14px; background: var(--app-bg-control); border-radius: 10px; color: var(--app-text-regular); font: 12px/1.8 var(--app-font-mono); max-height: 300px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ai-diagnosis { padding-top: 4px; min-width: 0; }.ai-diagnosis__head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }.ai-diagnosis__body { margin-top: 12px; display: flex; flex-direction: column; gap: 12px; }.ai-verdict, .ai-suggestion { padding: 14px; border-radius: 10px; background: var(--app-bg-control); }.ai-verdict__title { font-size: 14px; font-weight: 600; color: var(--app-text-primary); }.ai-verdict__desc, .ai-suggestion__text { font-size: 13px; line-height: 1.8; margin-top: 5px; color: var(--app-text-regular); overflow-wrap: anywhere; }.ai-chain { display: flex; flex-direction: column; gap: 14px; }.ai-chain__item { display: flex; align-items: flex-start; gap: 10px; }.ai-chain__dot { width: 24px; height: 24px; border-radius: 8px; background: var(--app-bg-control); color: var(--app-text-regular); font-size: var(--app-font-caption); font-weight: 500; display: grid; place-items: center; flex-shrink: 0; }.ai-chain__dot--hit, .ai-chain__dot--fallback_hit { color: var(--app-text-success); background: var(--el-color-success-light-9); }.ai-chain__dot--fallback { color: var(--app-text-warning); background: var(--el-color-warning-light-9); }.ai-chain__content { min-width: 0; flex: 1; }.ai-chain__title { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 13px; font-weight: 500; }.ai-chain__badge { padding: 3px 8px; border-radius: 8px; background: var(--app-bg-control); color: var(--app-text-secondary); font-size: var(--app-font-caption); line-height: 1.6; }.ai-chain__desc { color: var(--app-text-secondary); margin-top: 4px; font-size: 12px; line-height: 1.8; overflow-wrap: anywhere; }.ai-suggestion__title { display: flex; align-items: center; gap: 6px; color: var(--app-accent); font-size: 13px; font-weight: 500; }.ai-diagnosis__note { color: var(--app-text-secondary); font-size: 12px; line-height: 1.8; }
+@media(max-width:600px){.resource-header h1{font-size:24px}.log-card{padding:12px}.log-tabs{width:100%}.log-tab{flex:1}.pagination-wrapper{justify-content:flex-start}.toolbar-actions{width:100%;justify-content:space-between}}
 </style>

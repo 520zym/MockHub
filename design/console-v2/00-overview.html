@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440, initial-scale=1">
+<title>去 AI 味 · MockHub Console 02</title>
+<link rel="stylesheet" href="assets/console.css">
+<style>
+body{background:#f1f1ec}
+.doc__page{max-width:1260px;padding:44px 40px 50px}
+.doc h1{font-size:48px}
+.doc__grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:34px;align-items:start}
+.compare{gap:10px}
+.compare__card{padding:10px}
+.oldui,.newui{height:160px}
+.oldui{padding:12px}
+.newui__row{height:27px}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line)}
+.stepcard{background:#fff;padding:15px 16px 17px}
+.stepcard h3{font-size:11.5px;margin:0 0 6px;font-weight:600}
+.stepcard p{margin:0;font-size:10px;line-height:1.7;color:var(--text-2)}
+.stepcard .mono{font-size:9px;background:#f4f4ef;border:1px solid var(--line);padding:0 3px;border-radius:2px}
+</style>
+</head>
+<body>
+<div class="doc__bar">
+  <span class="brand__mark">M</span><b>MockHub</b><span class="sep">/</span><span>设计评审</span><span class="sep">/</span><span>Console 02</span>
+  <div class="right"><span>2026.10.22</span><span>张一鸣</span><span>内部</span></div>
+</div>
+
+<div class="doc__page">
+  <header class="doc__hero">
+    <div>
+      <div class="doc__eyebrow">REDESIGN NOTE · CONSOLE 02</div>
+      <h1>去掉 AI 味<span>。</span></h1>
+      <p class="doc__lede">不是换一套配色。是把每个界面决定都交还给信息：谁在用、现在什么状态、下一步做什么。下面五个页面按同一套规则重画——更像一个每天开着的内部工具，而不是一张生成出来的截图。</p>
+    </div>
+    <div class="doc__meta">
+      <b>范围</b>
+      登录 / 接口列表 / 接口编辑<br>请求日志 / 对话助手
+      <div style="height:12px"></div>
+      <b>约束</b>
+      不改后端接口，不改信息架构<br>保留 Element Plus 与现有路由
+      <div style="height:12px"></div>
+      <b>断点</b>
+      <span class="mono">1440 × 900 · 2x</span>
+    </div>
+  </header>
+
+  <section class="doc__section">
+    <div class="sec-head"><span class="sec-num">01</span><h2>六个决定</h2><span class="note">先把“为什么”说清楚，再谈像素</span></div>
+    <div class="principles">
+      <div class="principle"><div class="principle__n">01</div><h3>先有信息，再有装饰</h3><p>每一屏先回答三件事：这是什么、现在什么状态、下一步能做什么。装饰不能替信息占位置。</p></div>
+      <div class="principle"><div class="principle__n">02</div><h3>只留一个强调色</h3><p>朱砂只给主操作、选中态和未保存。其余层级靠字重、留白和 1px 线，不靠第二种紫。</p></div>
+      <div class="principle"><div class="principle__n">03</div><h3>密度就是专业感</h3><p>正文 11.5px，行高 45px，一屏看 12 条接口。表格贴边，不再把一张表塞进浮起来的圆角卡片。</p></div>
+      <div class="principle"><div class="principle__n">04</div><h3>形状保持克制</h3><p>圆角 3–4px，阴影只给真正浮起来的层。没有渐变、玻璃、发光，也没有装饰性插画。</p></div>
+      <div class="principle"><div class="principle__n">05</div><h3>技术内容用技术字体</h3><p>路径、方法、耗时、ID 一律等宽并启用 tabular-nums；中文回到系统字，不再用字距拉出“科技感”。</p></div>
+      <div class="principle"><div class="principle__n">06</div><h3>AI 是工具，不是皮肤</h3><p>不发光、不漂浮。入口是菜单项和 ⌘J，产出是可预览、可取消、可撤销的草稿，和普通功能长一样。</p></div>
+    </div>
+  </section>
+
+  <section class="doc__section">
+    <div class="sec-head"><span class="sec-num">02</span><h2>同一块内容，两种做法</h2><span class="note">左边是现在，右边是提案</span></div>
+    <div class="doc__grid">
+      <div class="compare">
+        <div class="compare__card">
+          <div class="compare__label"><span class="dot dot--old"></span>BEFORE · 现在</div>
+          <div class="oldui"><div class="ol-wrap">
+            <div class="ol-card">
+              <div class="ol-row"><span class="ol-pill">REST</span><span class="ol-pill g">GET</span><span class="ol-line" style="max-width:60px"></span><span class="ol-btn">新建接口</span></div>
+              <div class="ol-row"><span class="ol-line" style="height:7px"></span></div>
+              <div class="ol-row"><span class="ol-pill g" style="width:30px">GET</span><span class="ol-line" style="max-width:96px"></span><span class="ol-line" style="max-width:28px;margin-left:auto"></span></div>
+              <div class="ol-row"><span class="ol-pill g" style="width:30px">GET</span><span class="ol-line" style="max-width:74px"></span><span class="ol-line" style="max-width:28px;margin-left:auto"></span></div>
+            </div>
+            <div class="ol-orb">✦</div>
+          </div></div>
+        </div>
+        <div class="compare__card">
+          <div class="compare__label"><span class="dot dot--new"></span>AFTER · 提案</div>
+          <div class="newui">
+            <div class="newui__bar">接口管理<span class="spacer"></span>143</div>
+            <div class="newui__row"><span class="m">GET</span><span class="p">/api/pay/order</span><span class="n">4,218</span><span class="sw sw--on"></span></div>
+            <div class="newui__row"><span class="m">POST</span><span class="p">/api/pay/refund</span><span class="n">986</span><span class="sw sw--on"></span></div>
+            <div class="newui__row"><span class="m">GET</span><span class="p">/api/user/{id}</span><span class="n">3,102</span><span class="sw sw--on"></span></div>
+            <div class="newui__row"><span class="m">SOAP</span><span class="p">/ws/notice</span><span class="n">0</span><span class="sw"></span></div>
+            <div class="newui__foot">1–50 / 143<span class="spacer"></span>已选 2</div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <table class="toktable">
+          <thead><tr><th>维度</th><th>现在</th><th>提案</th></tr></thead>
+          <tbody>
+            <tr><td>页面底色</td><td class="old">135° 淡紫渐变</td><td class="new">#F1F1EC 纸面</td></tr>
+            <tr><td>主色</td><td class="old">#6366F1 + 紫渐变</td><td class="new">#15161A 墨 + #B33A16 朱砂</td></tr>
+            <tr><td>容器</td><td class="old">12px 圆角卡片 + 柔阴影</td><td class="new">1px 细线，零阴影</td></tr>
+            <tr><td>控件</td><td class="old">32–40px，圆角 10</td><td class="new">28–30px，圆角 3</td></tr>
+            <tr><td>文字</td><td class="old">15px 标题 / 13px 正文</td><td class="new">18px 标题 / 11.5px 正文</td></tr>
+            <tr><td>数字</td><td class="old">比例字宽，居中漂移</td><td class="new">等宽 + tabular-nums</td></tr>
+            <tr><td>AI 入口</td><td class="old">渐变悬浮球</td><td class="new">⌘J 菜单项 + 内联按钮</td></tr>
+            <tr><td>空态</td><td class="old">插画 + 大标题</td><td class="new">一行说明 + 一个操作</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="doc__section">
+    <div class="sec-head"><span class="sec-num">03</span><h2>字与色</h2><span class="note">系统字 + 单一信号色，够用了</span></div>
+    <div class="doc__grid">
+      <div class="specimen">
+        <div class="specimen__row"><span class="specimen__label">标题</span><span class="specimen__sample s1">接口管理</span><span class="specimen__px">18 / 600</span></div>
+        <div class="specimen__row"><span class="specimen__label">强调</span><span class="specimen__sample s2">今日 12,840 次调用</span><span class="specimen__px">13 / 500</span></div>
+        <div class="specimen__row"><span class="specimen__label">正文</span><span class="specimen__sample s3">支付成功回跳后查询订单状态。</span><span class="specimen__px">11.5 / 400</span></div>
+        <div class="specimen__row"><span class="specimen__label">辅助</span><span class="specimen__sample s4">按修改时间排序 · 负责人 张一鸣</span><span class="specimen__px">10 / 400</span></div>
+        <div class="specimen__row"><span class="specimen__label">等宽</span><span class="specimen__sample s5">GET /api/pay/order · 8 ms · 4,218</span><span class="specimen__px">10 / mono</span></div>
+      </div>
+      <div>
+        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:7px"><span style="font-size:10px;font-weight:600">色板</span><span style="font:8.5px var(--mono);color:var(--text-3);letter-spacing:.08em">8 COLORS · 2 SEMANTIC PAIRS</span></div>
+        <div class="swatches">
+          <div class="swatch"><div class="swatch__chip" style="background:#15161a"></div><b>#15161A</b><span>墨 · 导航 / 主按钮</span></div>
+          <div class="swatch"><div class="swatch__chip" style="background:#f1f1ec"></div><b>#F1F1EC</b><span>纸 · 页面底色</span></div>
+          <div class="swatch"><div class="swatch__chip" style="background:#ffffff"></div><b>#FFFFFF</b><span>面 · 表格 / 表单</span></div>
+          <div class="swatch"><div class="swatch__chip" style="background:#e4e4dd"></div><b>#E4E4DD</b><span>线 · 1px 分隔</span></div>
+          <div class="swatch"><div class="swatch__chip" style="background:#b33a16"></div><b>#B33A16</b><span>朱砂 · 选中 / 未保存</span></div>
+          <div class="swatch"><div class="swatch__chip" style="background:#16794c"></div><b>#16794C</b><span>绿 · GET / 成功</span></div>
+          <div class="swatch"><div class="swatch__chip" style="background:#1d4ed8"></div><b>#1D4ED8</b><span>蓝 · POST / 链接</span></div>
+          <div class="swatch"><div class="swatch__chip" style="background:#a8630a"></div><b>#A8630A</b><span>琥珀 · 警告 / PUT</span></div>
+        </div>
+        <div style="margin-top:10px;border:1px solid var(--line);background:#fff;padding:10px 11px;display:flex;gap:10px;align-items:center">
+          <span class="method m-GET">GET</span><span class="method m-POST">POST</span><span class="method m-PUT">PUT</span><span class="method m-DELETE">DELETE</span><span class="method m-PATCH">PATCH</span><span class="method m-SOAP">SOAP</span>
+          <span style="margin-left:auto;font:8.5px var(--mono);color:var(--text-3)">9.5px / 600 · 只上色，不包胶囊</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="doc__section">
+    <div class="sec-head"><span class="sec-num">04</span><h2>五个页面</h2><span class="note">同一套规则，不同的信息密度</span></div>
+    <div class="pagelist">
+      <div class="pagelist__row"><span class="pagelist__n">01</span><a class="pagelist__name" href="01-api-list.html">接口列表</a><span class="pagelist__desc">首屏先给数据：路径、团队、今日调用、最近命中。表格贴边，行高 45px，一屏 12 条。</span><span class="pagelist__tag">DENSITY</span></div>
+      <div class="pagelist__row"><span class="pagelist__n">02</span><a class="pagelist__name" href="02-api-edit.html">接口编辑</a><span class="pagelist__desc">左侧元数据固定，右侧返回体、响应设置与匹配规则同屏；未保存状态贯穿页头与底栏。</span><span class="pagelist__tag">FOCUS</span></div>
+      <div class="pagelist__row"><span class="pagelist__n">03</span><a class="pagelist__name" href="03-logs.html">请求日志</a><span class="pagelist__desc">列表与检查器并排，不互相遮挡；命中链路按步骤展开，状态码只上色，不包背景。</span><span class="pagelist__tag">TRACE</span></div>
+      <div class="pagelist__row"><span class="pagelist__n">04</span><a class="pagelist__name" href="04-assistant.html">对话助手</a><span class="pagelist__desc">助手停靠在右侧，不再漂浮；产出是一张带 diff 的待确认草稿，和列表里的“待确认”行互相指认。</span><span class="pagelist__tag">INLINE</span></div>
+      <div class="pagelist__row"><span class="pagelist__n">05</span><a class="pagelist__name" href="05-login.html">登录</a><span class="pagelist__desc">左屏用一条真实请求说明产品，右屏只留登录；没有居中卡片、渐变背景和插画。</span><span class="pagelist__tag">PROOF</span></div>
+    </div>
+  </section>
+
+  <section class="doc__section" style="border-bottom:0">
+    <div class="sec-head"><span class="sec-num">05</span><h2>怎么落地</h2><span class="note">不改路由与后端，先换一层皮和密度</span></div>
+    <div class="steps">
+      <div class="stepcard"><div class="principle__n">STEP 01</div><h3>换 token 与骨架</h3><p>在 <span class="mono">variables.scss</span> 收掉渐变、阴影和第二主色；<span class="mono">AppLayout</span> 改为深色窄侧栏 + 46px 顶栏，内容区去卡片化。</p></div>
+      <div class="stepcard"><div class="principle__n">STEP 02</div><h3>先改三个高频页</h3><p>接口列表、接口编辑、请求日志。统一 45px 行高、等宽路径、3px 控件和贴边表格；这三页决定 80% 的日常体感。</p></div>
+      <div class="stepcard"><div class="principle__n">STEP 03</div><h3>最后收口 AI</h3><p>移除渐变浮球与魔法图标，入口收进 ⌘J 与工具栏；所有生成结果加 diff、过期时间和撤销，不再用紫色区分能力。</p></div>
+    </div>
+  </section>
+
+  <footer class="doc__foot"><span>MOCKHUB / CONSOLE 02</span><span>·</span><span>5 PAGES · 1 SYSTEM</span><span class="right">下一版：暗色主题与手机端不在此次范围</span></footer>
+</div>
+</body>
+</html>

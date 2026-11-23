@@ -31,6 +31,9 @@ public class User {
     /** 是否首次登录（首次登录需强制修改密码） */
     private boolean firstLogin;
 
+    private String status = "ACTIVE";
+    private long authVersion;
+
     /** 创建时间（ISO 格式） */
     private String createdAt;
 
@@ -93,6 +96,12 @@ public class User {
     public void setFirstLogin(boolean firstLogin) {
         this.firstLogin = firstLogin;
     }
+
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
+    public long getAuthVersion() { return authVersion; }
+    public void setAuthVersion(long authVersion) { this.authVersion = authVersion; }
+    public boolean isActive() { return "ACTIVE".equals(status); }
 
     public String getCreatedAt() {
         return createdAt;

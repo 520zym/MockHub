@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MockHub 登录设计稿 · 方向 C 控制台分屏</title>
+<style>
+  :root{--rail:#151a21;--paper:#f4f5f7;--surface:#fff;--ink:#171b22;--muted:#6c7582;--line:#e1e5eb;--blue:#5b8cff;--green:#4ed3a3;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--paper);color:var(--ink);font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+  button,input{font:inherit}
+  .console{min-height:100vh;display:grid;grid-template-columns:minmax(320px,.8fr) minmax(0,1.2fr)}
+  .rail{position:relative;overflow:hidden;background:var(--rail);color:#e8edf5;padding:30px 34px;display:flex;flex-direction:column}
+  .rail:before{content:"";position:absolute;inset:0;background:linear-gradient(150deg,rgba(91,140,255,.14),transparent 46%),radial-gradient(circle at 16% 88%,rgba(78,211,163,.08),transparent 38%);pointer-events:none}
+  .brand{position:relative;display:flex;align-items:center;gap:11px;font-size:18px;font-weight:700;letter-spacing:-.02em}
+  .mark{width:34px;height:34px;border-radius:10px;background:var(--blue);color:#0d1420;display:grid;place-items:center;font-weight:900;font-size:18px}
+  .brand small{margin-left:2px;color:#8fa0b8;font:10px/1.4 var(--mono);letter-spacing:.12em;font-weight:400}
+  .rail-copy{position:relative;margin-top:clamp(28px,7vh,64px)}
+  h1{margin:0;font-size:clamp(26px,3vw,38px);line-height:1.22;letter-spacing:-.045em;font-weight:700}
+  h1 em{font-style:normal;color:#8fb2ff}
+  .topology{position:relative;width:100%;max-width:430px;height:auto;margin:clamp(24px,5vh,48px) 0 0;display:block;overflow:visible}
+  .topology .link{fill:none;stroke:#334155;stroke-width:1.5;stroke-dasharray:4 6}
+  .topology .node{fill:#1d2733;stroke:#3b4a5c;stroke-width:1}
+  .topology .core{fill:var(--blue)}
+  .topology .core-mark{fill:#0d1420;font:800 16px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;text-anchor:middle}
+  .topology .sat{fill:#253344;stroke:#41566d;stroke-width:1}
+  .topology .sat-mark{fill:#9fb3ca;font:10px var(--mono);text-anchor:middle}
+  .topology .pulse{fill:none;stroke:var(--blue);stroke-width:1;opacity:.35;transform-box:fill-box;transform-origin:center;animation:pulse 5.4s ease-out infinite}
+  .topology .dot{fill:var(--blue);opacity:.9}
+  @keyframes pulse{0%,15%{transform:scale(.86);opacity:.18}32%{transform:scale(1.08);opacity:.5}46%,100%{transform:scale(1);opacity:.24}}
+  @media(prefers-reduced-motion:reduce){.topology *{animation:none!important}}
+  .status{position:relative;display:flex;align-items:center;gap:8px;margin-top:auto;padding-top:24px;color:#8fa0b8;font:10.5px/1.6 var(--mono)}
+  .status-dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 0 4px rgba(78,211,163,.12)}
+  .rail-foot{position:relative;display:flex;justify-content:space-between;gap:12px;margin-top:14px;color:#65758b;font:10px/1.6 var(--mono)}
+  .panel{display:flex;flex-direction:column;justify-content:center;padding:34px clamp(26px,6vw,88px)}
+  .panel-head{width:100%;max-width:390px;margin:0 auto}
+  .panel-head h2{margin:0;font-size:28px;line-height:1.2;letter-spacing:-.045em;font-weight:720}
+  .form-card{width:100%;max-width:390px;margin:22px auto 0;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:24px 25px 22px}
+  label{display:block;margin-top:13px;color:#49525f;font-size:12px;font-weight:500}
+  input{width:100%;margin-top:6px;padding:10px 11px;border:1px solid var(--line);border-radius:7px;background:#fafbfc;color:var(--ink);outline:none;font-size:13px}
+  input:focus{border-color:#9fb5d9;background:#fff;box-shadow:0 0 0 3px rgba(91,140,255,.13)}
+  .enter{width:100%;margin-top:20px;padding:11px 14px;border:0;border-radius:7px;background:#1d2939;color:#fff;font-weight:600;cursor:pointer}
+  .enter:hover{background:#2b3a4e}
+  .fine{margin:12px 0 0;color:#929aa6;font-size:10.5px;line-height:1.6}
+  .panel-foot{width:100%;max-width:390px;margin:14px auto 0;display:flex;justify-content:space-between;gap:12px;color:#9aa3b0;font:10px/1.6 var(--mono)}
+  .draft{position:fixed;right:14px;bottom:12px;padding:5px 9px;border:1px solid #d5dbe4;border-radius:999px;background:rgba(255,255,255,.88);color:#7a8492;font:10px/1.4 var(--mono);z-index:9}
+  @media(max-width:900px){.console{grid-template-columns:1fr}.rail{padding:24px 24px 22px}.topology{max-width:390px;margin:22px 0 0}.status{margin-top:18px;padding-top:14px}.rail-foot{margin-top:10px}.panel{padding:28px 20px 38px}.form-card{padding:22px}}
+  @media(max-width:520px){.rail{padding:20px}.panel-head h2{font-size:26px}.panel-foot{display:none}.rail-foot{display:none}}
+</style>
+</head>
+<body>
+<main class="console">
+  <aside class="rail">
+    <header class="brand"><span class="mark">M</span><span>MockHub</span></header>
+    <div class="rail-copy"><h1>接口，<em>回到掌控</em>。</h1></div>
+    <svg class="topology" viewBox="0 0 430 300" role="img" aria-label="接口、规则与响应节点的连接示意图">
+      <path class="link" d="M148 104H186"/><path class="link" d="M282 104H244"/><path class="link" d="M215 202V146"/><path class="link" d="M186 238H260"/><path class="link" d="M282 238H344"/>
+      <circle class="pulse" cx="215" cy="104" r="52"/>
+      <rect class="node" x="26" y="72" width="122" height="64" rx="11"/><rect class="sat" x="46" y="94" width="54" height="8" rx="4"/><rect class="sat" x="46" y="110" width="34" height="8" rx="4"/>
+      <circle class="core" cx="215" cy="104" r="29"/><text class="core-mark" x="215" y="110">M</text>
+      <rect class="node" x="282" y="72" width="122" height="64" rx="11"/><rect class="sat" x="302" y="94" width="54" height="8" rx="4"/><rect class="sat" x="302" y="110" width="34" height="8" rx="4"/>
+      <rect class="sat" x="152" y="202" width="126" height="60" rx="10"/><rect class="sat" x="174" y="224" width="20" height="7" rx="3.5"/><rect class="sat" x="202" y="224" width="20" height="7" rx="3.5"/><rect class="sat" x="230" y="224" width="16" height="7" rx="3.5"/><rect class="sat" x="174" y="238" width="44" height="6" rx="3"/><rect class="sat" x="230" y="238" width="28" height="6" rx="3"/>
+      <circle class="dot" r="4"><animateMotion dur="5.4s" repeatCount="indefinite" path="M148 104H186"/></circle>
+      <circle class="dot" r="4"><animateMotion dur="5.4s" repeatCount="indefinite" path="M282 104H244"/></circle>
+      <circle class="dot" r="4"><animateMotion dur="5.4s" repeatCount="indefinite" path="M215 202V146"/></circle>
+      <circle class="dot" r="3.5"><animateMotion dur="5.4s" repeatCount="indefinite" path="M186 238H260"/></circle>
+    </svg>
+    <div class="status"><span class="status-dot"></span><span>LOCAL</span></div>
+  </aside>
+
+  <section class="panel">
+    <div class="panel-head"><h2>登录</h2></div>
+    <div class="form-card">
+      <form onsubmit="event.preventDefault()">
+        <label>用户名<input placeholder="用户名" autocomplete="username" /></label>
+        <label>密码<input type="password" placeholder="密码" autocomplete="current-password" /></label>
+        <button class="enter" type="submit">进入控制台</button>
+      </form>
+      <p class="fine">首次登录需修改密码。</p>
+    </div>
+  </section>
+</main>
+</body>
+</html>
