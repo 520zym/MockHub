@@ -93,6 +93,10 @@
                   <span v-if="aiClearKey && clearKeySource === 'vendor'" class="input-hint">切换供应商后请重新填写 Key</span>
                 </div>
                 <div class="input-hint">仅保存不回显，不会写入日志或浏览器存储。</div>
+                <div v-if="currentPreset?.consoleUrl" class="ai-console-row">
+                  <span>还没有 API Key？</span>
+                  <a :href="currentPreset.consoleUrl" target="_blank" rel="noopener noreferrer">前往 {{ currentPreset.name }} 工作台创建 <span aria-hidden="true">↗</span></a>
+                </div>
               </el-form-item>
 
               <el-form-item label="连接测试">
@@ -383,6 +387,10 @@ const providerColors = {
   glm: { background: '#EFF6FF', color: '#2563EB' },
   qwen: { background: '#F5F3FF', color: '#7C3AED' },
   'qwen-token-plan': { background: '#F5F3FF', color: '#7C3AED' },
+  volcengine: { background: '#EEF4FF', color: '#2563EB' },
+  qianfan: { background: '#EAF6FF', color: '#1D4ED8' },
+  hunyuan: { background: '#EAF7FF', color: '#0369A1' },
+  siliconflow: { background: '#F5F3FF', color: '#7C3AED' },
   openai: { background: '#ECFDF5', color: '#047857' },
   ollama: { background: '#F1F5F9', color: '#475569' },
   custom: { background: '#F7F8FA', color: 'var(--app-text-muted)' }
@@ -503,6 +511,10 @@ function inferVendor(baseUrl) {
   if (url.includes('bigmodel')) return 'glm'
   if (url.includes('token-plan.maas.qianwenaiapi.com')) return 'qwen-token-plan'
   if (url.includes('qianwenaiapi') || url.includes('dashscope')) return 'qwen'
+  if (url.includes('volces.com')) return 'volcengine'
+  if (url.includes('qianfan.baidubce.com')) return 'qianfan'
+  if (url.includes('hunyuan.cloud.tencent.com') || url.includes('tokenhub')) return 'hunyuan'
+  if (url.includes('siliconflow')) return 'siliconflow'
   if (url.includes('api.openai.com')) return 'openai'
   if (url.includes('11434')) return 'ollama'
   return 'custom'
@@ -846,6 +858,7 @@ onMounted(() => {
 .settings-form :deep(.el-radio__label) { color: #4A5568; }
 .settings-form :deep(.el-input-number) { width: 200px; }
 .ai-field { width: 100% !important; max-width: 520px; }
+.ai-console-row { display: flex; align-items: center; gap: 6px; margin-top: 7px; font-size: var(--app-font-caption); color: var(--app-text-muted); }.ai-console-row a { color: var(--app-accent); text-decoration: none; }.ai-console-row a:hover { color: var(--app-accent-hover); text-decoration: underline; }
 .input-hint { margin-left: 12px; font-size: var(--app-font-caption); line-height: 1.6; color: var(--app-text-muted); }
 .provider-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 16px; }
 .qwen-plan-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: -4px 0 16px; padding: 10px 12px; border: 1px solid #EDF0F5; border-radius: 9px; background: #FBFCFE; }

@@ -70,7 +70,7 @@
 - [x] **AI 生成条件规则** -- 自然语言转成现有 conditions 结构，逐条勾选、字段校验
 - [x] **AI 匹配诊断** -- 请求日志里重放命中链路，解释为什么命中 / 未命中
 - [x] **对话助手** -- 右下角入口，支持统计问答、搜索接口、创建/修改接口草稿（确认卡片）与会话历史
-- [x] **AI 供应商与模型** -- 8 个供应商入口（千问AI 内含按量计费 / Token Plan）、默认地址/模型、从 `/models` 实时拉取或手动输入
+- [x] **AI 供应商与模型** -- 12 个供应商入口（千问AI 内含按量计费 / Token Plan）、默认地址/模型、从 `/models` 实时拉取或手动输入；配置页可直达各平台工作台创建 API Key
 - [x] **AI 会话历史** -- 会话持久化，可查看历史、继续对话，并恢复确认卡片状态
 - [x] **MCP Server** -- Streamable HTTP JSON-RPC、Token、工具开关、多返回体草稿与修改接口
 - [x] **旧版本自动升级** -- 1.4.6 起自动建表、补列、补索引，无需手工改数据库
@@ -125,7 +125,7 @@
 
 | 项 | 说明 |
 | --- | --- |
-| 供应商 | DeepSeek / Kimi / MiniMax / 智谱 GLM / 千问AI（按量计费 / Token Plan）/ OpenAI / Ollama / 自定义；统一走 OpenAI 兼容协议 |
+| 供应商 | DeepSeek / Kimi / MiniMax / 智谱 GLM / 千问AI（按量计费 / Token Plan）/ 火山方舟 / 百度千帆 / 腾讯混元 / 硅基流动 / OpenAI / Ollama / 自定义；统一走 OpenAI 兼容协议 |
 | Base URL | 选择供应商后自动填入默认地址，可修改；例如 DeepSeek `https://api.deepseek.com/v1`、千问AI `https://maas.qianwenaiapi.com/compatible-mode/v1` |
 | 默认模型 | 每个供应商有内置推荐列表；也可从服务商 `/models` 实时拉取，或手动输入模型 ID |
 | API Key | 仅保存在服务端并以 AES-GCM 密文落库；接口只返回掩码，支持替换与清除 |
