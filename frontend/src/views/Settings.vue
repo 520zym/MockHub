@@ -829,7 +829,6 @@ onMounted(() => {
 .settings-section .section-title { margin: 0 0 4px; font-size: 20px; font-weight: 700; color: #1B2559; letter-spacing: -.2px; }
 .settings-section .section-title + :not(.section-desc) { margin-top: 16px; }
 .settings-section .section-desc { margin: 0 0 20px; font-size: 13px; color: var(--app-text-secondary); line-height: 1.75; }
-.api-chip { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; margin-left: 6px; border-radius: 6px; background: var(--app-bg-selected); color: var(--app-text-accent); font-size: var(--app-font-micro); font-weight: 600; vertical-align: middle; }
 .settings-form :deep(.el-form-item__label) { font-size: 13px; font-weight: 600; color: #4A5568; }
 .settings-form :deep(.el-radio__label) { color: #4A5568; }
 .settings-form :deep(.el-input-number) { width: 200px; }
@@ -839,7 +838,6 @@ onMounted(() => {
 .provider-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 16px; }
 .qwen-plan-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: -4px 0 16px; padding: 10px 12px; border: 1px solid #EDF0F5; border-radius: 9px; background: #FBFCFE; }
 .qwen-plan-row__label { font-size: var(--app-font-caption); color: var(--app-text-secondary); }
-.qwen-plan-row__host { font: var(--app-font-caption) var(--app-font-mono); color: var(--app-text-muted); overflow-wrap: anywhere; }
 .provider-card { position: relative; display: flex; align-items: center; gap: 10px; height: 74px; padding: 0 12px; border: 1px solid #EDF0F5; border-radius: 10px; background: #fff; text-align: left; cursor: pointer; }
 .provider-card:hover { border-color: #DDE2EE; }
 .provider-card--on { border-color: #C7D2FE; background: #FBFCFF; box-shadow: none; }
@@ -884,7 +882,6 @@ onMounted(() => {
 .ai-model-section { margin-top: 22px; padding-top: 18px; border-top: 1px solid #F1F5F9; }
 .ai-model-section__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
 .ai-model-section__head h4 { margin: 0; font-size: 14px; font-weight: 600; color: #1B2559; }
-.ai-model-section__head p { margin: 5px 0 0; font-size: var(--app-font-caption); line-height: 1.7; color: var(--app-text-muted); }
 .ai-model-actions { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
 .cors-switch-row { padding: 4px 0; }
 .file-maintenance-actions { display: flex; align-items: center; gap: 12px; }
