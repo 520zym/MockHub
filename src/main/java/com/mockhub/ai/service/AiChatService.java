@@ -33,6 +33,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -295,6 +296,9 @@ public class AiChatService {
         }
         String method = normalizeMethod(plan.method);
         String path = plan.path == null ? "" : plan.path.trim();
+        if (path.isEmpty() && containsAny(request.getMessage(), "随便", "任意", "随你", "你定", "看着办", "你来定")) {
+            path = "/api/mock-" + UUID.randomUUID().toString().substring(0, 8);
+        }
         if (path.isEmpty()) {
             response.setReply("请给我接口路径，例如：帮我创建 GET /api/user/info 的 Mock，返回姓名、头像、等级。");
             return;
@@ -317,6 +321,14 @@ public class AiChatService {
             body = mockGenerator.response(buildGenerationContext(request, name, method, path)).getContent();
         }
         body = sanitizeJson(body);
+        List<ApiResponseDTO> responses = buildResponses(plan, body);
+        String defaultBody = body;
+        for (ApiResponseDTO item : responses) {
+            if (item.getConditions() == null || item.getConditions().trim().isEmpty()) {
+                defaultBody = item.getResponseBody();
+                break;
+            }
+        }
 
         ApiDefinitionDTO dto = new ApiDefinitionDTO();
         dto.setTeamId(request.getTeamId());
@@ -326,20 +338,11 @@ public class AiChatService {
         dto.setPath(path);
         dto.setResponseCode(200);
         dto.setContentType("application/json");
-        dto.setResponseBody(body);
+        dto.setResponseBody(defaultBody);
         dto.setEnabled(true);
         dto.setResponseMode("CONDITION");
         dto.setDelayMs(0);
-
-        ApiResponseDTO first = new ApiResponseDTO();
-        first.setName("成功响应");
-        first.setResponseCode(200);
-        first.setContentType("application/json");
-        first.setResponseBody(body);
-        first.setBodyType("TEXT");
-        first.setActive(true);
-        first.setSortOrder(0);
-        dto.setResponses(Collections.singletonList(first));
+        dto.setResponses(responses);
 
         Map<String, Object> card = new LinkedHashMap<String, Object>();
         card.put("type", "PENDING_ACTION");
@@ -350,7 +353,8 @@ public class AiChatService {
         summary.put("name", name);
         summary.put("teamId", request.getTeamId());
         card.put("summary", summary);
-        card.put("preview", body.length() > 8000 ? body.substring(0, 8000) + "…" : body);
+        card.put("preview", defaultBody.length() > 8000 ? defaultBody.substring(0, 8000) + "…" : defaultBody);
+        card.put("responsePreviews", responsePreviews(responses));
 
         try {
             Map<String, Object> created = pendingActionService.createApiDraft(dto, method + " " + path);
@@ -362,6 +366,112 @@ public class AiChatService {
         }
         response.getCards().add(card);
         response.setReply("已生成接口草稿，确认后才会真正创建：");
+    }
+
+    private List<ApiResponseDTO> buildResponses(ChatPlan plan, String fallbackBody) {
+        List<ApiResponseDTO> responses = new ArrayList<ApiResponseDTO>();
+        if (plan.responses != null && !plan.responses.isEmpty()) {
+            int index = 0;
+            for (PlannedResponse planned : plan.responses) {
+                String responseBody = planned.responseBody == null || planned.responseBody.trim().isEmpty()
+                        ? fallbackBody : sanitizeJson(planned.responseBody);
+                String conditions = conditionsJson(planned.conditions);
+                ApiResponseDTO response = new ApiResponseDTO();
+                response.setName(responseName(planned.name, index));
+                response.setResponseCode(200);
+                response.setContentType("application/json");
+                response.setResponseBody(responseBody);
+                response.setBodyType("TEXT");
+                response.setActive(true);
+                response.setSortOrder(index);
+                response.setConditions(conditions);
+                responses.add(response);
+                index++;
+            }
+        }
+        boolean hasDefault = false;
+        for (ApiResponseDTO response : responses) {
+            if (response.getConditions() == null || response.getConditions().trim().isEmpty()) {
+                hasDefault = true;
+                break;
+            }
+        }
+        if (responses.isEmpty()) {
+            ApiResponseDTO response = new ApiResponseDTO();
+            response.setName("默认响应");
+            response.setResponseCode(200);
+            response.setContentType("application/json");
+            response.setResponseBody(fallbackBody);
+            response.setBodyType("TEXT");
+            response.setActive(true);
+            response.setSortOrder(0);
+            responses.add(response);
+        } else if (!hasDefault) {
+            ApiResponseDTO response = new ApiResponseDTO();
+            response.setName("默认响应");
+            response.setResponseCode(200);
+            response.setContentType("application/json");
+            response.setResponseBody(fallbackBody);
+            response.setBodyType("TEXT");
+            response.setActive(true);
+            response.setSortOrder(responses.size());
+            responses.add(response);
+        }
+        return responses;
+    }
+
+    private String responseName(String name, int index) {
+        String value = name == null ? "" : name.trim();
+        if (value.isEmpty()) return "返回体 " + (index + 1);
+        return value.length() <= 60 ? value : value.substring(0, 60);
+    }
+
+    private String conditionsJson(JsonNode conditions) {
+        if (conditions == null || !conditions.isArray() || conditions.size() == 0) {
+            return null;
+        }
+        List<Map<String, String>> normalized = new ArrayList<Map<String, String>>();
+        for (JsonNode condition : conditions) {
+            if (condition == null || !condition.isObject()) continue;
+            String path = condition.path("path").asText("").trim();
+            if (path.isEmpty()) continue;
+            String source = condition.path("source").asText("BODY").trim().toUpperCase();
+            if (!("BODY".equals(source) || "QUERY".equals(source) || "HEADER".equals(source))) source = "BODY";
+            String operator = condition.path("operator").asText("EQ").trim().toUpperCase();
+            String valueType = condition.path("valueType").asText("STRING").trim().toUpperCase();
+            if (!("STRING".equals(valueType) || "NUMBER".equals(valueType) || "BOOLEAN".equals(valueType))) valueType = "STRING";
+            JsonNode valueNode = condition.path("value");
+            String value = valueNode.isObject() || valueNode.isArray() ? valueNode.toString() : valueNode.asText("");
+            Map<String, String> item = new LinkedHashMap<String, String>();
+            item.put("source", source);
+            item.put("path", path.length() > 200 ? path.substring(0, 200) : path);
+            item.put("operator", operator);
+            item.put("value", value.length() > 500 ? value.substring(0, 500) : value);
+            item.put("valueType", valueType);
+            normalized.add(item);
+        }
+        if (normalized.isEmpty()) return null;
+        Map<String, Object> rule = new LinkedHashMap<String, Object>();
+        rule.put("conditions", normalized);
+        try {
+            return objectMapper.writeValueAsString(rule);
+        } catch (Exception e) {
+            log.warn("生成返回体匹配条件失败：{}", e.getMessage());
+            return null;
+        }
+    }
+
+    private List<Map<String, Object>> responsePreviews(List<ApiResponseDTO> responses) {
+        List<Map<String, Object>> previews = new ArrayList<Map<String, Object>>();
+        for (ApiResponseDTO response : responses) {
+            Map<String, Object> preview = new LinkedHashMap<String, Object>();
+            preview.put("name", response.getName());
+            preview.put("responseBody", response.getResponseBody());
+            preview.put("conditions", response.getConditions());
+            preview.put("isDefault", response.getConditions() == null || response.getConditions().trim().isEmpty());
+            previews.add(preview);
+        }
+        return previews;
     }
 
     private void handleUpdate(AiChatRequest request, AiSettings settings,
@@ -581,6 +691,7 @@ public class AiChatService {
                 plan.path = pathMatcher.group(1);
             }
             plan.name = defaultName(plan.path == null ? "" : plan.path);
+            if (wantsMultiResponses(message)) plan.responses = mockMultiResponses();
             return plan;
         }
         if (containsAny(lower, "搜索", "找", "查一下", "哪个接口", "有没有", "在哪")) {
@@ -593,16 +704,56 @@ public class AiChatService {
         return plan;
     }
 
+    private boolean wantsMultiResponses(String message) {
+        String text = message == null ? "" : message;
+        if (text.contains("多个返回体") || text.contains("多返回体") || text.contains("多个响应")) return true;
+        return text.contains("返回体") && text.matches("(?s).*(3个|三个|4个|四个|多个|每个.*条件|不同.*条件|默认).*");
+    }
+
+    private List<PlannedResponse> mockMultiResponses() {
+        List<PlannedResponse> list = new ArrayList<PlannedResponse>();
+        list.add(plannedResponse("条件 A", "{\"case\":\"A\"}", mockCondition("BODY", "type", "A")));
+        list.add(plannedResponse("条件 B", "{\"case\":\"B\"}", mockCondition("QUERY", "status", "active")));
+        list.add(plannedResponse("条件 C", "{\"case\":\"C\"}", mockCondition("HEADER", "X-Mock", "yes")));
+        list.add(plannedResponse("默认响应", "{\"code\":0,\"message\":\"default\"}", null));
+        return list;
+    }
+
+    private PlannedResponse plannedResponse(String name, String body, JsonNode conditions) {
+        PlannedResponse response = new PlannedResponse();
+        response.name = name;
+        response.responseBody = body;
+        response.conditions = conditions;
+        return response;
+    }
+
+    private JsonNode mockCondition(String source, String path, String value) {
+        try {
+            return objectMapper.readTree("[{\"source\":\"" + source + "\",\"path\":\"" + path
+                    + "\",\"operator\":\"EQ\",\"value\":\"" + value + "\",\"valueType\":\"STRING\"}]");
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     private ChatPlan modelPlan(AiSettings settings, AiChatRequest request) {
         String system = "你是 MockHub 的 AI 助手。判断用户意图，只输出 JSON："
                 + "{\"intent\":\"SEARCH_APIS|API_STATS|CREATE_API_DRAFT|UPDATE_API_DRAFT|HELP\","
                 + "\"apiId\":\"要修改的接口 ID\",\"keyword\":\"搜索关键词\",\"method\":\"GET\",\"path\":\"/api/xxx\","
                 + "\"name\":\"接口名称\",\"responseName\":\"要修改的返回体名称\","
-                + "\"responseBody\":\"响应体字符串\",\"reply\":\"中文回答\"}。"
+                + "\"responseBody\":\"单个响应体字符串\",\"reply\":\"中文回答\","
+                + "\"responses\":[{\"name\":\"返回体名称\",\"responseBody\":{},\"active\":true,"
+                + "\"conditions\":[{\"source\":\"BODY|QUERY|HEADER\",\"path\":\"字段路径\","
+                + "\"operator\":\"EQ|NE|CONTAINS|IN|GT|GTE|LT|LTE|REGEX|IS_EMPTY\",\"value\":\"匹配值\","
+                + "\"valueType\":\"STRING|NUMBER|BOOLEAN\"}]}]}。"
                 + "只有用户明确要求创建接口时才用 CREATE_API_DRAFT；要求修改已有接口或其返回值/响应体时用 UPDATE_API_DRAFT；不确定时用 HELP。"
                 + "UPDATE_API_DRAFT 优先使用上下文接口 ID；没有上下文时尽量从用户话里提取 path。创建与修改不要混淆。"
-                + "SEARCH_APIS 时 keyword 必填；CREATE_API_DRAFT 时 method/path 必填，responseBody 为合法 JSON 字符串。"
-                + "不要输出 Markdown 或额外文本。";
+                + "SEARCH_APIS 时 keyword 必填；CREATE_API_DRAFT 时 method/path 必填。"
+                + "CREATE_API_DRAFT 下：用户没有给 path/name 且表示“随便/你定”时，由你生成合理的 path 和 name；"
+                + "用户只要求一个返回体时用 responseBody；用户要求多个返回体时，必须输出 responses 数组，"
+                + "每个条件返回体写不同 conditions，并且恰好保留一个 conditions 为空的默认返回体。"
+                + "用户没有指定具体条件或响应内容时，由你合理设计字段、条件值和 JSON 响应体；不要追问，直接生成草稿。"
+                + "conditions 是 AND 关系；responseBody 必须是合法 JSON。不要输出 Markdown 或额外文本。";
 
         StringBuilder user = new StringBuilder();
         user.append("当前团队 ID：").append(request.getTeamId()).append("\n");
@@ -657,6 +808,24 @@ public class AiChatService {
             JsonNode bodyNode = node.path("responseBody");
             plan.responseBody = bodyNode.isObject() || bodyNode.isArray()
                     ? bodyNode.toString() : bodyNode.asText("");
+            JsonNode responsesNode = node.path("responses");
+            if (responsesNode.isArray()) {
+                for (JsonNode responseNode : responsesNode) {
+                    if (responseNode == null || !responseNode.isObject()) continue;
+                    PlannedResponse response = new PlannedResponse();
+                    response.name = responseNode.path("name").asText("");
+                    JsonNode responseBodyNode = responseNode.path("responseBody");
+                    response.responseBody = responseBodyNode.isObject() || responseBodyNode.isArray()
+                            ? responseBodyNode.toString() : responseBodyNode.asText("");
+                    JsonNode conditionsNode = responseNode.path("conditions");
+                    if (conditionsNode.isArray()) {
+                        response.conditions = conditionsNode;
+                    } else if (conditionsNode.path("conditions").isArray()) {
+                        response.conditions = conditionsNode.path("conditions");
+                    }
+                    plan.responses.add(response);
+                }
+            }
             String reply = node.path("reply").asText("");
             if (!reply.trim().isEmpty()) {
                 plan.reply = reply;
@@ -758,5 +927,12 @@ public class AiChatService {
         private String name;
         private String responseBody;
         private String reply;
+        private List<PlannedResponse> responses = new ArrayList<PlannedResponse>();
+    }
+
+    private static class PlannedResponse {
+        private String name;
+        private String responseBody;
+        private JsonNode conditions;
     }
 }
