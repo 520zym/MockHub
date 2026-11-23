@@ -133,9 +133,19 @@ public class AiSettingsService {
 
     /** 设置页连通性测试，仅超管可调用。 */
     public Map<String, Object> testConnection() {
-        AiSettings settings = load();
-        if (!isConfigured(settings)) {
-            throw new BizException(40303, "请先填写 Base URL、Model 与 API Key");
+        return testConnection(load());
+    }
+
+    /**
+     * 对给定配置做一次真实 Chat Completions 探测。
+     * 相比 /models，这条链路能覆盖不提供模型列表的 OpenAI 兼容服务（例如千问AI Token Plan）。
+     */
+    public Map<String, Object> testConnection(AiSettings settings) {
+        if (!isConnectionConfigured(settings)) {
+            throw new BizException(40303, "请先填写服务地址与 API Key");
+        }
+        if (!notBlank(settings.getModel())) {
+            throw new BizException(40303, "请先选择用于测试的模型");
         }
         long started = System.currentTimeMillis();
         String provider = settings.getProvider();
@@ -266,6 +276,15 @@ public class AiSettingsService {
             if (request.getApiKey() != null) {
                 String key = request.getApiKey().trim();
                 candidate.setApiKey(key.isEmpty() ? null : key);
+            }
+            if (request.getModel() != null) {
+                candidate.setModel(trimToNull(request.getModel()));
+            }
+        }
+        if (!notBlank(candidate.getModel()) && notBlank(candidate.getVendor())) {
+            AiProviderPreset preset = AiProviderPresets.get(candidate.getVendor());
+            if (preset != null && notBlank(preset.getDefaultModel())) {
+                candidate.setModel(preset.getDefaultModel());
             }
         }
         candidate.setKeyInvalid(false);

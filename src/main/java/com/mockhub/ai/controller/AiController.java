@@ -178,14 +178,21 @@ public class AiController {
     public Result<Map<String, Object>> testConnection(@RequestBody(required = false) AiConnectionTestRequest request) {
         checkSuperAdmin();
         AiSettings candidate = settingsService.connectionCandidate(request);
-        long started = System.currentTimeMillis();
-        List<Map<String, Object>> models = modelCatalogService.listModels(candidate);
-        Map<String, Object> result = new java.util.LinkedHashMap<String, Object>();
-        result.put("ok", true);
-        result.put("latencyMs", System.currentTimeMillis() - started);
-        result.put("provider", candidate.getProvider());
-        result.put("modelCount", models.size());
-        result.put("message", "连接正常，发现 " + models.size() + " 个上游模型");
+        Map<String, Object> result;
+        if (candidate.getModel() != null && !candidate.getModel().trim().isEmpty()) {
+            // 优先走真实对话探测：兼容不提供 /models 的服务商（如千问AI Token Plan）。
+            result = settingsService.testConnection(candidate);
+            result.put("modelCount", 0);
+        } else {
+            long started = System.currentTimeMillis();
+            List<Map<String, Object>> models = modelCatalogService.listModels(candidate);
+            result = new java.util.LinkedHashMap<String, Object>();
+            result.put("ok", true);
+            result.put("latencyMs", System.currentTimeMillis() - started);
+            result.put("provider", candidate.getProvider());
+            result.put("modelCount", models.size());
+            result.put("message", "连接正常，发现 " + models.size() + " 个上游模型");
+        }
         return Result.ok(result);
     }
 

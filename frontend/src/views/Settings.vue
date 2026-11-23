@@ -62,6 +62,9 @@
               <el-form-item label="API 地址">
                 <el-input v-model="aiForm.baseUrl" class="ai-field" placeholder="https://api.deepseek.com/v1" />
                 <div class="input-hint">自动拼接 /chat/completions；也可直接粘贴完整地址。</div>
+                <div v-if="aiForm.vendor === 'qwen' || aiForm.vendor === 'qwen-token-plan'" class="input-hint">
+                  Token Plan Key（sk-sp- 开头）请选择「千问AI Token Plan」；按量付费 Key 选择「千问AI」。
+                </div>
               </el-form-item>
 
               <el-form-item label="API Key">
@@ -92,7 +95,8 @@
                   <span v-if="aiTestResult" class="ai-test-ok">
                     <FilledIcon name="shield" :size="16" />
                     连接正常 · {{ aiTestResult.latencyMs }} ms
-                    <span class="ai-test-model">发现 {{ aiTestResult.modelCount || 0 }} 个模型</span>
+                    <span v-if="aiTestResult.modelCount" class="ai-test-model">发现 {{ aiTestResult.modelCount }} 个模型</span>
+                    <span v-else-if="aiTestResult.model" class="ai-test-model">已验证 · {{ aiTestResult.model }}</span>
                   </span>
                   <span v-if="aiConnectionDirty && !aiTestResult" class="input-hint">先测试连接，通过后再保存</span>
                 </div>
@@ -128,8 +132,12 @@
                 :recommendations="currentPreset ? currentPreset.models : []"
                 :vendor-name="currentPreset ? currentPreset.name : '服务商'"
                 :can-fetch="canFetchModels"
+                :auto-fetch="autoFetchModels"
                 :dirty="aiModelDirty"
               />
+              <p v-if="aiForm.vendor === 'qwen' || aiForm.vendor === 'qwen-token-plan'" class="input-hint" style="margin-left:0">
+                千问AI 可能不提供 /models 列表；可以直接选择推荐模型，或手动输入模型 ID。
+              </p>
               <div class="ai-model-actions">
                 <el-button type="primary" :loading="aiSaving" :disabled="!canSaveModel" @click="handleSaveModel">保存模型</el-button>
                 <span v-if="!aiSaved.model" class="input-hint">选择模型后保存，助手才会变为可用。</span>
@@ -365,6 +373,7 @@ const providerColors = {
   minimax: { background: '#FFF7ED', color: '#C2410C' },
   glm: { background: '#EFF6FF', color: '#2563EB' },
   qwen: { background: '#F5F3FF', color: '#7C3AED' },
+  'qwen-token-plan': { background: '#F5F3FF', color: '#7C3AED' },
   openai: { background: '#ECFDF5', color: '#047857' },
   ollama: { background: '#F1F5F9', color: '#475569' },
   custom: { background: '#F7F8FA', color: 'var(--app-text-muted)' }
@@ -417,6 +426,7 @@ const canSaveConnection = computed(() => {
 const canSaveModel = computed(() => aiConnectionReady.value && aiModelDirty.value && !!aiForm.model && !aiSaving.value)
 
 const canFetchModels = computed(() => aiConnectionReady.value && aiForm.provider === 'OPENAI_COMPATIBLE')
+const autoFetchModels = computed(() => !['qwen', 'qwen-token-plan'].includes(aiForm.vendor))
 
 watch([() => aiForm.provider, () => aiForm.vendor, () => aiForm.baseUrl, () => aiForm.apiKey, aiClearKey], () => {
   aiTestResult.value = null
@@ -472,6 +482,7 @@ function inferVendor(baseUrl) {
   if (url.includes('moonshot')) return 'kimi'
   if (url.includes('minimax')) return 'minimax'
   if (url.includes('bigmodel')) return 'glm'
+  if (url.includes('token-plan.maas.qianwenaiapi.com')) return 'qwen-token-plan'
   if (url.includes('qianwenaiapi') || url.includes('dashscope')) return 'qwen'
   if (url.includes('api.openai.com')) return 'openai'
   if (url.includes('11434')) return 'ollama'
@@ -657,7 +668,8 @@ async function handleTestAi() {
       provider: aiForm.provider,
       vendor: aiForm.vendor,
       baseUrl: aiForm.baseUrl,
-      apiKey: aiForm.apiKey ? aiForm.apiKey : (aiClearKey.value ? '' : null)
+      apiKey: aiForm.apiKey ? aiForm.apiKey : (aiClearKey.value ? '' : null),
+      model: aiForm.model || currentPreset.value?.defaultModel || ''
     })
     aiConnectionTested.value = true
     const count = aiTestResult.value?.modelCount || 0

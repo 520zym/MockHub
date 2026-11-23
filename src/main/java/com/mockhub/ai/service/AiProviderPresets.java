@@ -34,6 +34,8 @@ public final class AiProviderPresets {
                 "glm-4.6", Arrays.asList("glm-4.6", "glm-4.5", "glm-4-flash"), false));
         add(map, new AiProviderPreset("qwen", "千问AI", "https://maas.qianwenaiapi.com/compatible-mode/v1",
                 "qwen4-max", Arrays.asList("qwen4-max", "qwen4-max-preview", "qwen3.8-max", "qwen3.8-flash"), false));
+        add(map, new AiProviderPreset("qwen-token-plan", "千问AI Token Plan", "https://token-plan.maas.qianwenaiapi.com/compatible-mode/v1",
+                "qwen4-max", Arrays.asList("qwen4-max", "qwen4-max-preview", "qwen3.8-max", "qwen3.8-flash"), false));
         add(map, new AiProviderPreset("openai", "OpenAI", "https://api.openai.com/v1",
                 "gpt-4o-mini", Arrays.asList("gpt-4o-mini", "gpt-4o", "o3-mini"), false));
         add(map, new AiProviderPreset("ollama", "Ollama", "http://localhost:11434/v1",
@@ -83,6 +85,7 @@ public final class AiProviderPresets {
         if (url.contains("moonshot")) return "kimi";
         if (url.contains("minimax")) return "minimax";
         if (url.contains("bigmodel")) return "glm";
+        if (url.contains("token-plan.maas.qianwenaiapi.com") || url.contains("token-plan")) return "qwen-token-plan";
         if (url.contains("qianwenaiapi") || url.contains("dashscope")) return "qwen";
         if (url.contains("api.openai.com")) return "openai";
         if (url.contains("11434")) return "ollama";

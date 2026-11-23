@@ -118,7 +118,8 @@ const props = defineProps({
   recommendations: { type: Array, default: () => [] },
   vendorName: { type: String, default: '' },
   canFetch: { type: Boolean, default: false },
-  dirty: { type: Boolean, default: false }
+  dirty: { type: Boolean, default: false },
+  autoFetch: { type: Boolean, default: true }
 })
 
 const emit = defineEmits(['update:modelValue'])
@@ -205,7 +206,7 @@ async function toggle() {
     await nextTick()
     updatePopPosition()
     if (searchInput.value) searchInput.value.focus()
-    if (props.canFetch && !liveModels.value.length && !loading.value) fetchModels()
+    if (props.autoFetch && props.canFetch && !liveModels.value.length && !loading.value) fetchModels()
   }
 }
 
