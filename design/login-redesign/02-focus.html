@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MockHub 登录设计稿 · 方向 B 专注单卡</title>
+<style>
+  :root{--page:#f4f5f7;--surface:#fff;--ink:#191c22;--muted:#6d7480;--line:#e2e5eb;--accent:#2d3340;--blue:#3568d4;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--page);color:var(--ink);font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+  button,input{font:inherit}
+  .page{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:34px 20px;position:relative;overflow:hidden}
+  .page:before{content:"";position:absolute;inset:0;background-image:linear-gradient(#e7e9ed 1px,transparent 1px),linear-gradient(90deg,#e7e9ed 1px,transparent 1px);background-size:64px 64px;opacity:.5;mask-image:linear-gradient(to bottom,black,transparent 84%);pointer-events:none}
+  .top{position:absolute;top:28px;left:32px;display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:-.02em}
+  .mark{width:30px;height:30px;border-radius:9px;background:var(--accent);color:#fff;display:grid;place-items:center;font-weight:800;font-size:16px}
+  .top small{color:#8a909b;font:10px/1.4 var(--mono);font-weight:400;letter-spacing:.12em;margin-left:2px}
+  .card{position:relative;width:100%;max-width:370px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:26px 30px 28px;text-align:center}
+  .orbit{width:132px;height:132px;display:block;margin:0 auto 2px;overflow:visible}
+  .orbit .ring{fill:none;stroke:#d9dee7;stroke-width:1}
+  .orbit .ring.inner{stroke:#e8ebf0}
+  .orbit .dot-a{fill:var(--blue);transform-box:view-box;transform-origin:66px 66px;animation:a 6.4s linear infinite}
+  .orbit .dot-b{fill:#9aa7b8;transform-box:view-box;transform-origin:66px 66px;animation:b 6.4s linear infinite}
+  .orbit .core{fill:var(--accent)}
+  .orbit .core-mark{fill:#fff;font:700 15px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;text-anchor:middle}
+  @keyframes a{to{transform:rotate(360deg)}}
+  @keyframes b{to{transform:rotate(-360deg)}}
+  @media(prefers-reduced-motion:reduce){.orbit *{animation:none!important}}
+  h1{margin:0;font-size:27px;line-height:1.2;letter-spacing:-.045em;font-weight:720}
+  form{text-align:left}
+  label{display:block;margin-top:14px;color:#414854;font-size:12px;font-weight:500}
+  input{width:100%;margin-top:6px;padding:10px 11px;border:1px solid var(--line);border-radius:8px;background:#fafbfc;color:var(--ink);outline:none;font-size:13px}
+  input:focus{border-color:#9aa7ba;background:#fff;box-shadow:0 0 0 3px rgba(45,51,64,.07)}
+  .enter{width:100%;margin-top:20px;padding:11px 14px;border:0;border-radius:8px;background:var(--accent);color:#fff;font-weight:600;cursor:pointer}
+  .enter:hover{background:#3c4352}
+  .fine{margin:13px 0 0;color:#9299a4;font-size:10.5px;line-height:1.6}
+  .foot{position:absolute;bottom:20px;left:0;right:0;text-align:center;color:#969da7;font:10px/1.6 var(--mono)}
+  .draft{position:fixed;right:14px;bottom:12px;padding:5px 9px;border:1px solid #d9dde4;border-radius:999px;background:rgba(255,255,255,.85);color:#7c8490;font:10px/1.4 var(--mono);z-index:9}
+  @media(max-width:520px){.page{padding:70px 16px 50px}.top{top:20px;left:20px}.card{padding:24px 22px 22px;border-radius:14px}h1{font-size:25px}.foot{position:static;margin-top:18px}}
+</style>
+</head>
+<body>
+<main class="page">
+  <header class="top"><span class="mark">M</span><span>MockHub</span></header>
+  <section class="card" aria-labelledby="title">
+    <svg class="orbit" viewBox="0 0 132 132" role="img" aria-label="环绕的接口节点示意图">
+      <circle class="ring" cx="66" cy="66" r="53"/>
+      <circle class="ring inner" cx="66" cy="66" r="36"/>
+      <circle class="core" cx="66" cy="66" r="20"/>
+      <text class="core-mark" x="66" y="72">M</text>
+      <g class="dot-a"><circle cx="66" cy="13" r="4.5"/></g>
+      <g class="dot-b"><circle cx="66" cy="102" r="3.5"/></g>
+    </svg>
+    <h1 id="title">登录</h1>
+    <form onsubmit="event.preventDefault()">
+      <label>用户名<input placeholder="用户名" autocomplete="username" /></label>
+      <label>密码<input type="password" placeholder="密码" autocomplete="current-password" /></label>
+      <button class="enter" type="submit">登录</button>
+    </form>
+    <p class="fine">首次登录需修改密码。</p>
+  </section>
+</main>
+</body>
+</html>
