@@ -40,11 +40,11 @@
             <template v-else>
               <div class="provider-grid" v-loading="providersLoading">
                 <button
-                  v-for="p in aiProviders"
+                  v-for="p in displayProviders"
                   :key="p.key"
                   type="button"
                   class="provider-card"
-                  :class="{ 'provider-card--on': aiForm.vendor === p.key }"
+                  :class="{ 'provider-card--on': isProviderSelected(p) }"
                   @click="selectVendor(p)"
                 >
                   <span class="provider-logo" :style="providerLogoStyle(p)">{{ providerLetter(p) }}</span>
@@ -59,11 +59,20 @@
                 </button>
               </div>
 
+              <div v-if="isQwenProvider" class="qwen-plan-row">
+                <span class="qwen-plan-row__label">千问AI 计费方式</span>
+                <el-radio-group v-model="qwenPlanMode" size="small">
+                  <el-radio-button value="token-plan">Token Plan</el-radio-button>
+                  <el-radio-button value="payg">按量计费</el-radio-button>
+                </el-radio-group>
+                <span class="qwen-plan-row__host">{{ hostOf(aiForm.baseUrl) }}</span>
+              </div>
+
               <el-form-item label="API 地址">
                 <el-input v-model="aiForm.baseUrl" class="ai-field" placeholder="https://api.deepseek.com/v1" />
                 <div class="input-hint">自动拼接 /chat/completions；也可直接粘贴完整地址。</div>
-                <div v-if="aiForm.vendor === 'qwen' || aiForm.vendor === 'qwen-token-plan'" class="input-hint">
-                  Token Plan Key（sk-sp- 开头）请选择「千问AI Token Plan」；按量付费 Key 选择「千问AI」。
+                <div v-if="isQwenProvider" class="input-hint">
+                  Token Plan Key（sk-sp- 开头）选 Token Plan；按量付费 Key 选按量计费。
                 </div>
               </el-form-item>
 
@@ -135,7 +144,7 @@
                 :auto-fetch="autoFetchModels"
                 :dirty="aiModelDirty"
               />
-              <p v-if="aiForm.vendor === 'qwen' || aiForm.vendor === 'qwen-token-plan'" class="input-hint" style="margin-left:0">
+              <p v-if="isQwenProvider" class="input-hint" style="margin-left:0">
                 千问AI 可能不提供 /models 列表；可以直接选择推荐模型，或手动输入模型 ID。
               </p>
               <div class="ai-model-actions">
@@ -380,6 +389,16 @@ const providerColors = {
 }
 
 const currentPreset = computed(() => aiProviders.value.find(p => p.key === aiForm.vendor) || null)
+const displayProviders = computed(() => aiProviders.value.filter(p => p.key !== 'qwen-token-plan'))
+const isQwenProvider = computed(() => ['qwen', 'qwen-token-plan'].includes(aiForm.vendor))
+const qwenPlanMode = computed({
+  get: () => aiForm.vendor === 'qwen-token-plan' ? 'token-plan' : 'payg',
+  set: value => selectQwenPlan(value)
+})
+const QWEN_PLAN_URLS = {
+  'token-plan': 'https://token-plan.maas.qianwenaiapi.com/compatible-mode/v1',
+  payg: 'https://maas.qianwenaiapi.com/compatible-mode/v1'
+}
 
 const keyPlaceholder = computed(() => {
   if (aiKeyConfigured.value) return '已配置，留空保持不变'
@@ -496,8 +515,13 @@ function hostOf(baseUrl) {
   return String(baseUrl).replace(/^https?:\/\//, '').replace(/\/.*$/, '')
 }
 
+function isProviderSelected(p) {
+  return aiForm.vendor === p.key || (p.key === 'qwen' && aiForm.vendor === 'qwen-token-plan')
+}
+
 function selectVendor(p) {
   if (aiForm.provider === 'OPENAI_COMPATIBLE' && aiForm.vendor === p.key) return
+  if (p.key === 'qwen' && isQwenProvider.value) return
   aiForm.provider = 'OPENAI_COMPATIBLE'
   aiForm.vendor = p.key
   aiForm.baseUrl = p.baseUrl || ''
@@ -507,6 +531,20 @@ function selectVendor(p) {
   aiClearKey.value = aiSaved.keyConfigured && p.key !== aiSaved.vendor
   clearKeySource.value = aiClearKey.value ? 'vendor' : ''
   aiKeyConfigured.value = p.key === aiSaved.vendor ? aiSaved.keyConfigured : false
+}
+
+function selectQwenPlan(mode) {
+  const target = mode === 'token-plan' ? 'qwen-token-plan' : 'qwen'
+  if (aiForm.vendor === target) return
+  aiForm.provider = 'OPENAI_COMPATIBLE'
+  aiForm.vendor = target
+  aiForm.baseUrl = QWEN_PLAN_URLS[mode]
+  aiForm.apiKey = ''
+  aiTestResult.value = null
+  aiConnectionTested.value = false
+  aiClearKey.value = aiSaved.keyConfigured && target !== aiSaved.vendor
+  clearKeySource.value = aiClearKey.value ? 'vendor' : ''
+  aiKeyConfigured.value = target === aiSaved.vendor ? aiSaved.keyConfigured : false
 }
 
 function useMockProvider() {
@@ -810,6 +848,9 @@ onMounted(() => {
 .ai-field { width: 100% !important; max-width: 520px; }
 .input-hint { margin-left: 12px; font-size: var(--app-font-caption); line-height: 1.6; color: var(--app-text-muted); }
 .provider-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 16px; }
+.qwen-plan-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: -4px 0 16px; padding: 10px 12px; border: 1px solid #EDF0F5; border-radius: 9px; background: #FBFCFE; }
+.qwen-plan-row__label { font-size: var(--app-font-caption); color: var(--app-text-secondary); }
+.qwen-plan-row__host { font: var(--app-font-caption) var(--app-font-mono); color: var(--app-text-muted); overflow-wrap: anywhere; }
 .provider-card { position: relative; display: flex; align-items: center; gap: 10px; height: 74px; padding: 0 12px; border: 1px solid #EDF0F5; border-radius: 10px; background: #fff; text-align: left; cursor: pointer; }
 .provider-card:hover { border-color: #DDE2EE; }
 .provider-card--on { border-color: #C7D2FE; background: #FBFCFF; box-shadow: none; }
