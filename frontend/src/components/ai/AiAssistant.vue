@@ -39,18 +39,29 @@
           <div class="ai-history__list" v-loading="historyLoading">
             <div v-if="historyError" class="ai-history__empty ai-card-error" role="alert">{{ historyError }} <el-button link @click="openHistory">重试</el-button></div>
             <div v-else-if="!historyLoading && !conversations.length" class="ai-history__empty">当前团队还没有历史会话，先聊一句吧。</div>
-            <button
-              v-for="conv in conversations"
-              :key="conv.id"
-              type="button"
-              class="ai-history__item"
-              :class="{ 'ai-history__item--on': conv.id === conversationId }"
-              @click="loadConversation(conv.id)"
-            >
-              <div class="ai-history__title">{{ conv.title || '未命名会话' }}</div>
-              <div class="ai-history__preview">{{ conv.preview || '暂无消息' }}</div>
-              <div class="ai-history__meta">{{ conv.messageCount || 0 }} 条 · {{ formatHistoryTime(conv.updatedAt) }}</div>
-            </button>
+            <div v-for="conv in conversations" :key="conv.id" class="ai-history__row">
+              <button
+                type="button"
+                class="ai-history__item"
+                :class="{ 'ai-history__item--on': conv.id === conversationId }"
+                @click="loadConversation(conv.id)"
+              >
+                <div class="ai-history__title">{{ conv.title || '未命名会话' }}</div>
+                <div class="ai-history__preview">{{ conv.preview || '暂无消息' }}</div>
+                <div class="ai-history__meta">{{ conv.messageCount || 0 }} 条 · {{ formatHistoryTime(conv.updatedAt) }}</div>
+              </button>
+              <el-button
+                class="ai-history__delete"
+                text
+                circle
+                size="small"
+                title="删除会话"
+                aria-label="删除会话"
+                :loading="deletingHistoryId === conv.id"
+                :disabled="!!deletingHistoryId"
+                @click.stop="deleteConversation(conv)"
+              ><el-icon><Delete /></el-icon></el-button>
+            </div>
           </div>
         </div>
 
@@ -282,8 +293,8 @@
 <script setup>
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { MagicStick, Close, Lock, Search, DataAnalysis, Plus, Check, EditPen, Clock, Promotion, OfficeBuilding } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { MagicStick, Close, Lock, Search, DataAnalysis, Plus, Check, EditPen, Clock, Promotion, OfficeBuilding, Delete } from '@element-plus/icons-vue'
 import request from '@/api/request'
 import { useAiStore } from '@/stores/ai'
 import { useAppStore } from '@/stores/app'
@@ -296,7 +307,7 @@ const canRead = computed(() => !!teamId.value && !!appStore.currentTeam && userS
 const canWrite = computed(() => canRead.value && appStore.currentTeam?.status !== 'ARCHIVED' && userStore.hasCapability(teamId.value, 'write'))
 const canUseAssistant = computed(() => canRead.value && aiStore.enabled && aiStore.visible && aiStore.available)
 const open = ref(false), input = ref(''), loading = ref(false), messages = ref([]), bodyRef = ref(null), composerFocus = ref(false), composerInput = ref(null)
-const lastApiId = ref(''), conversationId = ref(''), historyOpen = ref(false), historyLoading = ref(false), historyError = ref(''), conversations = ref([])
+const lastApiId = ref(''), conversationId = ref(''), historyOpen = ref(false), historyLoading = ref(false), historyError = ref(''), conversations = ref([]), deletingHistoryId = ref('')
 const previewDialogVisible = ref(false), previewDialogContent = ref(''), previewDialogTitle = ref(''), now = ref(Date.now())
 const quickPrompts = computed(() => canWrite.value ? ['最近 7 天哪个接口调用最多？', '找一下用户相关的接口', '帮我创建 GET /api/user/info 的 Mock，返回姓名、头像、等级'] : ['最近 7 天哪个接口调用最多？', '找一下用户相关的接口', '解释当前接口的匹配规则'])
 let epoch = 0, disposed = false, clock = null
@@ -348,6 +359,37 @@ async function openHistory() {
   } catch (error) { if (current(ctx)) { conversations.value = []; historyError.value = errorText(error, '会话历史加载失败。') } }
   finally { if (current(ctx)) historyLoading.value = false }
 }
+async function deleteConversation(conv) {
+  if (!canUseAssistant.value || deletingHistoryId.value) return
+  try {
+    await ElMessageBox.confirm('删除会话「' + (conv.title || '未命名会话') + '」？删除后无法恢复。', '删除会话', { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' })
+  } catch { return }
+  const ctx = snapshot()
+  const id = conv.id
+  const wasCurrent = conversationId.value === id
+  deletingHistoryId.value = id
+  try {
+    await call('delete', '/ai/conversations/' + encodeURIComponent(id), undefined, ctx)
+    if (!current(ctx)) return
+    const remaining = conversations.value.filter(item => item.id !== id)
+    if (wasCurrent) {
+      clearChat()
+      open.value = true
+      conversations.value = remaining
+      historyOpen.value = true
+      historyLoading.value = false
+      historyError.value = ''
+    } else {
+      conversations.value = remaining
+    }
+    ElMessage.success('会话已删除')
+  } catch (error) {
+    if (current(ctx)) ElMessage.error(errorText(error, '删除失败，请稍后重试。'))
+  } finally {
+    deletingHistoryId.value = ''
+  }
+}
+
 async function loadConversation(id) {
   if (!canUseAssistant.value || loading.value || historyLoading.value || !conversations.value.some(item => item.id === id && item.teamId === teamId.value)) return
   const list = conversations.value
@@ -454,7 +496,7 @@ watch(messages, scrollToBottom, { deep: true })
 .ai-chat__ctx { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; flex-shrink: 0; padding: 8px 14px; background: var(--app-bg-surface); border-bottom: 1px solid var(--app-divider); }.ctx-chip { display: inline-flex; align-items: center; gap: 4px; min-width: 0; padding: 4px 8px; border-radius: 8px; background: var(--app-bg-control); color: var(--app-text-secondary); font-size: 12px; overflow-wrap: anywhere; }
 .ai-chat__body { flex: 1 1 0%; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 12px; overflow: auto; overscroll-behavior: contain; padding: 16px 14px; background: var(--app-bg-control); }
 .ai-unavailable, .ai-welcome { margin: auto; text-align: center; padding: 20px 10px; width: 100%; max-width: 360px; }.ai-welcome__icon { display: grid; place-items: center; width: 48px; height: 48px; margin: 0 auto 12px; border-radius: 16px; background: var(--app-bg-selected); color: var(--app-accent); font-size: 24px; }.ai-welcome__title { font-size: 16px; font-weight: 600; }.ai-welcome__desc, .ai-unavailable__hint { font-size: 13px; line-height: 1.8; color: var(--app-text-secondary); margin-top: 8px; }.ai-unavailable .el-button { margin-top: 16px; }.ai-welcome__prompts { display: flex; flex-direction: column; gap: 8px; margin-top: 18px; }.ai-prompt { border: 0; border-radius: 10px; padding: 10px 12px; background: var(--app-bg-surface); color: var(--app-accent); font: inherit; font-size: 13px; text-align: left; cursor: pointer; overflow-wrap: anywhere; }.ai-prompt:hover { background: var(--app-bg-selected); color: var(--app-accent-hover); }.ai-prompt:disabled { color: var(--app-text-disabled); background: var(--app-bg-disabled); cursor: not-allowed; }
-.ai-history { position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column; min-height: 0; background: var(--app-bg-surface); }.ai-history__head { display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; min-height: 64px; padding: 12px 14px 12px 18px; font-size: 14px; font-weight: 600; }.ai-history__list { min-height: 0; flex: 1; overflow: auto; overscroll-behavior: contain; padding: 10px; background: var(--app-bg-control); }.ai-history__empty { text-align: center; padding: 40px 16px; font-size: 13px; line-height: 1.8; color: var(--app-text-secondary); }.ai-history__item { display: block; width: 100%; margin-bottom: 8px; padding: 12px; border: 0; border-radius: 10px; text-align: left; background: var(--app-bg-surface); cursor: pointer; color: inherit; }.ai-history__item:hover, .ai-history__item--on { background: var(--app-bg-selected); }.ai-history__title { font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }.ai-history__preview { margin-top: 5px; font-size: 12px; line-height: 1.7; color: var(--app-text-secondary); overflow-wrap: anywhere; }.ai-history__meta { margin-top: 6px; font-size: 12px; color: var(--app-text-secondary); }
+.ai-history { position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column; min-height: 0; background: var(--app-bg-surface); }.ai-history__head { display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; min-height: 64px; padding: 12px 14px 12px 18px; font-size: 14px; font-weight: 600; }.ai-history__list { min-height: 0; flex: 1; overflow: auto; overscroll-behavior: contain; padding: 10px; background: var(--app-bg-control); }.ai-history__empty { text-align: center; padding: 40px 16px; font-size: 13px; line-height: 1.8; color: var(--app-text-secondary); }.ai-history__row { position: relative; margin-bottom: 8px; }.ai-history__item { display: block; width: 100%; padding: 12px 46px 12px 12px; border: 0; border-radius: 10px; text-align: left; background: var(--app-bg-surface); cursor: pointer; color: inherit; }.ai-history__delete { position: absolute; top: 50%; right: 8px; transform: translateY(-50%); color: var(--app-text-secondary); }.ai-history__delete:hover { color: var(--app-text-danger); background: var(--el-color-danger-light-9); }.ai-history__item:hover, .ai-history__item--on { background: var(--app-bg-selected); }.ai-history__title { font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }.ai-history__preview { margin-top: 5px; font-size: 12px; line-height: 1.7; color: var(--app-text-secondary); overflow-wrap: anywhere; }.ai-history__meta { margin-top: 6px; font-size: 12px; color: var(--app-text-secondary); }
 .ai-msg { display: flex; gap: 8px; min-width: 0; max-width: 100%; }.ai-msg--user { width: 100%; display: flex; justify-content: flex-end; }.ai-bubble-user { max-width: 88%; padding: 10px 13px; border-radius: 16px 16px 8px 16px; background: var(--app-primary); color: #FFFFFF; font-size: 13px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }.ai-msg__avatar { width: 24px; height: 24px; border-radius: 8px; font-size: 14px; margin-top: 2px; }.ai-msg__stack { display: flex; flex: 1; flex-direction: column; gap: 10px; min-width: 0; }.ai-bubble { padding: 10px 12px; background: var(--app-bg-surface); color: var(--app-text-primary); border: 1px solid var(--app-divider); border-radius: 16px 16px 16px 8px; font-size: 13px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }.ai-bubble--error { color: var(--app-text-danger); background: var(--el-color-danger-light-9); }.ai-msg__meta { padding-left: 2px; font-size: 12px; color: var(--app-text-secondary); overflow-wrap: anywhere; }
 .ai-card { min-width: 0; background: var(--app-bg-surface); border: 1px solid var(--app-divider); border-radius: 16px; overflow: hidden; }.ai-card__head, .ai-confirm__head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 10px 12px; background: var(--app-bg-selected); color: var(--app-accent); font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }.ai-card__right { margin-left: auto; color: var(--app-text-secondary); font-size: 12px; font-weight: 400; overflow-wrap: anywhere; }.ai-card__body { padding: 10px 12px; }.ai-card__body--list { padding: 6px 10px; }.ai-card__empty { padding: 14px; color: var(--app-text-secondary); font-size: 12px; text-align: center; }.ai-card-error { color: var(--app-text-danger); background: var(--el-color-danger-light-9); border-radius: 8px; padding: 10px; font-size: 12px; line-height: 1.8; overflow-wrap: anywhere; }
 .ai-api-row { width: 100%; display: flex; align-items: flex-start; flex-wrap: wrap; gap: 6px; border: 0; border-radius: 8px; padding: 8px 4px; background: var(--app-bg-surface); color: inherit; font: inherit; text-align: left; cursor: pointer; }.ai-api-row:hover { background: var(--app-bg-control); }.ai-method { flex-shrink: 0; padding: 2px 6px; border-radius: 8px; background: var(--app-bg-control); color: var(--app-text-regular); font-size: 11px; font-weight: 500; }.ai-method--get { background: var(--el-color-success-light-9); color: var(--app-text-success); }.ai-method--post, .ai-method--patch { background: var(--app-bg-selected); color: var(--app-text-accent); }.ai-method--put { background: var(--el-color-warning-light-9); color: var(--app-text-warning); }.ai-method--delete { background: var(--el-color-danger-light-9); color: var(--app-text-danger); }.ai-api-path { min-width: 0; flex: 1; font: 12px/1.8 var(--app-font-mono); overflow-wrap: anywhere; }.ai-api-name { flex-basis: 100%; font-size: 12px; line-height: 1.7; color: var(--app-text-secondary); overflow-wrap: anywhere; }
