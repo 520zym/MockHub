@@ -53,14 +53,14 @@ class AiSettingsServiceTest {
     }
 
     @Test
-    void fillsDefaultsWhenOnlyVendorProvided() {
+    void fillsBaseUrlButLeavesModelForLaterSelection() {
         AiSettingsUpdateRequest request = request("kimi");
 
         service.update(request);
 
         assertEquals("kimi", settings.getVendor());
         assertEquals("https://api.moonshot.cn/v1", settings.getBaseUrl());
-        assertEquals("kimi-k3", settings.getModel());
+        assertEquals(null, settings.getModel());
     }
 
     @Test
@@ -75,6 +75,7 @@ class AiSettingsServiceTest {
         settings.setModel("llama3.1");
         settings.setApiKey(null);
         assertTrue(service.isConfigured(settings));
+        assertTrue(service.isConnectionConfigured(settings));
     }
 
     private AiSettingsUpdateRequest request(String vendor) {

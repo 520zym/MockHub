@@ -44,8 +44,8 @@ export function getAiModels() {
 }
 
 /** 测试模型连通性（仅超管） */
-export function testAiConnection() {
-  return request.post('/ai/settings/test', null, AI_CONFIG)
+export function testAiConnection(data) {
+  return request.post('/ai/settings/test', data || null, AI_CONFIG)
 }
 
 /** 生成响应体（REST JSON / SOAP XML） */

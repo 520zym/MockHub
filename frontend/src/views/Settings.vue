@@ -64,17 +64,6 @@
                 <div class="input-hint">自动拼接 /chat/completions；也可直接粘贴完整地址。</div>
               </el-form-item>
 
-              <el-form-item label="默认模型">
-                <AiModelPicker
-                  v-model="aiForm.model"
-                  class="ai-field"
-                  :recommendations="currentPreset ? currentPreset.models : []"
-                  :vendor-name="currentPreset ? currentPreset.name : '服务商'"
-                  :can-fetch="canFetchModels"
-                  :dirty="aiFormDirty"
-                />
-              </el-form-item>
-
               <el-form-item label="API Key">
                 <div class="ai-key-row">
                   <el-input
@@ -96,16 +85,16 @@
 
               <el-form-item label="连接测试">
                 <div class="ai-test-row">
-                  <el-button :loading="aiTesting" :disabled="aiFormDirty" @click="handleTestAi">
+                  <el-button :loading="aiTesting" :disabled="!canTestConnection" @click="handleTestAi">
                     <FilledIcon name="api" :size="16" />
                     测试连接
                   </el-button>
                   <span v-if="aiTestResult" class="ai-test-ok">
                     <FilledIcon name="shield" :size="16" />
                     连接正常 · {{ aiTestResult.latencyMs }} ms
-                    <span class="ai-test-model">{{ aiTestResult.model }}</span>
+                    <span class="ai-test-model">发现 {{ aiTestResult.modelCount || 0 }} 个模型</span>
                   </span>
-                  <span v-if="aiFormDirty" class="input-hint">保存配置后可测试</span>
+                  <span v-if="aiConnectionDirty && !aiTestResult" class="input-hint">先测试连接，通过后再保存</span>
                 </div>
               </el-form-item>
 
@@ -120,10 +109,32 @@
             </template>
 
             <div class="ai-save-row">
-              <el-button type="primary" :loading="aiSaving" @click="handleSaveAi">保存供应商配置</el-button>
+              <el-button v-if="aiForm.provider !== 'MOCK'" type="primary" :loading="aiSaving" :disabled="!canSaveConnection" @click="handleSaveConnection">保存连接配置</el-button>
               <span v-if="aiSettingsUpdatedAt" class="input-hint">最近保存：{{ aiSettingsUpdatedAt }}</span>
               <el-button v-if="aiForm.provider !== 'MOCK'" text @click="useMockProvider">使用内置演示模型</el-button>
             </div>
+
+            <section v-if="aiConnectionReady" class="ai-model-section">
+              <div class="ai-model-section__head">
+                <div>
+                  <h4>选择默认模型</h4>
+                  <p>连接已保存，从上游拉取模型列表后选择一个模型使用。</p>
+                </div>
+                <span v-if="aiSaved.model" class="ai-test-model">当前：{{ aiSaved.model }}</span>
+              </div>
+              <AiModelPicker
+                v-model="aiForm.model"
+                class="ai-field"
+                :recommendations="currentPreset ? currentPreset.models : []"
+                :vendor-name="currentPreset ? currentPreset.name : '服务商'"
+                :can-fetch="canFetchModels"
+                :dirty="aiModelDirty"
+              />
+              <div class="ai-model-actions">
+                <el-button type="primary" :loading="aiSaving" :disabled="!canSaveModel" @click="handleSaveModel">保存模型</el-button>
+                <span v-if="!aiSaved.model" class="input-hint">选择模型后保存，助手才会变为可用。</span>
+              </div>
+            </section>
           </section>
 
           <!-- 助手与能力 -->
@@ -295,7 +306,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import FilledIcon from '@/components/FilledIcon.vue'
 import { useUserStore } from '@/stores/user'
@@ -345,6 +356,7 @@ const aiKeyMask = ref('')
 const aiClearKey = ref(false)
 const clearKeySource = ref('')
 const aiTestResult = ref(null)
+const aiConnectionTested = ref(false)
 const aiSettingsUpdatedAt = ref('')
 
 const providerColors = {
@@ -375,9 +387,40 @@ const aiFormDirty = computed(() => {
     || aiClearKey.value
 })
 
-const canFetchModels = computed(() => {
-  if (aiFormDirty.value || aiForm.provider !== 'OPENAI_COMPATIBLE') return false
-  return aiKeyConfigured.value || aiForm.vendor === 'ollama'
+const aiConnectionDirty = computed(() => {
+  return aiForm.provider !== aiSaved.provider
+    || aiForm.vendor !== aiSaved.vendor
+    || (aiForm.baseUrl || '') !== (aiSaved.baseUrl || '')
+    || !!aiForm.apiKey
+    || aiClearKey.value
+})
+
+const aiConnectionReady = computed(() => {
+  return aiForm.provider === 'OPENAI_COMPATIBLE'
+    && !!aiSaved.baseUrl
+    && (aiSaved.keyConfigured || aiSaved.vendor === 'ollama')
+    && !aiConnectionDirty.value
+})
+
+const aiModelDirty = computed(() => (aiForm.model || '') !== (aiSaved.model || ''))
+
+const canTestConnection = computed(() => {
+  if (aiForm.provider !== 'OPENAI_COMPATIBLE' || !aiForm.baseUrl.trim()) return false
+  return !!aiForm.apiKey || aiKeyConfigured.value || aiForm.vendor === 'ollama'
+})
+
+const canSaveConnection = computed(() => {
+  if (!canTestConnection.value) return false
+  return !aiConnectionDirty.value || aiConnectionTested.value
+})
+
+const canSaveModel = computed(() => aiConnectionReady.value && aiModelDirty.value && !!aiForm.model && !aiSaving.value)
+
+const canFetchModels = computed(() => aiConnectionReady.value && aiForm.provider === 'OPENAI_COMPATIBLE')
+
+watch([() => aiForm.provider, () => aiForm.vendor, () => aiForm.baseUrl, () => aiForm.apiKey, aiClearKey], () => {
+  aiTestResult.value = null
+  aiConnectionTested.value = false
 })
 
 const providerSummary = computed(() => {
@@ -390,8 +433,8 @@ const providerSummary = computed(() => {
   return {
     letter: name.slice(0, 1),
     name,
-    meta: (aiForm.model || '未配置模型') + ' · ' + (ready ? (aiForm.vendor === 'ollama' ? '本地模型' : 'API Key 已配置') : '未配置 Key'),
-    state: ready ? '已连接' : '未配置',
+    meta: (aiForm.model || '待选择模型') + ' · ' + (ready ? (aiForm.vendor === 'ollama' ? '本地模型' : 'API Key 已配置') : '未配置 Key'),
+    state: ready ? (aiForm.model ? '已连接' : '待选模型') : '未配置',
     on: ready
   }
 })
@@ -447,7 +490,7 @@ function selectVendor(p) {
   aiForm.provider = 'OPENAI_COMPATIBLE'
   aiForm.vendor = p.key
   aiForm.baseUrl = p.baseUrl || ''
-  aiForm.model = p.defaultModel || ''
+  aiForm.model = ''
   aiForm.apiKey = ''
   aiTestResult.value = null
   aiClearKey.value = aiSaved.keyConfigured && p.key !== aiSaved.vendor
@@ -470,7 +513,7 @@ function useApiProvider() {
     if (first) {
       aiForm.vendor = first.key
       aiForm.baseUrl = first.baseUrl || ''
-      aiForm.model = first.defaultModel || ''
+      aiForm.model = ''
     }
   }
   aiClearKey.value = false
@@ -518,6 +561,8 @@ async function loadAiSettings() {
     aiSettingsUpdatedAt.value = data.updatedAt || ''
     aiClearKey.value = false
     clearKeySource.value = ''
+    aiTestResult.value = null
+    aiConnectionTested.value = false
     Object.assign(aiSaved, {
       provider: aiForm.provider, vendor: aiForm.vendor, baseUrl: aiForm.baseUrl,
       model: aiForm.model, keyConfigured: !!data.keyConfigured
@@ -526,52 +571,97 @@ async function loadAiSettings() {
   finally { aiLoading.value = false }
 }
 
+function aiSettingsPayload() {
+  return {
+    enabled: aiForm.enabled,
+    provider: aiForm.provider,
+    vendor: aiForm.vendor,
+    baseUrl: aiForm.baseUrl,
+    model: aiForm.model || null,
+    apiKey: aiForm.apiKey ? aiForm.apiKey : (aiClearKey.value ? '' : null),
+    capResponseBody: aiForm.capResponseBody,
+    capConditions: aiForm.capConditions,
+    capExplain: aiForm.capExplain,
+    capDrafts: aiForm.capDrafts,
+    accessScope: aiForm.accessScope
+  }
+}
+
+function applySavedAi(saved) {
+  aiKeyConfigured.value = !!saved.keyConfigured
+  aiKeyMask.value = saved.keyMask || ''
+  aiSettingsUpdatedAt.value = saved.updatedAt || ''
+  aiForm.model = saved.model || ''
+  aiForm.apiKey = ''
+  aiClearKey.value = false
+  clearKeySource.value = ''
+  Object.assign(aiSaved, {
+    provider: aiForm.provider, vendor: aiForm.vendor, baseUrl: aiForm.baseUrl,
+    model: aiForm.model, keyConfigured: !!saved.keyConfigured
+  })
+}
+
 async function handleSaveAi() {
+  if (aiConnectionDirty.value && !aiConnectionTested.value) {
+    ElMessage.warning('请先测试连接，通过后再保存')
+    return
+  }
   aiSaving.value = true
   try {
-    const payload = {
-      enabled: aiForm.enabled,
-      provider: aiForm.provider,
-      vendor: aiForm.vendor,
-      baseUrl: aiForm.baseUrl,
-      model: aiForm.model,
-      apiKey: aiForm.apiKey ? aiForm.apiKey : (aiClearKey.value ? '' : null),
-      capResponseBody: aiForm.capResponseBody,
-      capConditions: aiForm.capConditions,
-      capExplain: aiForm.capExplain,
-      capDrafts: aiForm.capDrafts,
-      accessScope: aiForm.accessScope
-    }
-    const saved = await saveAiSettings(payload)
-    aiKeyConfigured.value = !!saved.keyConfigured
-    aiKeyMask.value = saved.keyMask || ''
-    aiSettingsUpdatedAt.value = saved.updatedAt || ''
-    aiForm.apiKey = ''
-    aiClearKey.value = false
-    clearKeySource.value = ''
+    const saved = await saveAiSettings(aiSettingsPayload())
+    const wasConnectionDirty = aiConnectionDirty.value
+    applySavedAi(saved)
     aiTestResult.value = null
-    Object.assign(aiSaved, {
-      provider: aiForm.provider, vendor: aiForm.vendor, baseUrl: aiForm.baseUrl,
-      model: aiForm.model, keyConfigured: !!saved.keyConfigured
-    })
+    aiConnectionTested.value = false
     await aiStore.load(true)
-    ElMessage.success('AI 配置已保存')
+    ElMessage.success(wasConnectionDirty ? '连接配置已保存，请选择模型' : 'AI 配置已保存')
+  } catch (e) { /* 拦截器已处理 */ }
+  finally { aiSaving.value = false }
+}
+
+async function handleSaveConnection() {
+  if (!canSaveConnection.value || aiSaving.value) return
+  aiSaving.value = true
+  try {
+    const saved = await saveAiSettings(aiSettingsPayload())
+    applySavedAi(saved)
+    aiTestResult.value = null
+    aiConnectionTested.value = false
+    await aiStore.load(true)
+    ElMessage.success('连接配置已保存，请选择模型')
+  } catch (e) { /* 拦截器已处理 */ }
+  finally { aiSaving.value = false }
+}
+
+async function handleSaveModel() {
+  if (!canSaveModel.value || aiSaving.value) return
+  aiSaving.value = true
+  try {
+    const saved = await saveAiSettings(aiSettingsPayload())
+    applySavedAi(saved)
+    await aiStore.load(true)
+    ElMessage.success('模型已保存')
   } catch (e) { /* 拦截器已处理 */ }
   finally { aiSaving.value = false }
 }
 
 async function handleTestAi() {
-  if (aiFormDirty.value) { ElMessage.warning('请先保存配置，再测试连接'); return }
-  if (aiForm.provider === 'MOCK') { ElMessage.info('内置演示模型无需连接测试'); return }
-  if (!aiKeyConfigured.value && aiForm.vendor !== 'ollama') {
-    ElMessage.warning('请先填写并保存 API Key')
+  if (!canTestConnection.value) {
+    ElMessage.warning('请填写服务地址与 API Key')
     return
   }
   aiTesting.value = true
   aiTestResult.value = null
   try {
-    aiTestResult.value = await testAiConnection()
-    ElMessage.success('连接正常')
+    aiTestResult.value = await testAiConnection({
+      provider: aiForm.provider,
+      vendor: aiForm.vendor,
+      baseUrl: aiForm.baseUrl,
+      apiKey: aiForm.apiKey ? aiForm.apiKey : (aiClearKey.value ? '' : null)
+    })
+    aiConnectionTested.value = true
+    const count = aiTestResult.value?.modelCount || 0
+    ElMessage.success(count ? '连接正常，发现 ' + count + ' 个模型' : '连接正常')
   } catch (e) { /* 拦截器已处理 */ }
   finally { aiTesting.value = false }
 }
@@ -749,6 +839,11 @@ onMounted(() => {
 .ai-scope { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 .ai-security { margin-top: 4px; }
 .ai-save-row { display: flex; align-items: center; gap: 12px; margin-top: 18px; }
+.ai-model-section { margin-top: 22px; padding-top: 18px; border-top: 1px solid #F1F5F9; }
+.ai-model-section__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
+.ai-model-section__head h4 { margin: 0; font-size: 14px; font-weight: 600; color: #1B2559; }
+.ai-model-section__head p { margin: 5px 0 0; font-size: var(--app-font-caption); line-height: 1.7; color: var(--app-text-muted); }
+.ai-model-actions { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
 .cors-switch-row { padding: 4px 0; }
 .file-maintenance-actions { display: flex; align-items: center; gap: 12px; }
 .storage-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 20px; margin-top: 16px; padding: 14px 0 2px; border-top: 1px solid #F1F5F9; }

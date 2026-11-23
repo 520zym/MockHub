@@ -201,6 +201,7 @@ async function toggle() {
     await nextTick()
     updatePopPosition()
     if (searchInput.value) searchInput.value.focus()
+    if (props.canFetch && !liveModels.value.length && !loading.value) fetchModels()
   }
 }
 

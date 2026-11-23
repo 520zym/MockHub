@@ -1,6 +1,8 @@
 package com.mockhub.ai.controller;
 
 import com.mockhub.ai.model.dto.AiConditionsResult;
+import com.mockhub.ai.model.dto.AiConnectionTestRequest;
+import com.mockhub.ai.model.AiSettings;
 import com.mockhub.ai.model.dto.AiChatRequest;
 import com.mockhub.ai.model.dto.AiChatResponse;
 import com.mockhub.ai.model.dto.AiExplainRequest;
@@ -34,6 +36,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -167,11 +170,23 @@ public class AiController {
         return Result.ok(pendingActionService.cancel(id));
     }
 
-    /** 测试模型服务连通性；仅超管。 */
+    /**
+     * 测试待保存接口地址与 API Key 的连通性；仅超管。
+     * 测试通过后前端才会允许保存连接，随后再拉取模型列表。
+     */
     @PostMapping("/settings/test")
-    public Result<Map<String, Object>> testConnection() {
+    public Result<Map<String, Object>> testConnection(@RequestBody(required = false) AiConnectionTestRequest request) {
         checkSuperAdmin();
-        return Result.ok(settingsService.testConnection());
+        AiSettings candidate = settingsService.connectionCandidate(request);
+        long started = System.currentTimeMillis();
+        List<Map<String, Object>> models = modelCatalogService.listModels(candidate);
+        Map<String, Object> result = new java.util.LinkedHashMap<String, Object>();
+        result.put("ok", true);
+        result.put("latencyMs", System.currentTimeMillis() - started);
+        result.put("provider", candidate.getProvider());
+        result.put("modelCount", models.size());
+        result.put("message", "连接正常，发现 " + models.size() + " 个上游模型");
+        return Result.ok(result);
     }
 
     private void checkSuperAdmin() {
