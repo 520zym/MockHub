@@ -135,13 +135,89 @@ public class AiChatService {
                     ? plan.reply : helpText());
         }
 
+        boolean newConversation = request.getConversationId() == null || request.getConversationId().trim().isEmpty();
         AiConversation conversation = conversationService.appendExchange(
                 request.getConversationId(), SecurityContextUtil.getCurrentUserId(), request.getTeamId(),
                 request.getMessage(), response.getReply(), response.getCards(),
                 response.getProvider(), response.getModel());
+        if (newConversation && conversation != null) {
+            String title = generateConversationTitle(settings, plan, request, response);
+            if (title != null && !title.trim().isEmpty()) {
+                try {
+                    conversationService.rename(conversation.getId(), SecurityContextUtil.getCurrentUserId(), title);
+                    conversation.setTitle(title);
+                } catch (Exception e) {
+                    log.warn("AI 会话标题保存失败，保留默认标题：{}", e.getMessage());
+                }
+            }
+        }
         response.setConversationId(conversation.getId());
         response.setConversationTitle(conversation.getTitle());
         return response;
+    }
+
+    /**
+     * 新建会话时生成短标题：优先让模型概括，失败或演示模式使用本地意图摘要。
+     */
+    private String generateConversationTitle(AiSettings settings, ChatPlan plan, AiChatRequest request, AiChatResponse response) {
+        String fallback = fallbackTitle(plan, request);
+        if (settings == null || AiSettings.PROVIDER_MOCK.equals(settings.getProvider())) {
+            return fallback;
+        }
+        try {
+            String prompt = "用户：" + clip(request.getMessage(), 700)
+                    + "\n助手回复：" + clip(response.getReply(), 700);
+            String raw = provider.complete(settings,
+                    "你是会话标题生成器。根据用户问题和助手回复，用不超过14个汉字概括一个具体主题。"
+                            + "只输出标题本身，不要引号、标点、序号、前缀或解释。",
+                    prompt);
+            String title = cleanGeneratedTitle(raw);
+            return title.isEmpty() ? fallback : title;
+        } catch (Exception e) {
+            log.warn("AI 会话标题生成失败，使用本地摘要：{}", e.getMessage());
+            return fallback;
+        }
+    }
+
+    private String fallbackTitle(ChatPlan plan, AiChatRequest request) {
+        if (plan != null) {
+            if (INTENT_STATS.equals(plan.intent)) return "接口调用排行";
+            if (INTENT_SEARCH.equals(plan.intent)) {
+                String keyword = normalizeShort(plan.keyword, 16);
+                return keyword.isEmpty() ? "查找接口" : "查找接口：" + keyword;
+            }
+            if (INTENT_CREATE.equals(plan.intent)) return "创建 Mock 接口";
+            if (INTENT_UPDATE.equals(plan.intent)) return "修改接口配置";
+        }
+        String text = request == null || request.getMessage() == null ? "" : request.getMessage();
+        text = text.replaceAll("\\s+", " ").trim();
+        for (int i = 0; i < 2; i++) {
+            text = text.replaceFirst("^(请帮我|帮我看看|帮我|请|麻烦|我想|想要|能不能|可以|查一下|看一下|找一下|最近)\\s*", "");
+        }
+        text = text.replaceAll("[。！？!?；;：:，,]+$", "").trim();
+        if (text.isEmpty()) return "新会话";
+        return text.length() <= 20 ? text : text.substring(0, 20) + "…";
+    }
+
+    private String cleanGeneratedTitle(String raw) {
+        String value = raw == null ? "" : raw.trim();
+        int newline = value.indexOf('\n');
+        if (newline >= 0) value = value.substring(0, newline).trim();
+        value = value.replaceFirst("^(标题|会话标题)[：:]\\s*", "");
+        value = value.replaceAll("^[“”\"'《》]+|[“”\"'《》]+$", "");
+        value = value.replaceAll("[。！？!?；;：:，,]+$", "").trim();
+        if (value.length() > 24) value = value.substring(0, 24) + "…";
+        return value;
+    }
+
+    private String normalizeShort(String value, int max) {
+        String text = value == null ? "" : value.replaceAll("\\s+", " ").trim();
+        return text.length() <= max ? text : text.substring(0, max) + "…";
+    }
+
+    private String clip(String value, int max) {
+        String text = value == null ? "" : value.replaceAll("\\s+", " ").trim();
+        return text.length() <= max ? text : text.substring(0, max) + "…";
     }
 
     // ===== 意图执行 =====

@@ -111,5 +111,6 @@ class AiChatServiceUpdateTest {
         assertEquals("PENDING_ACTION", reply.getCards().get(0).get("type"));
         verify(pendingActionService).createApiUpdateDraft(any(), anyString());
         assertTrue(reply.getReply().contains("修改草稿"));
+        assertEquals("修改接口配置", reply.getConversationTitle());
     }
 }

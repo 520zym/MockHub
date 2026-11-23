@@ -42,6 +42,10 @@ public class AiConversationRepository {
                 LIST_MAPPER, userId, limit);
     }
 
+    public void updateTitle(String id, String title) {
+        jdbcTemplate.update("UPDATE ai_conversation SET title = ? WHERE id = ?", title, id);
+    }
+
     public void updateMeta(String id, String title, String updatedAt) {
         jdbcTemplate.update("UPDATE ai_conversation SET title = COALESCE(?, title), updated_at = ? WHERE id = ?",
                 title, updatedAt, id);

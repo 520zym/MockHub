@@ -183,6 +183,17 @@ public class AiConversationService {
         return result;
     }
 
+    /** 只更新标题，不改变会话排序时间；仅会话所有者可操作。 */
+    public void rename(String id, String userId, String title) {
+        requireCurrentOwner(userId);
+        AiConversation conversation = repository.find(id, userId);
+        if (conversation == null) throw new BizException(40404, "会话不存在或已被删除");
+        String value = normalizeTitle(title);
+        if (value == null) return;
+        conversation.setTitle(value);
+        repository.updateTitle(id, value);
+    }
+
     public void delete(String id, String userId) {
         requireCurrentOwner(userId); // Owner cleanup remains possible after leaving the team; no read/write grant required.
         AiConversation conversation = repository.find(id, userId);
@@ -257,6 +268,13 @@ public class AiConversationService {
         } catch (Exception e) {
             throw mixedHistory();
         }
+    }
+
+    private String normalizeTitle(String text) {
+        String value = text == null ? "" : text.replaceAll("\\s+", " ").trim();
+        value = value.replaceAll("^[“”\"'《》]+|[“”\"'《》]+$", "").replaceAll("[。！？!?；;：:，,]+$", "").trim();
+        if (value.isEmpty()) return null;
+        return value.length() <= MAX_TITLE ? value : value.substring(0, MAX_TITLE) + "…";
     }
 
     private String title(String text) {
