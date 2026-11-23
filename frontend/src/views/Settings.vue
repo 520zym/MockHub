@@ -472,7 +472,7 @@ function inferVendor(baseUrl) {
   if (url.includes('moonshot')) return 'kimi'
   if (url.includes('minimax')) return 'minimax'
   if (url.includes('bigmodel')) return 'glm'
-  if (url.includes('dashscope')) return 'qwen'
+  if (url.includes('qianwenaiapi') || url.includes('dashscope')) return 'qwen'
   if (url.includes('api.openai.com')) return 'openai'
   if (url.includes('11434')) return 'ollama'
   return 'custom'

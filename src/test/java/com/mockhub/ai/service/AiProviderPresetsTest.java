@@ -21,6 +21,11 @@ class AiProviderPresetsTest {
         assertEquals("deepseek-chat", deepseek.getDefaultModel());
         assertTrue(deepseek.getModels().contains("deepseek-reasoner"));
         assertTrue(AiProviderPresets.get("ollama").isLocal());
+        AiProviderPreset qwen = AiProviderPresets.get("qwen");
+        assertNotNull(qwen);
+        assertEquals("千问AI", qwen.getName());
+        assertEquals("https://maas.qianwenaiapi.com/compatible-mode/v1", qwen.getBaseUrl());
+        assertEquals("qwen4-max", qwen.getDefaultModel());
     }
 
     @Test
@@ -35,6 +40,8 @@ class AiProviderPresetsTest {
         assertEquals("deepseek", AiProviderPresets.infer("https://api.deepseek.com/v1"));
         assertEquals("kimi", AiProviderPresets.infer("https://api.moonshot.cn/v1"));
         assertEquals("glm", AiProviderPresets.infer("https://open.bigmodel.cn/api/paas/v4"));
+        assertEquals("qwen", AiProviderPresets.infer("https://maas.qianwenaiapi.com/compatible-mode/v1"));
+        assertEquals("qwen", AiProviderPresets.infer("https://dashscope.aliyuncs.com/compatible-mode/v1"));
         assertEquals("ollama", AiProviderPresets.infer("http://localhost:11434/v1"));
         assertEquals(AiProviderPresets.CUSTOM, AiProviderPresets.infer("https://example.com/v1"));
     }

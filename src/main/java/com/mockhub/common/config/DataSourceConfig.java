@@ -383,7 +383,7 @@ public class DataSourceConfig {
                     + "WHEN lower(base_url) LIKE '%moonshot%' THEN 'kimi' "
                     + "WHEN lower(base_url) LIKE '%minimax%' THEN 'minimax' "
                     + "WHEN lower(base_url) LIKE '%bigmodel%' THEN 'glm' "
-                    + "WHEN lower(base_url) LIKE '%dashscope%' THEN 'qwen' "
+                    + "WHEN lower(base_url) LIKE '%qianwenaiapi%' OR lower(base_url) LIKE '%dashscope%' THEN 'qwen' "
                     + "WHEN lower(base_url) LIKE '%api.openai.com%' THEN 'openai' "
                     + "WHEN lower(base_url) LIKE '%11434%' THEN 'ollama' "
                     + "ELSE 'custom' END "
